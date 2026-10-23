@@ -414,17 +414,25 @@ The correct pattern, established by `_district_pvi()` /
    backend files it names, the generator script included, and every `app`
    or `scripts` module those import, transitively), since that change is
    usually the fix. A script the job runs takes an output path and reads no `/data` copy of
-   its own output. Files a script can't regenerate unattended — a new
-   survey whose question ids change, a model-selection refit that is a
-   method decision, a source behind research-only dependencies, a source
-   that needs hand-researched corrections — get a `stale` check instead,
-   which alerts (`data-stale-<file>`) when a newer version should exist and
-   says what a person has to do. A refresh that moves scores is a data
-   refresh within the same method (announced by an ops notice and recorded
-   in `_refreshed`), not a new `ALGORITHM_VERSION`; a refit that changes a
-   method's structure or a classifier's threshold is a version change and
-   goes through review, which is why those calibrations alert rather than
-   refit themselves.
+   its own output. A refresh that moves scores is a data refresh within
+   the same method (announced by an ops notice and recorded in
+   `_refreshed`), not a new `ALGORITHM_VERSION`.
+
+   A refit that changes a method's structure or a threshold refits itself
+   too, under an acceptance rule instead of a review (`DataFile.accept`,
+   `held_out_beats_in_use`): the script measures its refit and the copy in
+   use (handed to it as `{in_use}`) on its own held-out split and writes
+   the paired comparison into the candidate (`_comparison`); the refit is
+   installed only when it beats the copy in use by more than one standard
+   error of the paired difference and no subgroup the script reports loses
+   more than one standard error, and never when the script's own rule
+   refuses it (`refused`). Otherwise the copy in use stays and the
+   comparison is recorded in its `_refreshed.kept` ("refit within noise,
+   Δ=…, SE=…"): a measurement, never an alert. Such a refit also runs the
+   day after the code it fits changes (its `recipe`), and a fit shipped in
+   a commit supersedes a refit installed before it and is what the next
+   refit is measured against. The search calibrations are the first
+   (§3b).
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):
@@ -621,8 +629,11 @@ counted in memory and written after each hourly refresh), and a nightly
 check compares the gate's pass rate over the last four weeks with its own
 first four weeks under the calibration in use, alerting
 (`calibration-drift-<gate>`) when it has moved by 15 points or more and far
-outside sampling noise: the cue to label a fresh sample and refit. A new
-calibrated gate is added to `calibration_drift.GATES` and observes its
+outside sampling noise. The alert states the measured shift and asks
+nothing of anyone: hand labels can't be drawn by rule, which is why a gate
+takes a data-supplied label wherever one exists (the relevance gate's
+publisher labels) and records each one that turns up for its next refit. A
+new calibrated gate is added to `calibration_drift.GATES` and observes its
 decisions.
 
 ### 3b. Search ranking is measured, not asserted
@@ -666,7 +677,16 @@ weights and its "straight to the page" thresholds are fitted by
 the index (half the entities fit, half reported) and read from
 `app/data/site_search_calibration.json`. A wrong jump is worse than a
 results page: the thresholds allow no wrong jump in any probe type on the
-fit half. Rerun it when the index gains a kind or aliases.
+fit half. A jump is wrong when it lands anywhere but the probe's own page;
+an ambiguous query's other pages have probes of their own, so a jump on it
+is still refused. (Until 2026-10-23 any jump on an ambiguous probe counted
+as wrong, Record speeches titled "Illinois" or "ICE" made those names
+ambiguous, and a refit turned direct navigation off, #1248.) The pipeline
+refits it on the live index monthly, within a week of the index gaining a
+kind, and the day after the ranking code changes, under §3a's acceptance
+rule: per held-out probe, the reciprocal rank of its page plus 1 for a
+right jump, macro over probe types, and no type may lose more than a
+standard error.
 
 The `/search` results page is one list: site search's matches and Explore's
 hybrid document ranking fused by rank (`site_search.fuse`), since the two
@@ -679,8 +699,8 @@ lose more than a standard error to buy document recall. The Documents
 filter is the hybrid ranker's own UI (`/api/explore`), and
 `frontend/src/app/search/page.test.tsx` fails if either surface stops asking
 it, so the semantic channel can't be dropped by a "simplification" onto
-title matching. Rerun the fusion calibration after either harness's ranker
-changes. When it was introduced (2026-10-20, on a production copy),
+title matching. The pipeline refits the fusion the same way, under the
+same rule on held-out MRR at 10. When it was introduced (2026-10-20, on a production copy),
 `evaluate_explore_search.py`'s table was identical before and after (the
 hybrid ranker did not change: ALL hybrid MRR 0.610, R@20 0.916), and
 through `/search` the site-search probe types held at MRR 0.990 while the
@@ -883,8 +903,9 @@ answers these before it merges:
   title, a results URL, an FEC cycle) are built from the cycle by rule.
 - **Who holds office?** Read from the official source every run: members
   from Congress.gov's current roster (`member_lifecycle` for departures),
-  the president from the roster with the Federal Register cross-check
-  (`check_sitting_president`), justices from Oyez's sitting list
+  the president from the roster, completed from the Federal Register's
+  signer and Wikidata's record of the office when it lags an inauguration
+  (`presidential_roster.reconcile_with_register`), justices from Oyez's sitting list
   (`retire_departed_justices`, `court_roster_changed`), leadership and
   committees from congress-legislators. Never a typed name, majority party
   or count ("the nine justices").
@@ -1909,27 +1930,48 @@ wrong number on election night is worse than none:
   moved feed fails visibly, never as a quiet night and never worked around.
   A primary's contest labels are not proof of the general's: for the 14 days
   before election day a daily job reads every covered state's staged feed
-  exactly as the sync will and alerts on no general listed yet, a feed that
-  could not be read, a refused one, or a race with no contest
-  (`live_results/readiness.py`; it stores nothing and stops the day before).
+  exactly as the sync will (`live_results/readiness.py`; it stores no count
+  and stops the day before). A staged general whose contests account for
+  every race (by label, or by candidates) is ready, and its responses are
+  recorded as the state's reader self-check for the next cycle
+  (`/data/live_results_recordings/<ST>.json`). A general not staged yet is
+  not an alert: the same reader is run on the state's previous general,
+  live through the state's own index where it still lists it, else on the
+  recording replayed offline (bundled first-install recordings for IA, ID,
+  MT and RI, whose indexes no longer list a general), and passes when it
+  accounts for every House seat on file. Only a failed self-check, a
+  refused or unreadable feed, or a staged general missing a race is
+  alerted, one alert a day (condition `results-readiness`), worded as what
+  the system does next (reads again tomorrow, then every five minutes from
+  poll close). An unstaged state gets no lead-time alert before its polls
+  close: Montana's Secretary of State says its results appear after 8 p.m.
+  on election day, and `check_missing_counts` covers the hour after close.
   A reader returns None only when the state's own list or page was read and
   shows nothing on the date (a results host redirecting off itself counts);
-  a failed request raises `FeedUnreadable`, so an outage is never alerted as
-  "not staged" (North Dakota's list answered 504 on 2026-10-20 and was). Washington's House labels changed between primary and
-  general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
-  sent their current-election page to their Secretary of State's landing page
-  (Montana's says results come "after 8:00 on November 3"), where in 2024 both
-  served the staged general a month ahead. New Mexico's general stayed
-  staged under its own id (eid=2917, 2026-10-21), found from the ids the
-  state's own results page for the year links (`general_eid_discovery`,
-  each page taken only on its own type and date); Montana's will be named
-  until its host serves the general — the honest state of the feed. The
-  check raises one alert a day listing every state not ready with its
-  reason (condition `results-readiness`), not one per state.
-- A race the state's feed stops listing mid-count (a renamed contest, one set
-  aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
-  page (`inLatestRead`), and pages someone (`sync._dropped_races`): the
-  state's other races keep its feed looking healthy, so nothing else would.
+  a failed request raises `FeedUnreadable`, so an outage is never read as
+  "not staged" (North Dakota's list answered 504 on 2026-10-20). Each
+  reader finds the general by its date in the state's own index (Clarity's
+  elections.json or the state's landing page, Enhanced Voting's
+  jurisdiction list, Tally's election list); TotalVote's no-eid page is
+  the exception, and a TotalVote state whose page stops serving the staged
+  general names its year page in `general_eid_discovery` (New Mexico's
+  general, eid=2917, 2026-10-21). Montana's host sends its default page to
+  the Secretary of State's site, behind a bot wall since 2026-10-15, and no
+  unwalled page links its ids, so its entry names `eid_scan`: the host's
+  ids above the newest it is known to serve are read upward, one request a
+  second, to `EID_SCAN_BOUND` (twice the widest gap between its
+  consecutive elections: 450002570, 450002785, 450002928), each page taken
+  only on its own type and date; the whole bound once a day before
+  election day, a minute of it per sync pass from election day; every id
+  found becomes the next start (`/data/totalvote_eid_frontier.json`).
+- A race the state's feed stops listing under its label mid-count (a
+  renamed contest) is placed by its candidates (`sync.place_by_candidates`:
+  the one contest the reader could not place, `StateCount.unplaced`, whose
+  candidates' surnames are exactly the stored count's, or the confirmed
+  nominees' before a first count; two names or more, one to one); specials
+  the same way. A race placed by neither keeps its last count, tagged NOT
+  IN LATEST READ on the page (`inLatestRead`), and is alerted
+  (`sync._dropped_races`) while the sync keeps rereading.
 - The reporting figure is worded as the source counts it
   (`StateCount.units_complete`, `signals.reporting_line`, frontend
   `reportingText`): "N of M precincts fully reported" where it counts units
@@ -2193,7 +2235,13 @@ date is named beside it ("also filed, on or after this report's filing date")
 rather than guessed to be newer. A House member's new-filer report (index type
 "H", read from this year's index too) is read for a member with nothing newer;
 it states no date its values describe, so it is labelled by filing date and any
-annual report outranks it. Filers are matched in `filer_matching.py`: the
+annual report outranks it. So is a candidate report (index type "C"), with
+its amendment (an "A" in a year with the filer's candidate report and no
+annual one), for a member seated in a special election who filed nothing
+else (four on 2026-10-22), and only when the filer's first name is the
+member's (`filer_matching.first_name_agrees`): a namesake running for the
+seat files the same report under the same district. Among undated House
+reports the latest filed wins (`_rank`). Filers are matched in `filer_matching.py`: the
 last-name field up to its first comma ("Doe, Jr."), and a House filer listed
 under a district no member of that surname holds — the Clerk keeps a member's
 pre-redistricting district — is matched across the state only when the first
@@ -2738,6 +2786,17 @@ the pending list).
   `scripts/axe-routes.mjs` the page (each h1, h2, h3 and th as computed).
   Three ink levels: `ink` is `ink-hi`, then `ink-lo`, then `ink-min`, at
   least APCA Lc 8 apart (`inkContrast.test.ts`).
+  **Sizes (2026-10-22), desktop / phone:** body 18 / 17px, small 16 / 15,
+  dek and box title 20 / 18, section 24 / 22, title 36 / 28 (the rest in
+  `typeStyles.ts`). **A sentence a reader reads as prose is body**: a box's
+  line, RecordBox `dek`/`quote`, a finding, a list row's description, a
+  note (`NoteLine`), a "More" or "How to read this" disclosure's text,
+  About prose. Small is for what sits beside prose: source lines,
+  captions, units, dates, chips, labels. Measured on production at 1280px
+  before the change, small (then 14px) was most of the main column's text:
+  95% of a member page, 84% of a state ballot, 69% of the homepage, 68% of
+  the Action Center; readability rises with size to about 18pt and 14
+  measured worse (Rello, Pielot & Marcos, CHI 2016).
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
   (`font-display`, through TYPE), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
@@ -2756,7 +2815,7 @@ the pending list).
   `president_scorer.py`, and `backend/tests/test_shown_text_style.py` fails on
   an em dash in any string there that isn't a docstring or a log message.
 - **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
-  phone's type scale", 2026-10): the scale's smallest step is 14px, and the
+  phone's type scale", 2026-10): the scale's smallest step is 15px, and the
   sizes under it no longer exist.
 - **Letter case: sentence case, not capitals** (2026-10). A reader said the
   site's capitals felt intimidating, and the evidence agrees for anything

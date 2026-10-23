@@ -38,7 +38,7 @@ const SOURCE_LABEL = {
 } as const;
 
 const MEMBER_ABOUT_TEXT =
-  "Every asset listed on this member's most recent financial disclosure report: held by the member, their spouse, or a dependent child at the end of the year for an annual report, or, for a newly seated member's new-filer report, on the date a senator's report states (a representative's states none, so it is named by its filing date). The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), so no net-worth figure is computed; a value a member chose to state exactly is shown as that figure. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Shown for context, not compared with other members.";
+  "Every asset listed on this member's most recent financial disclosure report: held by the member, their spouse, or a dependent child at the end of the year for an annual report, or, for a newly seated member's new-filer report, on the date a senator's report states (a representative's states none, so it is named by its filing date). A representative seated in a special election may have filed only a candidate report so far; that report is shown, named by its filing date, until the first annual report. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), so no net-worth figure is computed; a value a member chose to state exactly is shown as that figure. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Shown for context, not compared with other members.";
 
 const PRESIDENT_ABOUT_TEXT =
   "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Shown for context.";
@@ -303,7 +303,7 @@ function HoldingsMore({
   const selectedLabel = data.categories.find((c) => c.category === category)?.label;
   if (!data.parsed) {
     return (
-      <p className="text-small text-ink-lo">
+      <p className="text-body text-ink-lo">
         {data.unreadableReason === "scanned"
           ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}
@@ -330,7 +330,7 @@ function HoldingsMore({
         <MetricTooltip text={ABOUT_TEXT[filer]}>About this data</MetricTooltip>
       </p>
       {data.laterFilingUrl && (
-        <p className="text-small text-ink-lo">
+        <p className="text-body text-ink-lo">
           Also filed, on or after this report&apos;s filing date: the{" "}
           {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
           can be read here, so it can&apos;t be placed against this one, and this section stays with
@@ -665,7 +665,7 @@ export default function Holdings({
   const notes = (
     <>
       {data.laterFilingUrl && (
-        <p className="text-small text-ink-lo mt-2">
+        <p className="text-body text-ink-lo mt-2">
           Also filed, on or after this report&apos;s filing date: the{" "}
           {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
           can be read here, so it can&apos;t be placed against this one, and this section stays with

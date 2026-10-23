@@ -13,7 +13,13 @@ copy of its logic), run as a subprocess at low priority:
      which command, and the content's sha256);
   4. a candidate that fails, or a script that fails, keeps the last good
      copy and opens an ops alert for that file, resolved by its next good
-     refresh.
+     refresh;
+  5. a refit of a method's structure or a threshold (`accept`) is installed
+     only when, on its script's own held-out split, it beats the copy in
+     use by more than one standard error of the paired difference and no
+     subgroup the script reports loses more than one (held_out_beats_in_use).
+     Otherwise the copy in use stays and the comparison is recorded in its
+     `_refreshed.kept`: a measurement, not an alert.
 
 Files whose regeneration can't honestly be automated (a new survey's
 question ids, a model-selection refit that is a method decision, a source
@@ -132,6 +138,11 @@ class DataFile:
     # After an install (or an unchanged refresh): a finding about the files
     # in use ({name: doc}) worth an ops alert that doesn't hold them back.
     check: Callable[[dict[str, dict]], str | None] | None = None
+    # A refit of a method's structure or a threshold: (candidate, copy in
+    # use) -> None to install it, or why the copy in use is kept (recorded
+    # in its _refreshed, never an alert). Runs after the gate. See
+    # held_out_beats_in_use.
+    accept: Callable[[dict, dict], str | None] | None = None
 
     @property
     def stem(self) -> str:
@@ -340,6 +351,57 @@ def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
     return True
 
 
+# A refit is installed only when, on its script's own held-out split, it
+# beats the copy in use by more than one standard error of the paired
+# difference, and no subgroup the script reports loses more than one (the
+# one-standard-error rule, Hastie, Tibshirani & Friedman 2009, the rule the
+# repo's model choices already use). The script measures both on the same
+# probes and writes the comparison into its candidate:
+#
+#   "_comparison": {"metric": "...", "delta": candidate - in use,
+#                   "se": standard error of the paired difference,
+#                   "subgroups": {name: {"delta": ..., "se": ...}},
+#                   "refused": ["a reason the script's own rule refuses it"]}
+#
+# or {"unchanged": true} when the refit's parameters are the copy in use's
+# (newer measurements by the same parameters), which installs.
+#
+# The copy in use reaches the script as "{in_use}" in its argv.
+def held_out_beats_in_use(new: dict, old: dict) -> str | None:
+    """None when the candidate's comparison clears the rule above, else why
+    the copy in use is kept."""
+    c = new.get("_comparison")
+    if isinstance(c, dict) and c.get("unchanged"):
+        return None  # the refit reproduces the method's parameters: only its measurements are new
+    if not isinstance(c, dict) or not {"delta", "se"} <= set(c):
+        return "the refit reports no held-out comparison with the copy in use"
+    if c.get("refused"):
+        return "; ".join(str(r) for r in c["refused"])
+    delta, se = float(c["delta"]), float(c["se"])
+    if not delta > se:
+        return f"refit within noise of the copy in use: {c.get('metric', 'held-out')} \u0394={delta:+.4f}, SE={se:.4f}"
+    losers = [f"{g} \u0394={float(v['delta']):+.4f}, SE={float(v['se']):.4f}"
+              for g, v in sorted((c.get("subgroups") or {}).items()) if float(v["delta"]) < -float(v["se"])]
+    if losers:
+        return (f"refit beats the copy in use overall (\u0394={delta:+.4f}, SE={se:.4f}) but loses more than one "
+                f"standard error on " + "; ".join(losers))
+    return None
+
+
+def record_kept(name: str, why: str, argv: list[str]) -> None:
+    """Record in the copy in use's provenance that a refit was measured and
+    not installed, and why. Its content is unchanged."""
+    doc = read(name)
+    if not doc:
+        return
+    rel = [a if not a.startswith(str(BACKEND)) else os.path.relpath(a, BACKEND) for a in argv]
+    provenance = doc.get("_refreshed") or {"bundled": bundled_sha256(name)}
+    kept = {"at": utcnow().isoformat(timespec="seconds"), "command": " ".join(rel), "why": why}
+    write_text_atomic(runtime_data_path(name), json.dumps(
+        {**doc, "_refreshed": {**provenance, "kept": kept}}, indent=1, ensure_ascii=False) + "\n")
+    _read_cache.pop(name, None)
+
+
 def refresh_one(spec: DataFile, ctx: Context) -> str:
     """Regenerate, gate and install one file. Returns the outcome."""
     condition = f"data-refresh-{spec.stem}"
@@ -359,7 +421,11 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
     def fill(arg: str) -> str:
         for name in spec.outputs:
             arg = arg.replace("{out:%s}" % name, candidates[name])
-        return arg.replace("{out}", candidates[spec.name]).replace("{tmp}", scratch)
+        return arg.replace("{out}", candidates[spec.name]).replace("{tmp}", scratch).replace("{in_use}", in_use)
+
+    # "{in_use}": the copy in use, for a script that measures its refit against it.
+    in_use = os.path.join(scratch, "in_use.json")
+    pathlib.Path(in_use).write_text(json.dumps(ctx.doc, ensure_ascii=False))
 
     argv = [fill(a) for a in template]
     docs: dict[str, dict] = {}
@@ -397,6 +463,11 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
             pathlib.Path(path).unlink(missing_ok=True)
         shutil.rmtree(scratch, ignore_errors=True)
     new = docs.get(spec.name, {})
+    if not what and spec.accept and (why := spec.accept(new, ctx.doc)):
+        # Measured and not better: the copy in use stays, and why is on its record.
+        record_kept(spec.name, why, argv)
+        resolve_ops_alert(condition)
+        return f"in use: {why}"
     if what:
         logged_at = None
         if output.strip():
@@ -438,14 +509,23 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
     outcomes: dict[str, str] = {}
     for spec in files if files is not None else DATA_FILES:
         try:
-            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
+            if shipped and spec.accept:
+                # A commit shipped a new fit: it supersedes a refit installed
+                # before it, and the next refit is measured against it.
+                for n in (spec.name, *spec.outputs):
+                    pathlib.Path(runtime_data_path(n)).unlink(missing_ok=True)
+                    _read_cache.pop(n, None)
+            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             template = spec.command(ctx) if spec.command else None
             # A failed try is retried the next day once what it runs has
-            # changed (a try recorded before recipes were counts as changed).
-            # Hashed only when it can matter (it reads the generator's whole
-            # import tree, about 5 s for every file).
-            current = recipe(template) if template is not None and ctx.last_failed else None
+            # changed (a try recorded before recipes were counts as changed),
+            # and so is a refit under the acceptance rule: a change to the
+            # code it fits (a ranker) is measured the next day. Hashed only
+            # when it can matter (it reads the generator's whole import
+            # tree, about 5 s for every file).
+            current = (recipe(template) if template is not None and (ctx.last_failed or spec.accept)
+                       else None)
             fixed = current is not None and current != ctx.last_recipe
             if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
@@ -891,25 +971,24 @@ def _egrid_stale(ctx: Context) -> str | None:
 
 # Site search's ranking and its fusion with Explore (scripts/calibrate_site_
 # search.py, calibrate_search_fusion.py) are fitted on known-item probes
-# built from the index, per kind of entity. A kind the fit never saw is
-# ranked by parameters nothing measured on it, so the check alerts when the
-# index holds one (AGENTS.md §3b: "rerun it when the index gains a kind").
-# They are not refitted here: a ranking weight changes through review.
-def _search_kinds_stale(script: str) -> Callable[[Context], str | None]:
-    def check(ctx: Context) -> str | None:
-        live = site_search.index_kinds()
-        if live is None:
-            return None
-        fitted = ctx.doc.get("kinds")
-        if fitted is None:
-            return (f"it records no kinds of entity, so whether its fit covers the index's ({', '.join(sorted(live))}) "
-                    f"can't be told. Rerun scripts/{script} on the live index; it records them.")
-        unseen = sorted(live - set(fitted))
-        if unseen:
-            return (f"the index now holds {', '.join(unseen)}, which the fit never saw. Rerun scripts/{script} on "
-                    f"the live index and review the measured change (AGENTS.md §3b).")
-        return None
-    return check
+# built from the live index, per kind of entity (AGENTS.md §3b). Refit
+# monthly, and within a week when the index holds a kind the copy in use
+# never saw; each script measures its refit against the copy in use on its
+# held-out half, and the refit is installed only under the acceptance rule
+# (held_out_beats_in_use; site search also never with a wrong jump on the
+# fit half, which the script reports as a refusal).
+def _search_due(ctx: Context) -> bool:
+    live = site_search.index_kinds()
+    unseen = live is not None and not live <= set(ctx.doc.get("kinds") or ())
+    return not ctx.tried_within(7 if unseen else 30)
+
+
+def _search_gate(fields: tuple[str, ...]) -> Callable[[dict, dict], list[str]]:
+    def gate(new: dict, old: dict) -> list[str]:
+        params = new.get("params") or {}
+        missing = [f for f in fields if not isinstance(params.get(f), (int, float))]
+        return [f"params missing {', '.join(missing)}"] if missing else []
+    return gate
 
 
 # The election map's training polls (app/forecast/training_polls.py):
@@ -1103,8 +1182,16 @@ DATA_FILES: list[DataFile] = [
     DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
     DataFile("court_finding.json", stale=_court_finding_stale),
     DataFile("environmental.json", stale=_egrid_stale),
-    DataFile("site_search_calibration.json", stale=_search_kinds_stale("calibrate_site_search.py")),
-    DataFile("search_fusion_calibration.json", stale=_search_kinds_stale("calibrate_search_fusion.py")),
+    DataFile("site_search_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_site_search.py"), "--database", settings.DATABASE_URL,
+                                  "--in-use", "{in_use}", "--output", "{out}"],
+             due=_search_due, gate=_search_gate(("direct_floor", "direct_margin", "pool", "enough")),
+             accept=held_out_beats_in_use, heavy=True, timeout_s=4 * 3600),
+    DataFile("search_fusion_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_search_fusion.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_search_due, gate=_search_gate(("k", "document_weight")),
+             accept=held_out_beats_in_use, heavy=True, timeout_s=4 * 3600),
     DataFile("ces_member_approval.json", stale=_ces_stale),
     DataFile("peer_gdp_per_capita.json", stale=_peer_gdp_stale),
     DataFile("bluesky_post_windows.json", stale=_bluesky_windows_stale),

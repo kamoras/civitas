@@ -191,3 +191,61 @@ class TestNotYetPublishedVsOutage:
             return '<a href="/sos/news/citizens-guide-2026-maine-referendum-election">x</a>'
         monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
         assert await me.fetch_measures(None, 2026) is None
+
+
+class TestSelfCheck:
+    """The reader run on the newest earlier November guide the
+    Legislature's library archives (ballot_measures_me.self_check)."""
+
+    LISTING_2025 = ('<A HREF="/Open/Elections/Returns/2025/20250225/">x</A>'
+                    '<A HREF="/Open/Elections/Returns/2025/20251104/">x</A>')
+    FOLDER = ('<A HREF="/Open/Elections/Returns/2025/20251104/elec_20251104b.pdf">b</A>'
+              '<A HREF="/Open/Elections/Returns/2025/20251104/elec_20251104g.pdf">g</A>')
+
+    def _library(self, monkeypatch, guide_pages):
+        import httpx
+
+        from app.pipeline.fetch import ballot_measures_me as me
+
+        base = me.LIBRARY_RETURNS
+
+        def handler(request):
+            url = str(request.url)
+            if url == f"{base}2025/":
+                return httpx.Response(200, text=self.LISTING_2025)
+            if url == f"{base}2025/20251104/":
+                return httpx.Response(200, text=self.FOLDER)
+            if url.endswith(".pdf"):
+                return httpx.Response(200, content=url.encode())
+            return httpx.Response(404)
+
+        cover = "MAINE STATE LEGISLATURE\nThe following document is provided by the\nLAW AND LEGISLATIVE DIGITAL LIBRARY"
+        returns = cover + "\nNovember 4, 2025 Referendum Election\nCTY MUNICIPALITY"
+
+        class Doc:
+            def __init__(self, raw):
+                texts = [cover, *guide_pages] if raw.endswith(b"g.pdf") else [returns]
+                self.pages = [type("P", (), {"extract_text": lambda self, t=t: t})() for t in texts]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(me.pdfplumber, "open", lambda f: Doc(f.read()))
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    async def test_last_years_guide_read_whole_passes(self, monkeypatch):
+        from app.pipeline.fetch import ballot_measures_me as me
+
+        async with self._library(monkeypatch, FIXTURE["2025"]) as client:
+            assert await me.self_check(client, 2026) is None
+
+    async def test_a_guide_the_reader_cannot_read_whole_fails(self, monkeypatch):
+        from app.pipeline.fetch import ballot_measures_me as me
+
+        pages = [p.replace("Intent and Content", "Intent") for p in FIXTURE["2025"]]
+        async with self._library(monkeypatch, pages) as client:
+            failed = await me.self_check(client, 2026)
+        assert failed and "whose own listing is" in failed

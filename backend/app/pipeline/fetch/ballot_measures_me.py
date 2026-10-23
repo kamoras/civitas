@@ -56,7 +56,10 @@ announcement, and no Secretary of State page says the November 3 ballot
 has no question either (the upcoming-elections page, the 60-day election
 update, the absentee release and application, and the citizen-initiative
 page are all silent). With no official statement of "none" to read, the
-reader stays at not yet covered and the late-cycle notice stands. A
+reader stays at not yet covered. From the expected-by date the reader's
+self-check (below: the reader run on last year's guide from the
+Legislature's library) tells a guide not published from a broken reader,
+so no notice is sent while it passes. A
 missing guide is never read as "none" — and it is "not yet published"
 only when every Secretary of State page was actually read; a page that
 couldn't be fetched is a failure (None), not an absence.
@@ -336,3 +339,65 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.warning("ME %d guide: a listed question's ballot text couldn't be read", year)
         return None
     return [(p, guide_url) for p in parsed]
+
+
+# The reader's self-check (election_pipeline._late_cycle_check). The
+# Legislature's Law and Legislative Reference Library archives every
+# election's documents in a directory per election day
+# (lldc.mainelegislature.org/Open/Elections/Returns/<year>/<yyyymmdd>/),
+# the Citizen's Guide among them behind a one-page library cover: 2025's
+# is elec_20251104g.pdf, "Maine Citizen's Guide to the Referendum Election"
+# on its second page (read 2026-10-22). Until this year's guide appears the
+# reader is run on the newest earlier November guide there, found by rule
+# from the directory listings, so a guide not published yet is known to be
+# the state's answer and not a broken reader.
+LIBRARY_RETURNS = "https://lldc.mainelegislature.org/Open/Elections/Returns/"
+_LIBRARY_COVER = "LAW AND LEGISLATIVE DIGITAL LIBRARY"
+# Years back to look for a November guide, and PDFs opened per election:
+# Maine has held a November referendum in most years, and an election's
+# directory holds a handful of documents (2025's: four).
+_SELF_CHECK_YEARS = 3
+_SELF_CHECK_PDFS = 12
+
+
+def _library_links(listing: str, pattern: str) -> list[str]:
+    return sorted({urljoin(LIBRARY_RETURNS, h) for h in re.findall(r'(?i)href="([^"]+)"', listing)
+                   if re.search(pattern, h)}, reverse=True)
+
+
+async def self_check(client: httpx.AsyncClient, year: int) -> str | None:
+    """Why the guide reader fails on the newest earlier November guide the
+    Legislature's library archives, or None when it reads it whole: its
+    questions parsed, matching the guide's own listing, each with ballot
+    text."""
+    for back in range(1, _SELF_CHECK_YEARS + 1):
+        listing = await fetch_text_with_retry(client, _rate_limiter, f"{LIBRARY_RETURNS}{year - back}/",
+                                              f"ME library {year - back} elections")
+        if listing is None:
+            return f"the Legislature's library listing for {year - back} could not be read"
+        for folder in _library_links(listing, rf"/{year - back}/{year - back}11\d\d/$"):
+            files = await fetch_text_with_retry(client, _rate_limiter, folder, "ME library election")
+            if files is None:
+                return f"the Legislature's library folder {folder} could not be read"
+            for pdf in _library_links(files, r"\.pdf$")[:_SELF_CHECK_PDFS]:
+                raw = await fetch_bytes_with_retry(client, _rate_limiter, pdf, "ME library document")
+                if raw is None:
+                    return f"{pdf} could not be read"
+                try:
+                    with pdfplumber.open(io.BytesIO(raw)) as doc:
+                        pages = [p.extract_text() or "" for p in doc.pages]
+                except Exception:
+                    continue
+                if pages and _LIBRARY_COVER in pages[0].upper():
+                    pages = pages[1:]
+                text = "\n".join(pages)
+                if not re.search(r"Citizen.s Guide", text[:600]):
+                    continue
+                parsed = parse_guide(text)
+                expected = listed_numbers(text)
+                if not parsed or [p["number"] for p in parsed] != expected or any(
+                        not p["official_title"] for p in parsed):
+                    return (f"the guide reader read {[p['number'] for p in parsed]} from {pdf}, whose own "
+                            f"listing is {expected}")
+                return None
+    return f"no November Citizen's Guide in the Legislature's library for the {_SELF_CHECK_YEARS} years before {year}"

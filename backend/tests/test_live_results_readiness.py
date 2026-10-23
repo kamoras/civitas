@@ -27,19 +27,38 @@ def alerts(monkeypatch):
 
 
 @pytest.fixture()
-def reads(monkeypatch):
-    """{state: StateCount | None | Exception} served as fetch_state_count."""
+def reads(monkeypatch, tmp_path):
+    """{state: StateCount | None | Exception} served as fetch_state_count
+    for election day; `reads.previous` the same for the previous general
+    (the self-check's live read). No bundled recording is read."""
     served = {}
+    previous = {}
 
     async def fetch(client, state, election_day):
-        got = served[state]
+        got = (served if election_day == DAY else previous).get(state)
         if isinstance(got, Exception):
             raise got
         return got
 
     monkeypatch.setattr(readiness, "fetch_state_count", fetch)
     monkeypatch.setattr(readiness, "live_results_states", lambda: set(served))
-    return served
+    monkeypatch.setattr(readiness, "_BUNDLED_RECORDINGS", tmp_path / "no-bundled")
+    return _Reads(served, previous)
+
+
+class _Reads:
+    def __init__(self, served, previous):
+        self._served, self.previous = served, previous
+
+    def update(self, values):
+        self._served.update(values)
+
+    def __iter__(self):
+        return iter(self._served)
+
+
+def _house(*districts):
+    return _count(*(ContestCount(office="H", district=d, candidates=[("A", "R", 0)]) for d in districts))
 
 
 class TestReadiness:
@@ -52,14 +71,18 @@ class TestReadiness:
 
     async def test_each_kind_of_problem_is_alerted_and_a_ready_state_cleared(self, db_session, alerts, reads):
         for rid, st, office, district in (("2026-SEN-NE", "NE", "S", None), ("2026-HOUSE-NE-1", "NE", "H", 1),
-                                          ("2026-HOUSE-ND-0", "ND", "H", 0), ("2026-HOUSE-VA-2", "VA", "H", 2)):
+                                          ("2026-HOUSE-ND-0", "ND", "H", 0), ("2026-HOUSE-VA-2", "VA", "H", 2),
+                                          ("2026-HOUSE-CO-1", "CO", "H", 1), ("2026-HOUSE-NM-1", "NM", "H", 1)):
             db_session.add(Race(id=rid, cycle_year=2026, office=office, state=st, district=district))
         db_session.flush()
         reads.update({
             # Ready: a contest for every race.
             "ND": _count(ContestCount(office="H", district=None, candidates=[("A", "R", 0)])),
-            # New Mexico's and Montana's hosts, three weeks out: redirected
-            # to a landing page, so the reader finds no general.
+            # Not staged, and its index still lists its 2024 general, whose
+            # contests the reader parses: waiting, not a problem.
+            "CO": None,
+            # Not staged, and its 2024 general's House contest is missing:
+            # the reader fails its self-check.
             "NM": None,
             "MT": RuntimeError("boom"),
             # North Dakota's election list answering 504 (2026-10-20): an
@@ -71,31 +94,41 @@ class TestReadiness:
             # Two contests read, neither mapped to the race on file.
             "VA": _count(ContestCount(office="H", district=3, candidates=[("A", "D", 0)])),
         })
+        reads.previous.update({"CO": _house(1), "NM": _house(2)})
         problems = await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25))
         sent, resolved = alerts
         assert set(problems) == {"NM", "MT", "AR", "GA", "NE", "VA"}
-        assert problems["NM"].startswith("its results site lists no election on 2026-11-03 yet")
+        assert problems["NM"] == ("its general is not staged yet, and its reader, on its 2024-11-05 general, "
+                                  "read live, found no contest for 2026-HOUSE-NM-1")
         assert problems["AR"] == "its feed could not be read: AR election list could not be read"
         assert "RuntimeError" in problems["MT"]
         assert "not production data" in problems["GA"]
-        assert problems["NE"].endswith("none for 2026-SEN-NE (a label the reader can't parse, or a contest not "
-                                       "staged yet)")
+        assert problems["NE"].endswith("none, by label or by candidates, for 2026-SEN-NE")
         assert "2026-HOUSE-VA-2" in problems["VA"]
-        # One alert for the day, every state not ready named with its reason.
+        # One alert for the day, every failed state named with its reason.
         [(subject, body, kw)] = sent
-        assert subject == "Live results not ready: 6 of 7 states (AR, GA, MT, NE, NM, VA)"
+        assert subject == "Live results readiness: 6 of 8 states failed (AR, GA, MT, NE, NM, VA)"
         assert kw == {"dedupe_key": "results-readiness-2026-11-03-2026-10-25", "condition": "results-readiness"}
         for state, problem in problems.items():
             assert f"\n- {state}: {problem}" in body
-        assert body.endswith("\nReady: ND.")
+        assert body.endswith("\nNot staged yet, reader self-check passed: CO.\nReady: ND.")
+        # The alert says what the system does, never what a person should.
+        for phrase in ("fix", "check the", "manual", "rerun", "look"):
+            assert phrase not in body.lower()
         # The per-state conditions of the alerts before 2026-10 are cleared.
         assert sorted(resolved) == sorted(f"results-readiness-{s}" for s in reads)
 
-    async def test_a_general_staged_before_its_contests_says_so(self, db_session, alerts, reads):
+    async def test_a_general_staged_before_its_contests_runs_the_self_check(self, db_session, alerts, reads):
+        db_session.add(Race(id="2026-HOUSE-NM-1", cycle_year=2026, office="H", state="NM", district=1))
+        db_session.flush()
         reads.update({"NM": _count()})
-        problems = await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25))
-        assert problems == {"NM": "its feed serves the general but lists no federal contest yet (staged before "
-                                  "its contests)"}
+        reads.previous.update({"NM": _house(1)})
+        assert await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25)) == {}
+        reads.previous.update({"NM": None})
+        problems = await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 26))
+        assert problems == {"NM": "its general is staged with no contest yet, and its index no longer lists its "
+                                  "2024-11-05 general and no recording of an earlier feed is held, so its reader "
+                                  "could not be checked"}
 
     async def test_every_state_ready_clears_the_alert(self, db_session, alerts, reads):
         reads.update({"ND": _count(ContestCount(office="H", district=None, candidates=[("A", "R", 0)]))})

@@ -16,8 +16,8 @@ calibration in use was first seen (a refit starts a new baseline); the check
 compares the last four weeks with it, and alerts when the pass rate has
 moved by at least MIN_SHIFT and the move is far outside sampling noise
 (a two-proportion z of at least MIN_Z, both windows holding at least MIN_N
-decisions). The alert asks for a fresh labelled sample and a refit; nothing
-here changes a threshold.
+decisions). The alert reports the measured shift; nothing here changes a
+threshold, and a refit needs labels drawn from the stream it now sees.
 
 Counters are kept in memory as gates decide and written per day per gate
 to api_cache (tier calibration-drift) after each hourly Action Center
@@ -157,9 +157,8 @@ def drift(gate: str, today: date | None = None) -> str | None:
     if abs(r1 - r0) < MIN_SHIFT or abs(z) < MIN_Z:
         return None
     return (f"{meaning}: {r1:.0%} of {n1} in the last four weeks, against {r0:.0%} of {n0} in the four weeks "
-            f"after this calibration was first used (z = {z:.1f}). What the gate sees has moved since its labels "
-            f"were drawn: label a fresh sample of what it sees now, add it to the labelled set, and refit "
-            f"(app/data/{filename}; its script is named in the file's _source).")
+            f"after this calibration was first used (z = {z:.1f}): what the gate sees has moved since the labels "
+            f"behind app/data/{filename} were drawn.")
 
 
 def check_all() -> dict[str, str | None]:

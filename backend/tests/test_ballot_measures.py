@@ -1216,12 +1216,30 @@ async def test_direct_source_failures_alert(monkeypatch, db_session):
     alert whatever else the run found."""
     import app.ops_alerts as ops_alerts
 
-    _direct_source(monkeypatch, [None])
+    _direct_source(monkeypatch, [None, None])
     sent = []
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **kw: sent.append(a))
     result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
     assert result["failed_states"] == 1
     assert len(sent) == 1
+    # Says what the system does, never what a person should.
+    assert "two reads" in sent[0][1] and "next nightly run reads every state again" in sent[0][1]
+
+
+@pytest.mark.asyncio
+async def test_a_passing_failure_is_read_again_in_the_same_run_and_not_alerted(monkeypatch, db_session):
+    """Texas's library answered one request with a 503 (2026-10-21): the
+    state is read again at the end of the pass, and a clean second read is
+    stored with no alert."""
+    import app.ops_alerts as ops_alerts
+
+    _direct_source(monkeypatch, [None, ["1"]])
+    sent = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **kw: sent.append(a))
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert (result["synced"], result["failed_states"]) == (1, 0)
+    assert sent == []
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
 
 
 # ── round 2: the write can't lose both answers; scope; freshness ─────
@@ -1608,13 +1626,46 @@ async def test_a_late_cycle_notice_for_documents_that_may_never_come(monkeypatch
     _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert failed == 0
     assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
-    assert sent == ["ballot-measure-late-CA-2026-11-03"]
+    assert sent == ["ballot-measure-late-CA-2026-11-03-unchecked"]
 
     sent.clear()
     monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: False)
     _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_a_reader_passing_its_self_check_sends_no_late_notice(monkeypatch, db_session):
+    """Maine's guide reader, run on an earlier year's guide from the
+    Legislature's library, tells "not published yet" from a broken reader:
+    a pass sends nothing, a failure says what the nightly run does next."""
+    import app.ops_alerts as ops_alerts
+    from app.pipeline.fetch import ballot_measures_pdf
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    sent, resolved = [], []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, **kw: sent.append(body))
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", resolved.append)
+    monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: True)
+    outcome = {"failed": None}
+
+    async def check(client, year):
+        assert year == 2026
+        return outcome["failed"]
+
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)] * 2)
+    from app.pipeline.fetch import ballot_measure_pdf_sources
+
+    strategy = ballot_measure_pdf_sources.source_for_state("CA")["strategy"]
+    monkeypatch.setitem(ballot_measures_pdf.SELF_CHECKS, strategy, check)
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert sent == [] and resolved == ["ballot-measure-late-CA-2026-11-03"]
+    assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+
+    outcome["failed"] = "the guide reader read [] from x.pdf, whose own listing is ['1']"
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert len(sent) == 1 and "failed its self-check" in sent[0] and "manual" not in sent[0]
 
 
 def test_election_dates_are_stored_as_iso_or_not_at_all(db_session):
@@ -2170,3 +2221,32 @@ def test_a_rekeyed_measure_keeps_its_title_and_is_superseded_not_removed(db_sess
     assert left == [f"NM-{election}-old"]
 
 
+
+
+@pytest.mark.asyncio
+async def test_a_document_not_linked_keeps_the_last_read_and_alerts_only_past_the_window(
+        monkeypatch, db_session, freeze_utcnow):
+    """Nothing has changed on the state's word: the measures stay current
+    and the coverage stays covered; only a document unlinked past the
+    window is alerted, worded as what the nightly run does."""
+    from datetime import datetime
+
+    import app.ops_alerts as ops_alerts
+    from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked
+
+    freeze_utcnow(datetime(2026, 10, 22, 6))
+    _direct_source(monkeypatch, [["1", "2"]])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    sent = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, **kw: sent.append(body))
+    _direct_source(monkeypatch, [DocumentNotLinked("doc", since="2026-10-21")] * 2)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["failed_states"] == 0 and sent == []
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
+
+    _direct_source(monkeypatch, [DocumentNotLinked("doc", since="2026-10-18")] * 2)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["failed_states"] == 1
+    assert len(sent) == 1 and "looks for the document again" in sent[0]
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}

@@ -222,7 +222,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 {complete ? (
                   <div className="border border-white/15 bg-surface p-4 sm:p-5">
                     <h3 className={TYPE.kicker}>Days from nomination to confirmation</h3>
-                    <p className="mt-1 text-small text-ink-lo">
+                    <p className="mt-1 text-body text-ink-lo">
                       Each bar counts confirmations that took that many days, {stats.binDays} days
                       to a bar. The shaded band is the middle half; the line, the median.
                     </p>
@@ -236,7 +236,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     </p>
                   </div>
                 ) : (
-                  <p className="border border-white/15 bg-surface p-4 text-small text-ink-lo sm:p-5">
+                  <p className="border border-white/15 bg-surface p-4 text-body text-ink-lo sm:p-5">
                     Days from nomination to confirmation are shown once every nomination is read.
                     The ones read so far are the oldest updates, so their median would not be this
                     Congress&apos;s.

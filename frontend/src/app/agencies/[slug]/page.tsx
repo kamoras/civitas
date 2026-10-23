@@ -82,7 +82,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   }
   if (status === "not_read" || !b) {
     return status === "unmatched" ? (
-      <div className="mt-3 text-small text-ink-lo">
+      <div className="mt-3 text-body text-ink-lo">
         <p>
           No agency in USAspending.gov&apos;s list matched this one by name closely enough to link
           the two, so no budget is shown rather than a guessed one.
@@ -97,7 +97,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
         )}
       </div>
     ) : (
-      <p className="mt-3 text-small text-ink-lo">
+      <p className="mt-3 text-body text-ink-lo">
         USAspending.gov&apos;s budgets haven&apos;t been read yet, so none is shown. That is a gap
         on Civitas, not an agency without a budget.
       </p>
@@ -108,7 +108,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   return (
     <>
       {status === "none" ? (
-        <p className="mt-3 text-small text-ink-lo">
+        <p className="mt-3 text-body text-ink-lo">
           USAspending.gov lists {b.name} but reports no budget figures for it in any fiscal year.
         </p>
       ) : (
@@ -260,7 +260,7 @@ function Overview({ a }: { a: AgencyDetail }) {
             children: (
               <>
                 {docs.linking && (
-                  <p className="text-small leading-relaxed text-ink-lo">
+                  <p className="text-body leading-relaxed text-ink-lo">
                     Counts so far: documents stored before agencies were read are still being linked
                     to the agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
                     {docs.linking.total.toLocaleString("en-US")} linked).
@@ -414,7 +414,7 @@ export default async function AgencyPage({ params }: PageProps) {
                     )}
                   </>
                 ) : (
-                  <p className="mt-2 text-small text-ink-lo">
+                  <p className="mt-2 text-body text-ink-lo">
                     {docs.linking
                       ? `None linked to this agency yet. ${LINKING_TAIL}`
                       : "No comment period of this agency is open on Civitas right now."}

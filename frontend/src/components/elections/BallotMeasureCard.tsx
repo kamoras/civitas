@@ -65,7 +65,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         // Shown, not hidden. Someone who saw this measure last week needs
         // to be told it was struck; a card that simply disappeared cannot
         // say that.
-        <p className="text-small text-signal-red mb-3">
+        <p className="text-body text-signal-red mb-3">
           This measure is no longer on the ballot. It is kept here so a change since your last visit
           is visible rather than silent.
         </p>

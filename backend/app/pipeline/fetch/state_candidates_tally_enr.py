@@ -377,7 +377,9 @@ def _party(choice_party: str, meta_party: str, parties: dict) -> str | None:
     return None
 
 
-def general_contests(search: dict, results: dict, parties: dict) -> list[ContestCount]:
+def general_contests(
+    search: dict, results: dict, parties: dict, unplaced: list[ContestCount] | None = None,
+) -> list[ContestCount]:
     """Every federal contest, joined across the search list (names) and
     the results (votes, precincts), with party read per choice through the
     election's own party table — a general-election contest's name carries
@@ -389,7 +391,7 @@ def general_contests(search: dict, results: dict, parties: dict) -> list[Contest
         name = contest.get("contestName") or ""
         parsed = parse_office(name)
         result = counted.get(contest_id)
-        if parsed is None or not isinstance(result, dict):
+        if not isinstance(result, dict) or (parsed is None and unplaced is None):
             continue
         choice_names = contest.get("choices") or {}
         candidates = []
@@ -404,8 +406,8 @@ def general_contests(search: dict, results: dict, parties: dict) -> list[Contest
             candidates.append((label, _party(ch.get("partyID"), meta.get("partyID"), parties), votes))
         total = result.get("totalVotes")
         reporting, precincts = result.get("precinctsReporting"), result.get("totalPrecincts")
-        out.append(ContestCount(
-            office=parsed[0], district=parsed[1], candidates=candidates,
+        (out if parsed else unplaced).append(ContestCount(
+            office=parsed[0] if parsed else "", district=parsed[1] if parsed else None, candidates=candidates,
             total_votes=total if isinstance(total, int) else None,
             reporting_units=reporting if isinstance(reporting, int) else None,
             total_units=precincts if isinstance(precincts, int) and precincts > 0 else None,
@@ -523,7 +525,8 @@ async def fetch_general_results(
         source_name=source.get("source_name") or f"{state} election results",
         page_url=source.get("results_page"),
         official=bool(results.get("isOfficial")),
-        contests=general_contests(search, results, parties),
+        contests=general_contests(search, results, parties, unplaced := []),
+        unplaced=unplaced,
         source_updated=parse_utc(results.get("lastUpdated")),
         source_version=str(results.get("versionID") or "") or None,
     )

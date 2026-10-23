@@ -201,7 +201,7 @@ export default function StateResults({
     return (
       <section className="mb-8 border border-white/[0.09] bg-surface p-4">
         <h2 className={TYPE.section}>No live count for {stateName} here</h2>
-        <p className="mt-1 max-w-3xl text-small text-ink-lo">
+        <p className="mt-1 max-w-3xl text-body text-ink-lo">
           {results?.rankedChoiceStates?.includes(ballot.state) ? (
             // The feed exists; reading it would mislead. A first-choice
             // leader is not necessarily who the ranked-choice rounds elect.
@@ -282,7 +282,7 @@ export default function StateResults({
       </p>
       {races.length === 0 &&
         (stillVoting ? (
-          <p className="border border-white/[0.09] bg-surface p-4 text-small text-ink-lo">
+          <p className="border border-white/[0.09] bg-surface p-4 text-body text-ink-lo">
             {pollsClose && Date.parse(pollsClose) > now
               ? `${stateName}'s last polls close at ${formatEasternTime(pollsClose)}. Nothing of its count is shown before then.`
               : `${stateName}'s polls haven't closed yet. Nothing of its count is shown before they do.`}
@@ -290,7 +290,7 @@ export default function StateResults({
         ) : failed ? (
           // Not "hasn't started": a feed that's down or refused says
           // nothing about whether counting has begun.
-          <p className="border border-signal-amber/40 bg-surface p-4 text-small text-ink-lo">
+          <p className="border border-signal-amber/40 bg-surface p-4 text-body text-ink-lo">
             {behind ? (
               feed?.checkedAt ? (
                 <>
@@ -379,7 +379,7 @@ export default function StateResults({
               // The live sync gives these seats no holder (heldBy null),
               // so none is ever marked FLIP; say why, or the absence of
               // flips in a state that redrew reads as none happening.
-              <p className="border-b border-white/[0.09] px-4 py-2 text-small text-ink-min">
+              <p className="border-b border-white/[0.09] px-4 py-2 text-body text-ink-min">
                 New district lines: no seat has a previous holder, so none is marked as changing
                 party.
               </p>

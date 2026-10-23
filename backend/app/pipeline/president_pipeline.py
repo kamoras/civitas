@@ -148,7 +148,7 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     for entry in roster:
         try:
             p = db.query(President).filter(President.id == entry.id).first()
-            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party")
+            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party") or entry.party
             is_current = entry.term_end is None
             if p is None:
                 if not party:

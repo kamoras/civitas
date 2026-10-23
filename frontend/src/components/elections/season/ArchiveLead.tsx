@@ -46,13 +46,13 @@ export default function ArchiveLead({
               ? `${kept.official} of ${kept.counted} counted races listed official by their states`
               : `${kept.races} federal races on the record; no state's count was read`}
           </p>
-          <p className="mt-2 text-small text-ink-lo">
+          <p className="mt-2 text-body text-ink-lo">
             {kept.races} federal races, {kept.counted} with a count read from the state&apos;s own
             feed{kept.measures ? `, and ${kept.measures} statewide measures, quoted` : ""}. A count
             &ldquo;leads&rdquo; until its state lists it as official; Civitas calls no race.
           </p>
           {a && (
-            <p className="mt-2 text-small text-ink-lo">
+            <p className="mt-2 text-body text-ink-lo">
               {a.graded > 0
                 ? `The seat map's ranges, checked against the official count so far: ${a.held80} of ${a.graded} margins inside the 80% range, ${a.held95} inside the 95%.`
                 : `The seat map's ranges are checked seat by seat once each count is official: none of ${a.ranged} is yet.`}
@@ -60,14 +60,14 @@ export default function ArchiveLead({
           )}
         </>
       ) : (
-        <p className="mt-3 text-small text-ink-lo">
+        <p className="mt-3 text-body text-ink-lo">
           {archive
             ? `No record of the ${held} election was kept here.`
             : `The record of the ${held} election couldn't be read just now.`}
         </p>
       )}
       {season.until && (
-        <p className="mt-2 text-small text-ink-lo">
+        <p className="mt-2 text-body text-ink-lo">
           The new Congress is seated on {longDate(dayAfter(season.until))} (20th Amendment).
         </p>
       )}

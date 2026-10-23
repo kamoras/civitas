@@ -246,7 +246,7 @@ export default function VotesBox({
                   )}
                 </>
               )}
-              <p className="text-small leading-relaxed text-ink-min">
+              <p className="text-body leading-relaxed text-ink-min">
                 What counts as a break: a majority of one party voted one way, a majority of the
                 other voted the other way, and the member sided with the other party. Housekeeping
                 votes (quorum calls, adjourning, approving the Journal, the House&apos;s previous
@@ -260,7 +260,7 @@ export default function VotesBox({
               <Block
                 label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
               >
-                <p className="text-small leading-relaxed text-ink-min">
+                <p className="text-body leading-relaxed text-ink-min">
                   On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further
                   from the {OTHER_PARTY[facts.party] ?? "other party"} than the party does, so they
                   are not counted as breaks toward the other party.
