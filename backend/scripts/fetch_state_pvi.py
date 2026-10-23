@@ -36,41 +36,45 @@ feature made this number public: presenting a 2016+2020 lean on a page
 titled "2026 midterm elections" was two cycles stale, and inconsistent
 with district_pvi.json's 2020+2024-window figures shown beside it.
 
-Data sources (network required to regenerate):
+Data sources (network required to regenerate), found by rule, never typed
+per cycle, so the window advances by itself (data_refresh runs this
+script monthly):
 
-  2020: the Federal Election Commission's "Federal Elections 2020"
-    (Table 2, 2020 presidential electoral and popular vote, by state),
-    compiled from each state's certified results; a U.S. government work,
-    public domain. Until 2026-10 the 2020 half came from MEDSL's
-    "U.S. President 1976-2020" file (v20210113), which predates some
-    states' final certified counts (New York 13,901 Biden and 7,199 Trump
-    votes short; California, Indiana, North Dakota, New Hampshire, New
-    Jersey and North Carolina by fewer); no state's figure changed with the
-    switch. The workbook is not at an
-    immutable URL, so it is gated: its states must sum to its own national
-    total row, and to the national totals recorded below.
+  The two cycles are the two newest presidential elections an official
+  compilation covers: the newest version of MEDSL's "U.S. President
+  1976-<year>" dataset on Harvard Dataverse (doi:10.7910/DVN/42MVDX, CC0,
+  transcribed from each state's certified canvass) and the FEC's Federal
+  Elections compilations its results index links (public domain).
 
-  2024: 2024-president-state.csv from MEDSL's GitHub repository
-    MEDSL/2024-elections-official (released 2025-11, CC0 on Dataverse),
-    transcribed from each state's certified canvass and pinned to an
-    immutable commit (the FEC has not published its 2024 compilation).
-    Until 2026-10 the 2024 half came from the tonmcg county dataset, whose
-    2024 file is a scrape of a news site's results pages, not an official
-    tabulation; MEDSL's official state file reproduces all 51 figures
-    unchanged.
+  Each cycle is read from the FEC's compilation (Table 2, the state
+  presidential popular vote, from certified results) when the FEC has
+  published it, else from MEDSL's file. Until 2026-10 the 2020 half came
+  from MEDSL's 1976-2020 file (v20210113), which predated some states'
+  final certified counts (New York 13,901 Biden and 7,199 Trump votes
+  short); no state's figure changed with the switch to the FEC. MEDSL's
+  newest file (1976-2024) reproduces the 2024 counts of the
+  MEDSL/2024-elections-official repository this script read until
+  2026-10.
 
-A 2024 candidate's votes are its party-simplified DEMOCRAT / REPUBLICAN
-rows, fusion lines included (MEDSL's New York row already sums Harris's
-Democratic and Working Families lines). The per-state
-two-party counts are written beside the PVIs ("inputs"), so the figures
-can be recomputed from the file alone (tests/test_score_calculator.py
-does).
+  An FEC table is gated: its states must sum to its own "Total:" row, its
+  Democratic and Republican columns are read by their own "(D)" and "(R)"
+  labels (the 2016 table lists Trump first, the 2020 table Biden), and every
+  state's two-party share must agree with MEDSL's for the same cycle to
+  within FEC_MEDSL_TOLERANCE.
+
+A candidate's votes are every ballot line in the state carrying their
+name (fit_forecast_model.presidential_totals: New York's fusion lines sum).
+The per-state two-party counts are written beside the PVIs ("inputs"), so
+the figures can be recomputed from the file alone
+(tests/test_score_calculator.py does).
 
 Fidelity gates (all must pass or the script exits 1 without trusting the
-output): 51 jurisdictions each with a Democratic and a Republican row in
-both cycles, plausible range/lean-split, and per-state continuity against
-the previously committed file (a swapped D/R column or sign flip moves nearly
-every state by far more than one election cycle ever does).
+output): 51 jurisdictions each with a Democratic and a Republican count in
+both cycles, plausible range/lean-split, and, when the output path holds a
+previous file, per-state continuity against it (a swapped D/R column or
+sign flip moves nearly every state by far more than one election cycle ever
+does; under data_refresh the same check is its gate against the copy in
+use).
 
 Run from the repo:
     python3 backend/scripts/fetch_state_pvi.py [output.json]
@@ -78,81 +82,97 @@ Run from the repo:
 Exits 1 if any ingestion/fidelity gate fails.
 """
 
-import csv
 import io
 import json
 import pathlib
 import re
 import sys
-import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from app.contact import CONTACT_NOTE  # noqa: E402
-
-# FEC, Federal Elections 2020 (public domain). Table 2 is the workbook's
-# third sheet; its columns are state, electoral votes (two), Biden, Trump,
-# all others, total.
-FEC_2020_URL = "https://www.fec.gov/resources/cms-content/documents/federalelections2020.xlsx"
-FEC_2020_SHEET = "xl/worksheets/sheet3.xml"
-# The FEC's published 2020 national totals for Biden and Trump (Table 2's
-# "Total:" row), a citable fact: the gate that the sheet read is that table.
-FEC_2020_NATIONAL = {"D": 81_283_501, "R": 74_223_975}
-
-# MEDSL's official 2024 state-level presidential returns, pinned to the
-# commit that last changed the file ("Fixed issue with VT state-level
-# return party labels", 2025-11-20).
-MEDSL_2024_URL = (
-    "https://raw.githubusercontent.com/MEDSL/2024-elections-official/"
-    "f67c9de44cc31e0faa4b94986ba0a01afa3708b3/2024-president-state.csv"
+from app.time_utils import utcnow  # noqa: E402
+from fit_forecast_model import (  # noqa: E402  (one reader of each source)
+    FEC_RESULTS_INDEX,
+    PRESIDENT_DOI,
+    download,
+    medsl_file,
+    presidential_totals,
 )
 
-SOURCE_DESC = (
-    "2020: Federal Election Commission, Federal Elections 2020, Table 2 (state "
-    "presidential popular vote, from certified results; public domain). 2024: MEDSL 2024 official "
-    "state-level presidential returns (github.com/MEDSL/2024-elections-official, "
-    "2024-president-state.csv, CC0). Two-party vote shares, Cook PVI formula."
-)
+# The most two compilations of one cycle may disagree on a state's two-party
+# Democratic share, in points: certified counts revised after MEDSL's
+# transcription. Measured 2026-10-23, FEC against MEDSL's 1976-2024 file:
+# at most 0.005 points in 2016 (Maryland) and 0.012 in 2020 (North Dakota).
+# A column read under the wrong party is tens of points off.
+FEC_MEDSL_TOLERANCE = 0.5
+
 # For maintainers, kept out of _source: the site shows _source as the
 # figure's provenance (PviMethodologyNote), where a regenerate command
 # is noise.
 REGENERATE = "backend/scripts/fetch_state_pvi.py"
 
-WINDOW = "2020+2024"
-AS_OF = "2026-10-15"  # last regenerated from the pinned sources above
-
-CYCLES = ("2020", "2024")
-
-# Cook's weights for the two elections, most recent heaviest (module
+# Cook's weights for the earlier and the more recent election (module
 # docstring). A methodology fact, not a fitted value.
-CYCLE_WEIGHTS = {"2020": 0.25, "2024": 0.75}
+WEIGHTS = (0.25, 0.75)
 
-# Max per-state PVI movement tolerated vs. the previously committed file
-# (2016+2020 window -> 2020+2024 window). One shared election plus one new
-# one moves states a few points (measured max at adoption: 3); a swapped
-# column or sign flip moves most of the map by tens of points.
+# Max per-state PVI movement tolerated vs. the previous file (a new window
+# shares one election with the last). One shared election plus one new one
+# moves states a few points (measured max at the 2016+2020 to 2020+2024
+# re-window: 3); a swapped column or sign flip moves most of the map by
+# tens of points.
 CONTINUITY_TOLERANCE = 5
-
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion{CONTACT_NOTE})"}
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json"
 
 _XL = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 
-def _fec_2020(raw: bytes) -> dict[str, dict[str, int]]:
-    """{"ST": {"D": Biden, "R": Trump}} from the FEC's Table 2 sheet. Raises
-    unless the 51 states sum to the sheet's own "Total:" row and that row
-    is the FEC's published national total."""
+def fec_compilation(year: int) -> bytes | None:
+    """The FEC's Federal Elections <year> workbook, as its results index
+    and the year's page link it; None when the index links no such year."""
+    index = download(FEC_RESULTS_INDEX).decode("utf-8", "replace")
+    page = re.search(r'href="([^"]*federal-elections-%d/?)"' % year, index)
+    if not page:
+        return None
+    url = page.group(1) if page.group(1).startswith("http") else "https://www.fec.gov" + page.group(1)
+    book = re.search(r'href="([^"]*federalelections%d\.xlsx)"' % year, download(url).decode("utf-8", "replace"))
+    if not book:
+        raise SystemExit(f"FEC Federal Elections {year}: its page links no federalelections{year}.xlsx")
+    return download(book.group(1) if book.group(1).startswith("http") else "https://www.fec.gov" + book.group(1))
+
+
+def fec_published_years() -> set[int]:
+    """Presidential years the FEC's results index links a compilation for."""
+    index = download(FEC_RESULTS_INDEX).decode("utf-8", "replace")
+    return {int(y) for y in re.findall(r"federal-elections-(\d{4})", index) if int(y) % 4 == 0}
+
+
+def _table_2(raw: bytes) -> tuple[ET.Element, list[str]]:
+    """The workbook's Table 2 sheet (state presidential electoral and
+    popular vote), found by its name."""
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        shared = [
-            "".join(t.text or "" for t in si.iter(f"{_XL}t"))
-            for si in ET.fromstring(zf.read("xl/sharedStrings.xml"))
+        wb = zf.read("xl/workbook.xml").decode()
+        rels = zf.read("xl/_rels/workbook.xml.rels").decode()
+        sheets = [m for m in re.findall(r"<sheet\b[^>]*/>", wb) if re.search(r'name="[^"]*Table 2\b', m)]
+        if len(sheets) != 1:
+            raise SystemExit(f"FEC workbook: {len(sheets)} sheets named Table 2")
+        rid = re.search(r'r:id="([^"]+)"', sheets[0]).group(1)
+        rel = re.search(r'<Relationship\b[^>]*Id="%s"[^>]*/>' % re.escape(rid), rels).group(0)
+        target = re.search(r'Target="([^"]+)"', rel).group(1).lstrip("/").removeprefix("xl/")
+        return ET.fromstring(zf.read("xl/" + target)), [
+            "".join(t.text or "" for t in si.iter(f"{_XL}t")) for si in ET.fromstring(zf.read("xl/sharedStrings.xml"))
         ]
-        sheet = ET.fromstring(zf.read(FEC_2020_SHEET))
-    counts, total = {}, None
+
+
+def fec_counts(raw: bytes) -> dict[str, dict[str, int]]:
+    """{"ST": {"D", "R"}} from an FEC compilation's Table 2: the popular-vote
+    columns labelled "(D)" and "(R)". Raises unless 51 states sum to the
+    table's own "Total:" row."""
+    sheet, shared = _table_2(raw)
+    rows = []
     for row in sheet.iter(f"{_XL}row"):
         cells = {}
         for c in row.iter(f"{_XL}c"):
@@ -160,9 +180,23 @@ def _fec_2020(raw: bytes) -> dict[str, dict[str, int]]:
             if v is not None and v.text is not None:
                 col = re.match(r"[A-Z]+", c.get("r")).group(0)
                 cells[col] = shared[int(v.text)] if c.get("t") == "s" else v.text
+        rows.append(cells)
+    popular = {col for r in rows for col, v in r.items() if v.strip().upper() == "POPULAR VOTE"}
+    side = {}
+    for r in rows:
+        for col in popular:
+            label = r.get(col, "").strip()
+            if label.endswith("(D)"):
+                side["D"] = col
+            elif label.endswith("(R)"):
+                side["R"] = col
+    if set(side) != {"D", "R"}:
+        raise SystemExit(f"FEC Table 2: no popular-vote columns labelled (D) and (R) ({sorted(popular)})")
+    counts, total = {}, None
+    for cells in rows:
         label = cells.get("A", "").strip().rstrip("*")  # "ME*", "NE*": split electoral votes
         try:
-            d, r = int(float(cells["D"])), int(float(cells["E"]))
+            d, r = int(float(cells[side["D"]])), int(float(cells[side["R"]]))
         except (KeyError, ValueError):
             continue
         if re.fullmatch(r"[A-Z]{2}", label):
@@ -170,41 +204,25 @@ def _fec_2020(raw: bytes) -> dict[str, dict[str, int]]:
         elif label.startswith("Total"):
             total = {"D": d, "R": r}
     summed = {p: sum(v[p] for v in counts.values()) for p in ("D", "R")}
-    if len(counts) != 51 or total != summed or total != FEC_2020_NATIONAL:
-        raise SystemExit(f"FEC 2020 table: {len(counts)} states summing to {summed}, total row {total}, "
-                         f"published {FEC_2020_NATIONAL}")
+    if len(counts) != 51 or total != summed:
+        raise SystemExit(f"FEC Table 2: {len(counts)} states summing to {summed}, total row {total}")
     return counts
 
 
-def _get_bytes(url: str) -> bytes:
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=90) as r:
-        return r.read()
-
-
-def _get(url: str) -> str:
-    return _get_bytes(url).decode("utf-8")
-
-
-def _medsl_two_party(text: str, year: str) -> dict[str, dict[str, int]]:
-    """{"ST": {"D": votes, "R": votes}} from MEDSL's state-level returns CSV.
-    The writein flag is not read: the 2024 release has no Democratic or
-    Republican write-in rows."""
-    counts: dict[str, dict[str, int]] = {}
-    for row in csv.DictReader(io.StringIO(text)):
-        if row["year"].strip() != year:
+def cross_check(fec: dict, medsl: dict, year: int) -> None:
+    """Raises unless every state's two-party Democratic share in the FEC's
+    table is within FEC_MEDSL_TOLERANCE points of MEDSL's."""
+    off = []
+    for st, c in fec.items():
+        m = medsl.get(st)
+        if not m:
+            off.append(f"{st} not in MEDSL")
             continue
-        party = row["party_simplified"].strip().upper()
-        key = "D" if party == "DEMOCRAT" else "R" if party == "REPUBLICAN" else None
-        if key is None:
-            continue
-        st = row["state_po"].strip().upper()
-        try:
-            votes = int(row["votes"])
-        except (ValueError, KeyError):
-            continue
-        counts.setdefault(st, {"D": 0, "R": 0})[key] += votes
-    return counts
+        gap = 100 * abs(c["D"] / (c["D"] + c["R"]) - m["D"] / (m["D"] + m["R"]))
+        if gap > FEC_MEDSL_TOLERANCE:
+            off.append(f"{st} {gap:.2f} points")
+    if off:
+        raise SystemExit(f"FEC and MEDSL {year} disagree: {', '.join(off)}")
 
 
 def _two_party_d(counts: dict[str, dict[str, int]]) -> dict[str, float]:
@@ -217,9 +235,11 @@ def _two_party_d(counts: dict[str, dict[str, int]]) -> dict[str, float]:
 
 
 def compute_pvi(by_cycle: dict[str, dict[str, dict[str, int]]]) -> dict[str, int]:
-    """Cook PVI per state (positive = R lean). See module docstring."""
+    """Cook PVI per state (positive = R lean), over the two cycles in
+    `by_cycle`, earlier then later (WEIGHTS). See module docstring."""
+    cycles = sorted(by_cycle)
     nat_tp_d = {}
-    for y in CYCLES:
+    for y in cycles:
         nat = {"D": 0, "R": 0}
         for dr in by_cycle[y].values():
             nat["D"] += dr["D"]
@@ -227,21 +247,21 @@ def compute_pvi(by_cycle: dict[str, dict[str, dict[str, int]]]) -> dict[str, int
         nat_tp_d[y] = nat["D"] / (nat["D"] + nat["R"])
 
     states = set()
-    for y in CYCLES:
+    for y in cycles:
         states |= set(by_cycle[y])
 
     out: dict[str, int] = {}
     for st in sorted(states):
         margins = []
         ok = True
-        for y in CYCLES:
+        for y in cycles:
             c = by_cycle[y].get(st)
             if not c or (c["D"] + c["R"]) == 0:
                 ok = False
                 break
             margins.append(c["D"] / (c["D"] + c["R"]) - nat_tp_d[y])
         if ok:
-            out[st] = -round(sum(CYCLE_WEIGHTS[y] * m for y, m in zip(CYCLES, margins)) * 100)
+            out[st] = -round(sum(w * m for w, m in zip(WEIGHTS, margins)) * 100)
     return out
 
 
@@ -253,7 +273,7 @@ def ingestion_gates(
     a sign flip or swapped column would silently invert every senator's
     seat expectation downstream."""
     failures = []
-    for y in CYCLES:
+    for y in sorted(by_cycle):
         for st, dr in sorted(by_cycle[y].items()):
             if not dr["D"] or not dr["R"]:
                 failures.append(f"{y}: {st} has no {'Democratic' if not dr['D'] else 'Republican'} votes")
@@ -281,6 +301,32 @@ def ingestion_gates(
     return failures
 
 
+def gather() -> tuple[dict[str, dict[str, dict[str, int]]], dict[str, str]]:
+    """({cycle: {"ST": {"D", "R"}}}, {cycle: its source}) for the two newest
+    presidential elections an official compilation covers."""
+    url, name = medsl_file(PRESIDENT_DOI)
+    medsl = {int(y): dict(v) for y, v in presidential_totals(download(url).decode()).items()}
+    complete = {y for y, states in medsl.items() if len(states) == 51}
+    fec_years = fec_published_years()
+    newest = max(complete | fec_years)
+    by_cycle, sources = {}, {}
+    for year in (newest - 4, newest):
+        raw = fec_compilation(year) if year in fec_years else None
+        if raw is not None:
+            by_cycle[str(year)] = fec_counts(raw)
+            if year in complete:
+                cross_check(by_cycle[str(year)], medsl[year], year)
+            sources[str(year)] = (f"Federal Election Commission, Federal Elections {year}, Table 2 (state "
+                                  f"presidential popular vote, from certified results; public domain)")
+        elif year in complete:
+            by_cycle[str(year)] = {st: c for st, c in medsl[year].items()}
+            sources[str(year)] = (f"MIT Election Data and Science Lab, U.S. President {name.split('-president')[0]} "
+                                  f"(Harvard Dataverse, {PRESIDENT_DOI}, {name}, CC0; from certified canvasses)")
+        else:
+            raise SystemExit(f"{year}: neither the FEC nor MEDSL's newest file has its presidential returns")
+    return by_cycle, sources
+
+
 def main() -> int:
     output = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUTPUT
 
@@ -291,17 +337,15 @@ def main() -> int:
         except (ValueError, OSError):
             previous = None
 
-    by_cycle = {
-        "2020": _fec_2020(_get_bytes(FEC_2020_URL)),
-        "2024": _medsl_two_party(_get(MEDSL_2024_URL), "2024"),
-    }
+    by_cycle, sources = gather()
+    earlier, later = sorted(by_cycle)
     pvi = compute_pvi(by_cycle)
 
     vals = list(pvi.values())
     r_lean = sum(1 for v in vals if v > 0)
     d_lean = sum(1 for v in vals if v < 0)
     even = sum(1 for v in vals if v == 0)
-    print(f"computed {len(pvi)} jurisdictions: R-leaning {r_lean}, D-leaning "
+    print(f"computed {len(pvi)} jurisdictions over {earlier}+{later}: R-leaning {r_lean}, D-leaning "
           f"{d_lean}, EVEN {even}, min {min(vals)}, max {max(vals)}")
 
     failures = ingestion_gates(pvi, previous, by_cycle)
@@ -313,19 +357,20 @@ def main() -> int:
 
     json.dump(
         {
-            "_source": SOURCE_DESC,
+            "_source": f"{earlier}: {sources[earlier]}. {later}: {sources[later]}. Two-party vote shares, "
+                       f"Cook PVI formula.",
             "_regenerate": REGENERATE,
             "_method": (
-                "STATE_PVI(st) = -round(100 * (0.25 * d2020 + 0.75 * d2024)), "
+                f"STATE_PVI(st) = -round(100 * ({WEIGHTS[0]} * d{earlier} + {WEIGHTS[1]} * d{later})), "
                 "d = state two-party D share - national two-party D share; "
-                "positive = R lean. Cook Political Report's formula and window "
-                "for its current (2025) published PVIs, all 51 of which it "
-                "reproduces."
+                "positive = R lean. Cook Political Report's formula (since its 2022 release) over the two "
+                "newest presidential elections; on the 2020+2024 window it reproduces all 51 of Cook's "
+                "2025 published state PVIs."
             ),
             "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
-            "_window": WINDOW,
-            "_as_of": AS_OF,
-            "inputs": {y: {st: by_cycle[y][st] for st in pvi} for y in CYCLES},
+            "_window": f"{earlier}+{later}",
+            "_as_of": utcnow().date().isoformat(),
+            "inputs": {y: {st: by_cycle[y][st] for st in pvi} for y in (earlier, later)},
             "states": pvi,
         },
         open(output, "w"),

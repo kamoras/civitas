@@ -335,7 +335,6 @@ def _nightly_pipeline() -> None:
         check_election_readiness,
         check_feedback_token_expiration,
         check_sitting_president,
-        check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
     )
@@ -352,10 +351,6 @@ def _nightly_pipeline() -> None:
             # FEEDBACK_TOKEN's mandatory PAT expiration — a real GitHub API
             # call, so this one is self-gated to run at most weekly.
             check_feedback_token_expiration,
-            # state_pvi.json's election-year window — this one can't
-            # self-advance (see the check's own docstring for why), so the
-            # alert is the only signal that a manual refresh is due.
-            check_state_pvi_staleness,
             # Each hand-labelled calibration against the stream it gates
             # (pass rates since it was fitted).
             calibration_drift.check_all,
@@ -367,8 +362,9 @@ def _nightly_pipeline() -> None:
             # Register's newest presidential document (an inauguration the
             # roster hasn't caught up with).
             check_sitting_president,
-            # The election map's fits stop at their newest trained cycle;
-            # like state_pvi.json, nothing refits them on its own.
+            # The election map's fits against the newest certified general
+            # (they refit by themselves, data_refresh; this says which
+            # input a refit still waits on).
             check_election_map_training_staleness,
             # Public API v1's deprecated fields past their dated sunset,
             # and the unmeasured 0-100 transforms kept only to feed them.

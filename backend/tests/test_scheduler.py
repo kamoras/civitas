@@ -184,7 +184,6 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.resolve_ops_alert") as mock_resolve, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
-             patch("app.ops_alerts.check_state_pvi_staleness"), \
              patch("app.calibration_drift.check_all"), \
              patch("app.ops_alerts.check_election_readiness"), \
              patch("app.ops_alerts.check_sitting_president"), \
@@ -243,7 +242,6 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.resolve_ops_alert"), \
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
-             patch("app.ops_alerts.check_state_pvi_staleness"), \
              patch("app.calibration_drift.check_all"), \
              patch("app.ops_alerts.check_election_readiness"), \
              patch("app.ops_alerts.check_sitting_president"), \
