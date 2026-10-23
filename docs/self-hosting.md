@@ -141,9 +141,9 @@ is public, so the server treats it as **no token at all** and refuses it
 - `DATABASE_URL`: the compose files set `sqlite:////data/civitas.db`, on the
   data volume.
 - `PROCESS_ROLE`: leave unset. The Swarm overlay sets it per service.
-- **`CURRENT_CONGRESS`: never set it.** It follows the clock. A value here
-  pins both the scored windows and the House district lines to one Congress
-  for good.
+- `CURRENT_CONGRESS` and `ARCHIVE_MODE`: leave unset. The Congress follows
+  the clock; a `CURRENT_CONGRESS` here is ignored unless `ARCHIVE_MODE=true`,
+  which is only for re-running an archived database.
 
 ---
 

@@ -91,7 +91,7 @@ from app.pipeline.analyze.score_calibration import generate_calibration_report
 from app.pipeline.fetch import ballot_measure_pdf_sources, district_pvi
 from app.pipeline.fetch.agencies import run_agency_sync
 from app.pipeline_chain import chain_running
-from app.scheduler import get_next_run_time, triggered_chain
+from app.scheduler import get_next_run_time, run_missed_nightly, triggered_chain
 from app.services import bill_service
 from app.time_utils import utcnow
 
@@ -1914,6 +1914,8 @@ async def admin_reset_data():
         background.start_writer(run_agency_sync, name="agency-sync")
     except background.WritesHeld as held:
         logger.info("%s", held)
+    # A nightly chain the reset held off starts now, not tomorrow night.
+    run_missed_nightly()
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

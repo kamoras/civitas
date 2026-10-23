@@ -267,8 +267,8 @@ def _alert_reserved(agencies: list[dict]) -> None:
     send_ops_alert(
         f"Agency sync: the Federal Register lists an agency slug a page uses: {', '.join(taken)}",
         f"/agencies/{taken[0]} is a page of its own (frontend/src/app/agencies/), so the agency "
-        "with that slug has no reachable page and links to it land on that page. Rename the page "
-        "and update RESERVED_SLUGS in app/pipeline/fetch/agencies.py.",
+        "with that slug has no reachable page and links to it land on that page (RESERVED_SLUGS "
+        "in app/pipeline/fetch/agencies.py).",
         dedupe_key=f"{condition}-{'-'.join(taken)}",
         condition=condition,
     )
