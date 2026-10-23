@@ -37,6 +37,8 @@ from app.pipeline.analyze.score_calculator import _seat_pvi, scoring_version
 from app.readout import mark
 from app.score_keeping import load_breakdown
 from app.score_display import shown_share, thin_dimensions
+from app.services.presidential_support_service import METHOD as SUPPORT_METHOD
+from app.services.presidential_support_service import chamber_view as support_chamber_view
 from app.services.representative_service import get_representative_score_breakdown
 from app.services.senator_service import get_senator_score_breakdown
 from app.time_utils import congress_in_session
@@ -434,8 +436,120 @@ def chamber_measures(db: Session, chamber: str) -> dict:
             "passed": sum(stages[3:]) if five else None,
             "law": stages[4] if five else None,
         })
+    support = support_chamber_view(db, chamber)
+    by_member = {m["id"]: m for m in (support or {}).get("members", [])}
+    for row in members:
+        s = by_member.get(row["id"])
+        row["withPresident"] = s["withPresident"] if s else None
+        row["presidentVotes"] = s["votes"] if s else None
+    for row in out:
+        row["rule"], row["ruleText"] = PERCENTILE_RULE, percentile_rule_text()
+    if support and any(m["rate"] is not None for m in support["members"]):
+        out.append(president_row(chamber, support, rows))
     members.sort(key=lambda x: x["name"])
     return {"chamber": chamber, "measures": out, "members": members}
+
+
+# The four peer measures' rule as the measures page states it beside each
+# row (member pages draw the words; the chamber page shows the rule).
+PERCENTILE_RULE = {"kind": "percentile", **RULE}
+
+
+def percentile_rule_text() -> str:
+    lo, hi = RULE["outside"]
+    well_lo, well_hi = RULE["wellOutside"]
+    return (f"Word rule on member pages: a figure is above or below peers outside the {lo}th to {hi}th "
+            f"percentile of the member's own party, and well above or below outside the {well_lo}th to "
+            f"{well_hi}th and more than {RULE['wellGapSd']:g} standard deviation from expected.")
+
+
+# Votes with the president's stated position, the measures page's fifth
+# row. Its own rule, not the percentile words: a senator has a few dozen
+# such votes against hundreds of party-line votes, too few to place a
+# member among peers, so each member's 95% range (Wilson) is set against
+# the seat's expected rate (presidential_support_service.summary). Fewer
+# counted votes than RULE's minimum record draws no word, as on the other
+# rows; member_boxes.president_box follows the same rule.
+SUPPORT_RULE = {"kind": "interval", "interval": 95, "minRecord": RULE["minRecord"]}
+SUPPORT_WORD = {
+    "more": "more than the seat's expected rate",
+    "within": "within the seat's expected rate",
+    "less": "less than the seat's expected rate",
+}
+
+
+def support_word(summary: dict) -> str | None:
+    """The comparison's words for one member's summary, None for a record
+    under the minimum or with no expected rate."""
+    if (summary.get("votes") or 0) < SUPPORT_RULE["minRecord"]:
+        return None
+    return SUPPORT_WORD.get(summary.get("comparedWithExpected") or "")
+
+
+def president_row(chamber: str, support: dict, rows: list[dict]) -> dict:
+    """The measures page's row for votes with the president: the chamber's
+    members at their rate, each point's readout with the range, the
+    counted votes, the seat's expected rate and the comparison's words."""
+    house = chamber == "house"
+    seats = {r["id"]: r for r in rows}
+    members = [m for m in support["members"] if m["rate"] is not None]
+    values = sorted(m["rate"] for m in members)
+    # One tick per party, not a chamber median: the parties sit far apart
+    # here, and a chamber median falls in the gap between them, a rate
+    # almost no member has.
+    party_medians = []
+    for party, plural in _PARTY_PLURAL.items():
+        rates = [m["rate"] for m in members if m["party"] == party]
+        if rates:
+            mid = statistics.median(rates)
+            party_medians.append({"party": party, "value": mid, "n": len(rates),
+                                  "shown": f"{plural}' median {axis_figure('share', mid)}"})
+
+    def entry(m: dict) -> dict:
+        word = support_word(m)
+        votes = f"{m['withPresident']:,} of {m['votes']:,} vote{'' if m['votes'] == 1 else 's'}"
+        parts = [f"Range {shown_share(m['rateLow'])} to {shown_share(m['rateHigh'])}"]
+        if m["expected"] is not None:
+            parts.append(f"seat's expected rate {shown_share(m['expected'])}")
+        parts.append(word or f"too few counted votes to compare (under {SUPPORT_RULE['minRecord']})")
+        caucus = (seats.get(m["id"]) or {}).get("caucus", m["party"])
+        return {"id": m["id"], "name": m["name"], "party": m["party"], "caucus": caucus,
+                "state": m["state"], "district": m["district"], "value": m["rate"],
+                "shown": f"{shown_share(m['rate'])}, {votes}", "expected": m["expected"],
+                "gap": m["difference"], "rank": rank_shown(m["rate"], values),
+                "context": " · ".join(parts), "word": word, "thin": word is None,
+                "compared": m["comparedWithExpected"] if word else None,
+                "rateLow": m["rateLow"], "rateHigh": m["rateHigh"], "votes": m["votes"]}
+
+    entries = [entry(m) for m in members]
+    more = sorted((e for e in entries if e["compared"] == "more"), key=lambda e: -e["gap"])
+    less = sorted((e for e in entries if e["compared"] == "less"), key=lambda e: e["gap"])
+    counted = [m["votes"] for m in members]
+    party_votes = [v for r in rows if (v := alignment_facts(r["facts"]).get("partyVotes"))]
+    who = "representative" if house else "senator"
+    contrast = (f" against {round(statistics.median(party_votes)):,} party-line votes" if party_votes else "")
+    rule_text = (f"Word rule for this row: not the percentile one, since the median {who} has "
+                 f"{round(statistics.median(counted)):,} counted votes{contrast}, too few to place among peers. "
+                 f"Each member's 95% range is set against the seat's expected rate: more than it when the "
+                 f"whole range is above, less when below, within when the range includes it. Fewer than "
+                 f"{SUPPORT_RULE['minRecord']} counted votes draws no word.")
+    return {
+        "key": "presidentSupport", "label": "Votes with the president",
+        "question": "How often does this member vote the way the president asked?",
+        "why": ("Share of counted votes where this member voted the way a White House Statement of "
+                "Administration Policy asked. Members of the president's party, and from seats that lean "
+                "the president's way, tend to vote that way more. Neither more nor less is better."),
+        "direction": "higher means more votes on the president's stated side", "unit": "share",
+        "median": None, "partyMedians": party_medians, "n": len(entries),
+        "source": {"name": SUPPORT_METHOD["source"], "url": SUPPORT_METHOD["sourceUrl"]},
+        "medianShown": None,
+        **_axis("share", values),
+        "points": sorted(entries, key=lambda e: e["value"]),
+        # Only members whose whole range is clear of the seat's rate.
+        "mostAbove": more[:3],
+        "mostBelow": less[:3],
+        "rule": SUPPORT_RULE, "ruleText": rule_text,
+    }
 
 
 # Why the line above the stack says what it says: the rule, in a sentence.

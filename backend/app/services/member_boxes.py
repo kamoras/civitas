@@ -20,6 +20,7 @@ from app.election_calendar import class_up, senator_class
 from app.election_phase import active_election
 from app.live_results.sync import elected_congress_sits
 from app.models import PresidentialSupport
+from app.peer_comparison import SUPPORT_RULE
 from app.readout import compact_money, seat_name
 from app.score_display import shown_share
 from app.services.constituent_survey import survey_year
@@ -162,7 +163,10 @@ def president_box(db: Session, member_id: str) -> dict | None:
     s = support_summary(row)
     text = f"{s['withPresident']:,} of {s['votes']:,}"
     caption = "votes on the president's stated side" if s["votes"] != 1 else "vote on the president's stated side"
-    verdict = VERDICT.get(s["comparedWithExpected"] or "")
+    # A record under the measures page's minimum draws no comparison there
+    # (peer_comparison.SUPPORT_RULE), so none here either.
+    thin = s["votes"] < SUPPORT_RULE["minRecord"]
+    verdict = None if thin else VERDICT.get(s["comparedWithExpected"] or "")
     rate = shown_share(s["rate"])
     if verdict and s["expected"] is not None:
         expected = shown_share(s["expected"])

@@ -647,8 +647,7 @@ def check_score_distribution(db, model=None) -> list[dict]:
         .all()
     )
     # Same Congress by calendar date, the boundary the trend chart and the
-    # leaderboard arrows use. A CURRENT_CONGRESS setting left behind the
-    # calendar is ops_alerts.check_current_congress_staleness's to flag.
+    # leaderboard arrows use.
     by_date: dict[str, list[tuple]] = defaultdict(list)
     for row in history_rows:
         by_date[row[0]].append(row[1:])

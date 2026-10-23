@@ -301,14 +301,20 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 **No composite is displayed** (2026-10). The weighted Representation Score
 and its rank are not shown on any page; each is still computed for public
-API v1's deprecated `overall` and `rank` (removed in v2). What the site
+API v1's deprecated `overall` and `rank` (served through `schemas.API_V1_SUNSET`, then left out of
+responses by themselves, `public.strip_deprecated`). What the site
 shows is each measure against peers (`app/peer_comparison.py`): the member's
 figure, the seat-adjusted expected figure, the peers' distribution, and an
 evaluative word per measure ("well above / above / near / below / well below
 peers") from a fixed percentile rule whose cut points are conventions, served
 with every comparison as `rule`. The words are neutral about direction (above
 and below, never better and worse). Never add a page that ranks members by a
-blend of unlike measures, or a word not from that rule.
+blend of unlike measures, or a word not from that rule. The one row with
+words of its own is votes with the president on the measures page
+(`peer_comparison.president_row`, 2026-10): a senator has a few dozen such
+votes, too few for a percentile, so it says "more than / within / less than
+the seat's expected rate" from the member's 95% range, and every row there
+serves its rule (`rule`, `ruleText`) so the page states which one it follows.
 
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
@@ -496,12 +502,12 @@ The correct pattern, established by `_district_pvi()` /
    process-wide value — hand such work over with `asyncio.to_thread`) — so a process
    running across Jan 3 moves at its next job with no restart, and a job
    running across noon stays on one Congress. The read-only API process
-   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
-   freezes the district lines as well as the windows, and
-   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
-   database; **the production `.env` must not set `CURRENT_CONGRESS`**
-   (`.env.example` leaves it commented out, and a test keeps it that
-   way). Every House run — the nightly
+   runs no jobs; it advances the value on its liveness loop. A pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and it exists only for re-running an archived
+   database, so it takes two settings, `ARCHIVE_MODE=true` and `CURRENT_CONGRESS`. Without
+   `ARCHIVE_MODE`, a `CURRENT_CONGRESS` in the environment is ignored (logged at start) and the
+   value follows the clock, so a line left in a production `.env` can never go stale
+   (`.env.example` leaves both commented out, and a test keeps it that way). Every House run — the nightly
    chain's and each triggered one (`/api/admin/pipeline/trigger`,
    `/trigger-house`, the token trigger) — goes through
    `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
@@ -2462,7 +2468,8 @@ See `.env.example` for all options. Key variables:
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
 | `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
-| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
+| `CURRENT_CONGRESS` | No | Computed from the clock. Ignored unless `ARCHIVE_MODE=true`, which pins the scored windows *and* House members' district lines to it: only for re-running an archived database |
+| `ARCHIVE_MODE` | No | `true` only to re-run an archived database: makes `CURRENT_CONGRESS` a pin |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -2470,11 +2477,10 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
-an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
-before 2026-09) pins the scored windows and the district lines on the
-119th Congress for good — check for the line and delete it
-(`check_current_congress_staleness` alerts once it has gone stale).
+always has. `ARCHIVE_MODE` is for an archived re-run only: an `.env`
+copied from a template that once set `CURRENT_CONGRESS=119` (before
+2026-09) does nothing without it, since outside archive mode the setting
+follows the clock.
 
 ### Database
 
@@ -2601,7 +2607,7 @@ the pending list).
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
 | Find your members (Congress › Members: Senate and House by state, town or county; `/politicians` redirects here) | `frontend/src/app/congress/members/MembersDirectory.tsx`, `GET /api/politicians`, `GET /api/politicians/house-districts` |
-| The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
+| The chamber measure by measure (`/congress/members/measures`: five rows, the fifth votes with the president on its own interval rule, linking its full page `/congress/president/<chamber>`, which is no menu's view; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, "Entered into the record" front page: lead, tier and Congress/Agencies/news columns by a fixed rule, task boxes and registration closing) | `frontend/src/components/home/Masthead.tsx`, `FrontPage.tsx` and `YourMembersLink.tsx` (from `GET /api/front-page`, `backend/app/api/notable.py`), `HomeTasks.tsx`, `StateJump.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
@@ -2667,7 +2673,11 @@ the pending list).
   FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
   `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
   documented from one column list (`_csv`, `_csv_doc`): the contract test
-  checks its header against that list, and it is not an MCP tool.
+  checks its header against that list, and it is not an MCP tool. A field or column
+  being retired is marked deprecated (`json_schema_extra={"deprecated": True}`
+  with `default=None`; a column's description starting with
+  `_DEPRECATED_COLUMN`) and stops being served the day after
+  `schemas.API_V1_SUNSET` by itself, never by a person removing it on the day.
 - **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
   `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
   roll call names "H.R. 997"), so the API's `JSONResponse`

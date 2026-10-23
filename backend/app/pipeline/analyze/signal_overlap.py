@@ -149,8 +149,8 @@ def record_signal_overlap(db, chamber: str) -> dict | None:
             send_ops_alert(
                 f"{chamber.title()} score components overlap (|r| >= {ACTION_R})",
                 f"Two components measured from related data now move together:\n{lines}\n"
-                "The established fix is to cut the redundant weight or restructure "
-                "(score_calculator's v6.8/v6.11 notes), not to recalibrate around it.",
+                "While they do, the score counts one signal twice (score_calculator's v6.8 and "
+                "v6.11 notes record the earlier cases and how each was resolved).",
                 dedupe_key=f"signal-overlap-{chamber}-{utcnow().date().isoformat()}",
                 condition=f"signal-overlap-{chamber}",
             )

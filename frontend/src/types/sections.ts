@@ -16,7 +16,6 @@ export interface SectionFigures {
     recess: { lastBusinessDay: string | null } | null;
     committees: { count: number; metThisWeek: number | null };
     bills: { inMotion: number };
-    president: Record<"house" | "senate", { rate: number; rollCalls: number } | null>;
   };
   agencies: {
     budget: { total: number; fiscalYear: number | null; reportedCount: number } | null;
