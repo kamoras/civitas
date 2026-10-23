@@ -80,6 +80,7 @@ logger = logging.getLogger(__name__)
 BACKEND = pathlib.Path(__file__).resolve().parent.parent
 BUNDLED = BACKEND / "app" / "data"
 _STATE_TIER = "data-refresh"
+MAPS_FILE = "redrawn_congressional_maps.json"
 
 _read_cache: dict[str, tuple[object, dict]] = {}
 
@@ -659,6 +660,49 @@ def _calendar_gate(new: dict, old: dict) -> list[str]:
     same_election = new.get("electionDate") == old.get("electionDate")
     if before and items < (0.95 if same_election else 0.3) * before:
         failures.append(f"{items} deadlines where the copy in use has {before}")
+    return failures
+
+
+# Each election's maps: the cycles the bundled file researched, plus the
+# coming election's, derived from the Census Bureau's block equivalency file
+# for the Congress it seats (scripts/derive_redrawn_maps.py). Weekly while
+# the site's election is one the bundled file doesn't list and isn't held
+# yet: until the file is published that reads three directory listings; once
+# it is, a re-release (the 120th's was, 2026-10-07, after a court order) is
+# picked up within the week.
+def _maps_command(ctx: Context) -> list[str] | None:
+    election = _election()
+    return [PY, _script("derive_redrawn_maps.py"), "{out}", "--cycle", str(election.cycle), "--cache", "{tmp}"]
+
+
+def _maps_due(ctx: Context) -> bool:
+    election = _election()
+    bundled = _bundled_doc(MAPS_FILE).get("cycles") or {}
+    return election.phase == "campaign" and str(election.cycle) not in bundled and not ctx.tried_within(7)
+
+
+def _bundled_doc(name: str) -> dict:
+    try:
+        return json.loads((BUNDLED / name).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _maps_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    cycles = new.get("cycles") or {}
+    bundled = _bundled_doc(MAPS_FILE).get("cycles") or {}
+    if any(cycles.get(c) != e for c, e in bundled.items()):
+        failures.append("a researched cycle of the bundled file changed")
+    for c, entries in cycles.items():
+        if not c.isdigit():
+            failures.append(f"cycle {c!r} is not a year")
+        for st, e in (entries or {}).items():
+            if st not in STATE_NAMES or not re.fullmatch(r"CD\d+", str((e or {}).get("map") or "")):
+                failures.append(f"{c} {st}: {e!r}")
+    lost = sorted(set(old.get("_derived") or {}) - set(new.get("_derived") or {}) - set(bundled))
+    if lost:
+        failures.append(f"cycles derived before and not now: {lost}")
     return failures
 
 
@@ -1308,4 +1352,5 @@ DATA_FILES: list[DataFile] = [
              due=_every(30), gate=_commemorative_gate, accept=held_out_beats_in_use,
              scoring_inputs=lambda doc: doc.get("threshold"), heavy=True, timeout_s=3 * 3600),
     DataFile("district_lean.json", stale=_district_lean_stale),
+    DataFile(MAPS_FILE, command=_maps_command, due=_maps_due, gate=_maps_gate, heavy=True, timeout_s=1800),
 ]
