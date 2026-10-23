@@ -32,7 +32,7 @@
         "http://localhost:3000/elections/states/NY",
         "http://localhost:3000/congress/bills",
         "http://localhost:3000/agencies",
-        "http://localhost:3000/agencies/budget",
+        "http://localhost:3000/executive/budgets",
         "http://localhost:3000/about/scores",
         "http://localhost:3000/elections/map?chamber=senate",
         "http://localhost:3000/elections/map?chamber=house"

@@ -156,7 +156,7 @@ describe("currentTab", () => {
 
   it("marks the tab whose views a page is, and the page itself", () => {
     expect(marked("executive", "/agencies")).toEqual([["agencies", "page"]]);
-    expect(marked("executive", "/agencies/budget")).toEqual([["agencies", "true"]]);
+    expect(marked("executive", "/executive/budgets")).toEqual([["agencies", "true"]]);
     expect(marked("executive", "/compare/presidents")).toEqual([["presidents", "true"]]);
     expect(marked("congress", "/congress/week")).toEqual([["reports", "true"]]);
     expect(marked("congress", "/congress/month/2026-09")).toEqual([["reports", "true"]]);
