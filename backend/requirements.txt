@@ -49,7 +49,7 @@ narwhals==2.26.0
 networkx==3.7
 numpy==2.5.3
 opencv-python-headless==5.0.0.93
-opentelemetry-api==1.45.0
+opentelemetry-api==1.45.1
 packaging==26.3
 pdfminer.six==20260107
 pdfplumber==0.11.10

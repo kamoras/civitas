@@ -14,7 +14,7 @@
 # (frozen_clock_plugin.py, the test suite run on another date), fonttools
 # and brotli (fetch_site_fonts.py's Open Graph TrueType files). The rest is what those pull in beyond
 # requirements.txt.
-brotli==1.2.0
+brotli==1.2.1
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
 fonttools==4.63.0
