@@ -1,12 +1,12 @@
 {
-  "_source": "scripts/calibrate_search_fusion.py on the live indexes (2026-10-20): fitted on half the targets' known-item probes (site search's and Explore's), measured on the other half.",
+  "_source": "scripts/calibrate_search_fusion.py on the live indexes (2026-10-22): fitted on half the targets' known-item probes (site search's and Explore's), measured on the other half.",
   "params": {
-    "k": 0.5,
-    "document_weight": 0.1,
+    "k": 1.0,
+    "document_weight": 0.15,
     "strong_match": 0.5,
     "weak_weight": 0.0
   },
-  "structure": "gate kept: macro MRR gain 0.0400 on the fit half, standard error 0.0060",
+  "structure": "gate kept: macro MRR gain 0.0363 on the fit half, standard error 0.0079",
   "cutoff": 10,
   "held_out": {
     "acronym": {
@@ -28,16 +28,16 @@
       "r10_after": 1.0
     },
     "doc:crcite": {
-      "probes": 42,
+      "probes": 43,
       "mrr_before": 0.0,
-      "mrr_after": 0.37,
+      "mrr_after": 0.381,
       "r1_before": 0.0,
-      "r1_after": 0.167,
+      "r1_after": 0.186,
       "r10_before": 0.0,
-      "r10_after": 0.786
+      "r10_after": 0.767
     },
     "doc:docket": {
-      "probes": 4,
+      "probes": 3,
       "mrr_before": 0.0,
       "mrr_after": 1.0,
       "r1_before": 0.0,
@@ -55,7 +55,7 @@
       "r10_after": 1.0
     },
     "doc:frdoc": {
-      "probes": 24,
+      "probes": 22,
       "mrr_before": 1.0,
       "mrr_after": 1.0,
       "r1_before": 1.0,
@@ -64,49 +64,49 @@
       "r10_after": 1.0
     },
     "doc:identifier": {
-      "probes": 10,
-      "mrr_before": 0.2,
-      "mrr_after": 0.533,
-      "r1_before": 0.2,
+      "probes": 8,
+      "mrr_before": 0.25,
+      "mrr_after": 0.542,
+      "r1_before": 0.25,
       "r1_after": 0.5,
-      "r10_before": 0.2,
-      "r10_after": 0.6
+      "r10_before": 0.25,
+      "r10_after": 0.625
     },
     "doc:paraphrase": {
-      "probes": 66,
+      "probes": 65,
       "mrr_before": 0.0,
-      "mrr_after": 0.663,
+      "mrr_after": 0.648,
       "r1_before": 0.0,
-      "r1_after": 0.53,
+      "r1_after": 0.508,
       "r10_before": 0.0,
-      "r10_after": 0.909
+      "r10_after": 0.908
     },
     "doc:rare": {
-      "probes": 66,
+      "probes": 65,
       "mrr_before": 0.0,
-      "mrr_after": 0.437,
+      "mrr_after": 0.457,
       "r1_before": 0.0,
-      "r1_after": 0.182,
+      "r1_after": 0.215,
       "r10_before": 0.0,
-      "r10_after": 0.955
+      "r10_after": 0.969
     },
     "doc:title": {
-      "probes": 61,
-      "mrr_before": 0.526,
-      "mrr_after": 0.524,
-      "r1_before": 0.475,
-      "r1_after": 0.475,
-      "r10_before": 0.689,
-      "r10_after": 0.689
+      "probes": 58,
+      "mrr_before": 0.498,
+      "mrr_after": 0.498,
+      "r1_before": 0.448,
+      "r1_after": 0.448,
+      "r10_before": 0.655,
+      "r10_after": 0.672
     },
     "document": {
-      "probes": 74,
-      "mrr_before": 0.919,
-      "mrr_after": 0.919,
-      "r1_before": 0.919,
-      "r1_after": 0.919,
-      "r10_before": 0.919,
-      "r10_after": 0.919
+      "probes": 76,
+      "mrr_before": 0.921,
+      "mrr_after": 0.921,
+      "r1_before": 0.921,
+      "r1_after": 0.921,
+      "r10_before": 0.921,
+      "r10_after": 0.921
     },
     "identifier": {
       "probes": 82,
@@ -127,7 +127,7 @@
       "r10_after": 1.0
     },
     "page": {
-      "probes": 76,
+      "probes": 85,
       "mrr_before": 1.0,
       "mrr_after": 1.0,
       "r1_before": 1.0,
@@ -158,8 +158,26 @@
       "mrr_after": 0.99
     },
     "document_types": {
-      "mrr_before": 0.316,
+      "mrr_before": 0.319,
       "mrr_after": 0.666
     }
-  }
+  },
+  "kinds": [
+    "agency",
+    "bill",
+    "committee",
+    "district",
+    "document",
+    "issue",
+    "justice",
+    "measure",
+    "member",
+    "monitor",
+    "nomination",
+    "page",
+    "president",
+    "race",
+    "rollcall",
+    "state"
+  ]
 }
