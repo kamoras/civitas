@@ -11,18 +11,19 @@ state and name, so a member who took office after the survey, or who has
 changed chambers since, has no reading rather than their predecessor's.
 """
 
-import json
 import logging
 import pathlib
 import re
 import unicodedata
 
+from app import data_refresh
 from app.score_display import shown_share
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 _DATA = pathlib.Path(__file__).resolve().parent.parent / "data" / "ces_member_approval.json"
+# A fixed survey, set only by tests; None reads the copy in use.
 _survey_cache: dict | None = None
 
 # Respondent parties in display order.
@@ -32,14 +33,13 @@ _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv"})
 
 
 def _survey() -> dict:
-    global _survey_cache
-    if _survey_cache is None:
-        try:
-            _survey_cache = json.loads(_DATA.read_text())
-        except Exception:
-            logger.warning("Constituent survey data unavailable (%s)", _DATA, exc_info=True)
-            _survey_cache = {}
-    return _survey_cache
+    if _survey_cache is not None:
+        return _survey_cache
+    # The newest survey data_refresh has mapped and installed, else the bundled one.
+    data = data_refresh.read(_DATA.name)
+    if not data:
+        logger.warning("Constituent survey data unavailable (%s)", _DATA)
+    return data
 
 
 def _name_parts(name: str) -> tuple[str, str] | None:

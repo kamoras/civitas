@@ -166,38 +166,6 @@ class TestCheckFeedbackTokenExpiration:
         mock_alert.assert_not_called()
 
 
-class TestCheckStatePviStaleness:
-    """state_pvi.json's sources are deliberately pinned to immutable
-    historical snapshots (see the check's own docstring) — a scheduled
-    refetch can't advance its 2-cycle window, so this alert is the only
-    signal an operator gets that a manual refresh is due."""
-
-    def _check(self, window: str, today: date):
-        from app.ops_alerts import check_state_pvi_staleness
-
-        with patch("app.pipeline.analyze.score_calculator._read_pvi_json",
-                   return_value={"_window": window}), \
-             patch("app.ops_alerts.utcnow", return_value=datetime.combine(today, datetime.min.time())), \
-             patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            check_state_pvi_staleness()
-        return mock_alert
-
-    @pytest.mark.parametrize("window, today, alerts", [
-        pytest.param("2020+2024", date(2027, 1, 1), False, id="silent_well_before_next_cycle_is_due"),
-        pytest.param("2020+2024", date(2028, 12, 14), False, id="silent_right_before_the_due_date"),
-        pytest.param("2020+2024", date(2028, 12, 15), True, id="alerts_on_the_due_date"),
-        pytest.param("2020+2024", date(2029, 1, 1), True, id="alerts_once_next_cycle_data_should_be_available"),
-        pytest.param("", date(2030, 1, 1), False, id="silent_when_window_metadata_missing"),
-    ])
-    def test_alerts_once_the_next_cycle_is_due(self, window, today, alerts):
-        mock_alert = self._check(window, today=today)
-        if alerts:
-            mock_alert.assert_called_once()
-            assert "2028" in mock_alert.call_args.args[1]
-        else:
-            mock_alert.assert_not_called()
-
-
 def _check_stale(db_session):
     with patch("app.ops_alerts.SessionLocal", return_value=db_session), \
          patch("app.ops_alerts.send_ops_alert") as mock_alert:
@@ -559,13 +527,13 @@ class TestElectionReadiness:
 
 
 class TestCheckSittingPresident:
-    """The roster's sitting president against the Federal Register's newest
-    presidential document: an inauguration the roster hasn't caught up with
-    is alerted; a register that is merely behind the roster is not."""
+    """The table's sitting president against the roster sync's last check
+    with the Federal Register: alerted only when the sync recorded a
+    disagreement it could not resolve."""
 
     @staticmethod
-    def _check(db_session, signer):
-        with patch("app.ops_alerts.newest_presidential_signer", return_value=signer), \
+    def _check(db_session, check):
+        with patch("app.pipeline.fetch.presidential_roster.register_check", return_value=check), \
              patch("app.ops_alerts.SessionLocal", return_value=SimpleNamespace(query=db_session.query, close=lambda: None)), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert") as resolve:
@@ -574,66 +542,34 @@ class TestCheckSittingPresident:
 
     @pytest.fixture
     def roster(self, db_session):
-        db_session.add_all([
-            President(id="outgoing-47", name="Outgoing A. President, Jr.", party="R", number=47,
-                      term_start="2025-01-20", is_current=True),
-        ])
+        db_session.add(President(id="outgoing-47", name="Outgoing A. President, Jr.", party="R", number=47,
+                                 term_start="2025-01-20", is_current=True))
         db_session.commit()
 
     def test_the_same_person_resolves(self, db_session, roster):
-        alert, resolve = self._check(db_session, ("Outgoing President", "2026-10-07"))
+        alert, resolve = self._check(db_session, {"signer": "Outgoing President", "signed": "2026-10-07",
+                                                  "problem": None})
         alert.assert_not_called()
         resolve.assert_called_once_with("sitting-president-mismatch")
 
-    def test_a_new_president_the_roster_lacks_alerts(self, db_session, roster):
-        # 2029-01-21: the new president's first documents, the roster still
-        # on the outgoing one.
-        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
-        assert alert.call_args.kwargs["condition"] == "sitting-president-mismatch"
-        assert "Incoming President" in alert.call_args.args[1]
-
-    def test_a_register_behind_the_roster_is_quiet(self, db_session):
-        # The roster already shows the new president; the register's newest
-        # documents (published days after signing) are still the outgoing
-        # president's.
-
-        db_session.add(President(id="incoming-48", name="Incoming President", party="D", number=48,
-                                 term_start="2029-01-20", is_current=True))
-        db_session.commit()
-        alert, resolve = self._check(db_session, ("Outgoing President", "2029-01-17"))
+    def test_a_disagreement_the_sync_resolved_is_quiet(self, db_session, roster):
+        alert, resolve = self._check(db_session, {"signer": "Incoming President", "signed": "2029-01-21",
+                                                  "problem": None})
         alert.assert_not_called()
         resolve.assert_not_called()
 
-    def test_no_sitting_president_alerts(self, db_session):
-        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
-        assert "nobody" in alert.call_args.args[1]
+    def test_a_disagreement_the_sync_could_not_resolve_alerts_with_its_reason(self, db_session, roster):
+        alert, _ = self._check(db_session, {"signer": "Incoming President", "signed": "2029-01-21",
+                                            "problem": "Wikidata does not yet record Incoming President"})
+        assert alert.call_args.kwargs["condition"] == "sitting-president-mismatch"
+        text = alert.call_args.args[1]
+        assert "Incoming President" in text and "Wikidata does not yet record" in text
+        assert "tries again" in text and "Check" not in text
 
-    def test_an_unreadable_register_changes_nothing(self, db_session, roster):
+    def test_no_check_yet_changes_nothing(self, db_session, roster):
         alert, resolve = self._check(db_session, None)
         alert.assert_not_called()
         resolve.assert_not_called()
-
-
-def test_newest_presidential_signer_reads_the_newest_signing(monkeypatch):
-    class Resp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"results": [
-                {"president": {"name": "Outgoing President"}, "signing_date": "2029-01-19"},
-                {"president": {"name": "Incoming President"}, "signing_date": "2029-01-20"},
-                {"president": None, "signing_date": "2029-01-21"},
-            ]}
-
-    monkeypatch.setattr(ops_alerts.httpx, "get", lambda *a, **k: Resp())
-    assert ops_alerts.newest_presidential_signer() == ("Incoming President", "2029-01-20")
-
-    def down(*a, **k):
-        raise ops_alerts.httpx.ConnectError("down")
-
-    monkeypatch.setattr(ops_alerts.httpx, "get", down)
-    assert ops_alerts.newest_presidential_signer() is None
 
 
 def test_v1_fields_alive_past_their_sunset_alert(freeze_utcnow):

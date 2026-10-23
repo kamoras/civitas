@@ -30,7 +30,7 @@ def senate(tmp_path, monkeypatch):
     more), the position part rising toward the seat's center."""
     rng = random.Random(3)
     pvi = {st: rng.randint(-20, 20) for st in STATES}
-    monkeypatch.setattr(score_calculator, "_state_pvi_cache", pvi)
+    monkeypatch.setattr(score_calculator, "_state_pvi", lambda: pvi)
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", {})
     monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     members, votes, db_rows = [], [], []

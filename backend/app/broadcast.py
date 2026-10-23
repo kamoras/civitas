@@ -59,7 +59,7 @@ from sqlalchemy.orm import Session
 
 import httpx
 
-from app import retractions
+from app import data_refresh, retractions
 from app.config import settings
 from app.contact import SELF_FETCH_USER_AGENT
 from app.models import BroadcastPost
@@ -115,6 +115,8 @@ SCHEDULED_KINDS = frozenset({"spotlight", "congress_day", "congress_week", "cong
 HELD_MAX_AGE = timedelta(days=2)
 
 _WINDOWS_PATH = pathlib.Path(__file__).resolve().parent / "data" / "bluesky_post_windows.json"
+_BUNDLED_WINDOWS = _WINDOWS_PATH
+# A fixed list of windows, set only by tests; None reads the file in use.
 _windows_cache: list[tuple[int, int]] | None = None
 
 # How far back the hourly pass fills in a card the page didn't give at
@@ -175,14 +177,16 @@ def _windows() -> list[tuple[int, int]]:
     """The posting windows, as [start, end) Eastern hours; an end at or
     before its start runs past midnight. Empty when the file can't be read,
     and then nothing is held."""
-    global _windows_cache
-    if _windows_cache is None:
-        try:
-            _windows_cache = [(w["start"], w["end"]) for w in json.loads(_WINDOWS_PATH.read_text())["windows"]]
-        except (OSError, ValueError, KeyError, TypeError):
-            logger.warning("Bluesky posting windows unreadable (%s); scheduled posts go out at once", _WINDOWS_PATH)
-            _windows_cache = []
-    return _windows_cache
+    if _windows_cache is not None:
+        return _windows_cache
+    try:
+        # The measurement in use: data_refresh's quarterly remeasure, else the bundled one.
+        doc = (data_refresh.read(_WINDOWS_PATH.name) if _WINDOWS_PATH == _BUNDLED_WINDOWS
+               else json.loads(_WINDOWS_PATH.read_text()))
+        return [(w["start"], w["end"]) for w in doc["windows"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        logger.warning("Bluesky posting windows unreadable (%s); scheduled posts go out at once", _WINDOWS_PATH)
+        return []
 
 
 def _hour_in_window(hour: int) -> bool:

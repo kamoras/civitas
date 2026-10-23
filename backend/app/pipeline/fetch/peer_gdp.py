@@ -54,6 +54,7 @@ import statistics
 import httpx
 from sqlalchemy.orm import Session
 
+from app import data_refresh
 from app.contact import BOT_USER_AGENT
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
@@ -86,8 +87,9 @@ _CACHE_TTL_HOURS = 24 * 30  # annual figures, revised a few times a year
 
 
 def bundled_per_capita() -> dict[str, dict[int, float]]:
-    """{country: {year: GDP per person}} from the bundled Maddison file."""
-    raw = json.loads(_BUNDLED.read_text())
+    """{country: {year: GDP per person}} from the Maddison file in use (the
+    newest release data_refresh has read, else the bundled one)."""
+    raw = data_refresh.read(_BUNDLED.name) or json.loads(_BUNDLED.read_text())
     return {c: {int(y): float(v) for y, v in years.items()} for c, years in raw["countries"].items()}
 
 

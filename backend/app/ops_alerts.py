@@ -454,75 +454,41 @@ def check_election_readiness() -> None:
             resolve_ops_alert(condition)
 
 
-# The Federal Register's presidential documents (proclamations, executive
-# orders, memoranda) each name the president who signed them: the official
-# record of who holds the office, published within days of a signing.
-PRESIDENTIAL_DOCUMENTS_URL = "https://www.federalregister.gov/api/v1/documents.json"
-
-
-def _person_key(name: str) -> tuple[str, str] | None:
-    """(first, last) of a name with initials, suffixes and punctuation
-    dropped, so the Federal Register's "First Last" and the roster's "First
-    M. Last, Jr." compare equal; None for an empty name."""
-    words = [w for w in "".join(c if c.isalpha() or c == " " else "" for c in name.lower()).split()
-             if len(w) > 1 and w not in {"jr", "sr", "ii", "iii", "iv"}]
-    return (words[0], words[-1]) if words else None
-
-
-def newest_presidential_signer(timeout: float = 15.0) -> tuple[str, str] | None:
-    """(president's name, signing date) of the newest presidential document
-    in the Federal Register, or None when it can't be read."""
-    try:
-        resp = httpx.get(PRESIDENTIAL_DOCUMENTS_URL, params={
-            "conditions[type][]": "PRESDOCU", "order": "newest", "per_page": 20,
-            "fields[]": ["president", "signing_date"],
-        }, timeout=timeout)
-        resp.raise_for_status()
-        rows = [r for r in resp.json().get("results") or []
-                if (r.get("president") or {}).get("name") and r.get("signing_date")]
-    except Exception:
-        logger.warning("Federal Register presidential documents could not be read", exc_info=True)
-        return None
-    if not rows:
-        return None
-    newest = max(rows, key=lambda r: r["signing_date"])
-    return newest["president"]["name"], newest["signing_date"]
-
-
 def check_sitting_president() -> None:
     """Alert when the presidents table's sitting president is not the one
-    signing presidential documents.
+    signing presidential documents and the roster sync could not resolve it.
 
-    The sitting president comes from UCSB's roster each night
-    (presidential_roster.py), never a typed name. A roster that is slow to
-    add a new president after an inauguration would keep the outgoing one
-    "sitting" with nothing to say so. The Federal Register is the official
-    cross-check: its newest presidential document, signed after the stored
-    president's term began, by someone else, means the roster has fallen
-    behind. A register still showing the outgoing president's last
-    documents (it publishes days after signing) is not a disagreement."""
-    signer = newest_presidential_signer()
-    if signer is None:
-        return
-    name, signed = signer
+    The sitting president comes from UCSB's roster each night, reconciled
+    with the Federal Register's newest presidential document and Wikidata's
+    record of the office (presidential_roster.reconcile_with_register): a
+    roster behind an inauguration is completed there, with no alert. This
+    alerts only when that reconciliation recorded a problem for the
+    Register's current signer (a source that hasn't recorded the new
+    president yet), and resolves once the table agrees."""
+    # Imported here: the fetch package imports this module.
+    from app.pipeline.fetch.presidential_roster import person_key, register_check
+
     db = SessionLocal()
     try:
+        check = register_check(db)
         sitting = db.query(President).filter(President.is_current.is_(True)).all()
     finally:
         db.close()
-    if len(sitting) == 1 and _person_key(sitting[0].name) == _person_key(name):
+    if not check:
+        return
+    if len(sitting) == 1 and person_key(sitting[0].name) == person_key(check["signer"]):
         resolve_ops_alert("sitting-president-mismatch")
         return
-    if len(sitting) == 1 and signed < (sitting[0].term_start or ""):
-        return  # the register is behind the roster, not the other way round
+    if not check.get("problem"):
+        return  # agreed or completed at the last sync; the table follows at the next roster sync
     stored = ", ".join(p.name for p in sitting) or "nobody"
     send_ops_alert(
         "Sitting president differs from the Federal Register",
-        f"The Federal Register's newest presidential document, signed {signed}, is {name}'s, but the "
-        f"presidents table marks {stored} as sitting. The roster (UCSB's presidents list, read nightly by "
-        f"presidential_roster.py) has not caught up: the site names the wrong sitting president until it "
-        f"does. Check https://www.presidency.ucsb.edu/presidents; nothing needs editing in code.",
-        dedupe_key=f"sitting-president-mismatch-{signed}-{_person_key(name)}",
+        f"The Federal Register's newest presidential document, signed {check['signed']}, is "
+        f"{check['signer']}'s, but the presidents table marks {stored} as sitting, and the nightly roster "
+        f"sync could not add the new president: {check['problem']}. The site names {stored} as sitting; "
+        f"each roster sync (the Supplementary run) tries again and resolves this when it succeeds.",
+        dedupe_key=f"sitting-president-mismatch-{check['signed']}-{person_key(check['signer'])}",
         condition="sitting-president-mismatch",
     )
 
@@ -613,55 +579,6 @@ def check_api_v1_sunset() -> None:
         dedupe_key=f"api-v1-sunset-{len(fields)}",
         condition="api-v1-sunset",
     )
-
-
-def check_state_pvi_staleness() -> None:
-    """Alert once a newer presidential election's data should be available
-    for state_pvi.json's two-cycle window than what's currently baked in.
-
-    Unlike CURRENT_CONGRESS or the committee-leadership data
-    (app/pipeline/fetch/committee_leadership.py), this is NOT something a
-    scheduled refetch can advance automatically (district PVI is pinned
-    too, per Congress, in app/data/district_pvi_sources.json — see
-    fetch/district_pvi.py):
-    scripts/fetch_state_pvi.py deliberately pins its data sources to
-    specific immutable GitHub-mirrored commits — "so a regeneration years
-    from now fetches the exact same file" — so re-running it forever
-    reproduces the identical 2020+2024 numbers. Advancing the window is a
-    genuine one-time engineering task each presidential cycle (finding the
-    new cycle's data source, verifying it passes the fidelity gates), the
-    same class of unavoidable manual step as adding a new president to the
-    historical term tables. This turns "nobody notices a new cycle is due"
-    into a loud, deduped, dashboard-visible alert instead of silence —
-    logged + DB-recorded regardless of whether ALERT_NTFY_URL is set.
-    """
-    import re
-
-    from app.pipeline.analyze.score_calculator import _read_pvi_json
-
-    window = _read_pvi_json("state_pvi.json").get("_window", "")
-    years = [int(y) for y in re.findall(r"\d{4}", window)]
-    if not years:
-        return
-    next_cycle = max(years) + 4
-    # Presidential county-level canvass data is reliably compiled within a
-    # few weeks of the election; mid-December of the election year is a
-    # comfortable buffer before alerting.
-    if utcnow().date() < date(next_cycle, 12, 15):
-        resolve_ops_alert("stale-state-pvi")  # regenerated for the new cycle
-    else:
-        send_ops_alert(
-            "state_pvi.json window is stale",
-            f"state_pvi.json is still windowed to {window}, but the "
-            f"{next_cycle} presidential election has passed and its data "
-            f"should be available now. Update scripts/fetch_state_pvi.py's "
-            f"CYCLES/source URLs to the new cycle, verify the fidelity "
-            f"gates pass, and regenerate the file. (district_pvi.json "
-            f"is separate: its sources are pinned per Congress in "
-            f"app/data/district_pvi_sources.json.)",
-            dedupe_key=f"stale-state-pvi-{next_cycle}",
-            condition="stale-state-pvi",
-        )
 
 
 def stock_trades_overrun_budget() -> timedelta:
