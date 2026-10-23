@@ -58,7 +58,7 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
-from app import committee_routing, scoring_revisions, site_search
+from app import precision_rule, scoring_revisions, site_search
 from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
@@ -268,6 +268,19 @@ def _record_try(name: str, outcome: str, recipe: str | None = None) -> None:
         db.close()
 
 
+def request_refit(name: str, why: str) -> None:
+    """Make `name` due at the next run whatever its cadence: the calibration
+    drift check asks this of a gate that refits itself from data-supplied
+    labels (calibration_drift.REFITTING), so drift starts a refit rather
+    than waiting on a person."""
+    db = SessionLocal()
+    try:
+        api_cache_set(db, _STATE_TIER, name, {"triedAt": None, "outcome": f"refit requested: {why}", "recipe": None},
+                      normal_ttl_hours=24 * 365 * 5)
+    finally:
+        db.close()
+
+
 def run_command(argv: list[str], timeout_s: int) -> tuple[int | None, str]:
     """Run a generator script from backend/, at the lowest CPU priority so
     page requests never wait on it. (exit code, or None when it ran past
@@ -365,6 +378,25 @@ def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
     write_text_atomic(runtime_data_path(name), _dumps(name, doc))
     _read_cache.pop(name, None)
     return True
+
+
+# The acceptance rule for a calibrated gate that refits itself from labels
+# the data supplies (AGENTS.md 3a, precision_rule.accept): the script writes
+# precision_rule.compare's comparison of the refit and the fit in use on the
+# same held-out labelled items as "_comparison", with "unchanged" when the
+# refit's parameters are the fit in use's (its reference or measurements
+# moved, the method did not) and "refused" for a reason its own rule
+# refuses it.
+def precision_rule_accepts(new: dict, old: dict) -> str | None:
+    """None to install the refit, else why the fit in use stays."""
+    c = new.get("_comparison")
+    if isinstance(c, dict) and c.get("refused"):
+        return "; ".join(str(r) for r in c["refused"])
+    if isinstance(c, dict) and c.get("unchanged"):
+        return None
+    if not isinstance(c, dict) or not {"candidate", "in_use"} <= set(c):
+        return "the refit reports no held-out comparison with the fit in use"
+    return precision_rule.accept(c)
 
 
 def record_kept(name: str, why: str, argv: list[str]) -> None:
@@ -656,18 +688,18 @@ def _jurisdictions_gate(new: dict, old: dict) -> list[str]:
     return failures + _drift(new, old, "committees", keep=0.8)
 
 
-# The committee-routing fit: refit whenever its inputs change (the
-# jurisdictions above, or the labels in a commit) — its data_hash names them.
-def _routing_due(ctx: Context) -> bool:
-    return ctx.doc.get("data_hash") != committee_routing.data_hash() and not ctx.tried_within(7)
-
-
+# The committee-routing fit: refit daily from the labels the stored data
+# supplies (bills' committee referrals, and texts no committee handles:
+# committee_routing.labelled_texts), installed under the acceptance rule.
 def _routing_gate(new: dict, old: dict) -> list[str]:
     failures = []
-    if new.get("data_hash") != committee_routing.data_hash():
-        failures.append("the fit is not of the inputs in use")
+    if new.get("reference") != "data":
+        failures.append("the fit is not of the data-supplied labels")
     if not (0 < float(new.get("threshold") or 0) < 1) or int(new.get("k") or 0) < 1:
         failures.append(f"threshold {new.get('threshold')}, k {new.get('k')}")
+    labels = new.get("labels") or {}
+    if not labels.get("bill") or not labels.get("none"):
+        failures.append(f"labels {labels}: both kinds are needed")
     return failures
 
 
@@ -1181,8 +1213,9 @@ DATA_FILES: list[DataFile] = [
              command=lambda ctx: [PY, _script("fetch_committee_jurisdictions.py"), "{out}"],
              due=_jurisdictions_due, gate=_jurisdictions_gate, timeout_s=900),
     DataFile("committee_routing_calibration.json",
-             command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--output", "{out}"],
-             due=_routing_due, gate=_routing_gate, heavy=True, timeout_s=3600),
+             command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_every(1), gate=_routing_gate, accept=precision_rule_accepts, heavy=True, timeout_s=3600),
     # The two newest presidential elections an official compilation covers
     # (MEDSL's newest Dataverse file, the FEC's compilations), found by rule:
     # a new election's returns move the window with no edit.

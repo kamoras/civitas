@@ -36,8 +36,15 @@ class TestBuildActions:
              "docId": 7, "docKey": "fr-2026-17123", "closesOn": "2026-10-20"},
             {"text": "Contact the Senate Committee on Finance", "type": "contact_committee",
              "url": "https://www.finance.senate.gov/",
-             "committee": {"code": "SSFI", "name": "Senate Committee on Finance", "chamber": "senate"}},
+             "committee": {"code": "SSFI", "name": "Senate Committee on Finance", "chamber": "senate",
+                           "likely": True}},
         ]
+
+    def test_a_committee_routed_by_a_fit_meeting_the_precision_rule_is_stored_as_not_likely(self):
+        actions = ac._build_actions_from_data("A story", [], [], [], [], policy_areas=["HEALTH"],
+                                              committees=[{**FINANCE, "likely": False}])
+        committee = next(a["committee"] for a in actions if a["type"] == "contact_committee")
+        assert committee["likely"] is False
 
     def test_generic_contact_only_when_nothing_specific_exists(self):
         def generic(**kw):

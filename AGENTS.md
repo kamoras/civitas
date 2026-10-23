@@ -232,7 +232,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against bills labelled by their Congress.gov committee referrals and texts no committee handles, refit daily, blended with tier-2 jurisdiction prototypes: `app/committee_routing.py`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -309,7 +309,12 @@ evaluative word per measure ("well above / above / near / below / well below
 peers") from a fixed percentile rule whose cut points are conventions, served
 with every comparison as `rule`. The words are neutral about direction (above
 and below, never better and worse). Never add a page that ranks members by a
-blend of unlike measures, or a word not from that rule.
+blend of unlike measures, or a word not from that rule. The one row with
+words of its own is votes with the president on the measures page
+(`peer_comparison.president_row`, 2026-10): a senator has a few dozen such
+votes, too few for a percentile, so it says "more than / within / less than
+the seat's expected rate" from the member's 95% range, and every row there
+serves its rule (`rule`, `ruleText`) so the page states which one it follows.
 
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
@@ -635,8 +640,8 @@ which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
 
 A calibration fitted to **hand labels** (the Action Center's relevance,
-clustering, claim and actor gates, the trend-post gates, committee routing,
-the member-photo check) can't regenerate itself, and doesn't need to when
+clustering, claim and actor gates, the trend-post gates, the member-photo
+check) can't regenerate itself, and doesn't need to when
 its labels change: each records the hash of its labels and a test fails
 until it is refit. What it can't see is the stream moving away from its
 labels. Each such gate reports what it decides (`calibration_drift.observe`,
@@ -655,10 +660,17 @@ paired difference lower; otherwise the fit in use stays and the refit is
 recorded with why (`precision_rule.compare`). Today that is the
 near-identical cut (issue pairs plus feed articles the text dates days
 apart, `action_center.fit_near_identical_cut`), the related-vote threshold
-(`roll_call_links.refit`, on `RollCallLinkLabel`) and the outlet reposts
-(`bluesky_engagement`, on `OutletPostLink`). A
-new calibrated gate is added to `calibration_drift.GATES` and observes its
-decisions.
+(`roll_call_links.refit`, on `RollCallLinkLabel`), the outlet reposts
+(`bluesky_engagement`, on `OutletPostLink`) and committee routing (bills'
+committee referrals and texts no committee handles,
+`scripts/calibrate_committee_routing.py`, run daily by `data_refresh` and
+installed through `data_refresh.precision_rule_accepts`). A new calibrated
+gate is added to `calibration_drift.GATES` and observes its decisions; one
+that refits itself through `data_refresh` is also listed in
+`calibration_drift.REFITTING` (drift then requests its refit, and alerts
+only if drift outlasts `REFIT_GRACE_DAYS` of refits) and `PARAMETERS` (its
+baseline follows the parameters, not the measurements a daily refit
+rewrites).
 
 ### 3b. Search ranking is measured, not asserted
 
@@ -1592,8 +1604,8 @@ for the Senate and House runs, which rewrite the rows it updates.
 
 A gate's labels come from the data wherever the data supplies one (the
 relevance gate's publisher labels above). Hand labels are the exception, used
-only where it was checked that no data-supplied label exists (committee
-routing; the story-to-vote link, `app/roll_call_links.py`), and such a gate
+only where it was checked that no data-supplied label exists (the
+story-to-vote link, `app/roll_call_links.py`), and such a gate
 records each data-supplied label that turns up later for its next refit.
 
 Running beside the chain makes it a second writer on SQLite's one write
@@ -1637,19 +1649,26 @@ Each issue's actions are fixed templates around stored data:
   fingerprint like `live_results/`). Tier 2 and tier 3 together: each
   committee's subjects as House Rule X / Senate Rule XXV list them
   (`committee_jurisdictions.json`, `scripts/fetch_committee_jurisdictions.py`;
-  hubness-corrected, CSLS) blended with the votes of the nearest
-  hand-labelled issues (`committee_routing_examples.json`, an empty label
-  meaning no committee). It names a committee only when both signals pick
-  the same one and the combined share clears the threshold
-  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`).
-  The threshold is chosen on the training issues by the Action Center's
-  precision rule (exact lower 95% bound ≥ 0.80, else the highest bound);
-  the held-out curve is written for reading, never chosen from. The rule is
-  not met yet (0.82 held out, bound 0.67), so the row is worded as a likely
-  match — keep that wording until a recalibration reports
-  `precision_rule_met_on_training: true` and the held-out bound agrees. The
-  test fails until the script is rerun after either data file changes. The rules' subjects alone were
-  measured at 0.38 held-out precision — do not drop the labelled votes to
+  hubness-corrected, CSLS) blended with the votes of the nearest labelled
+  texts the data supplies (`committee_routing.labelled_texts`): each stored
+  bill labelled with the committees its Congress.gov actions record it was
+  referred to (no request added: the pipeline already stores the actions),
+  and, as no committee's, feed articles filed under another desk naming no
+  official (the relevance gate's label 0) and race coverage. It names a
+  committee only when both signals pick the same one and the combined share
+  clears the threshold. `scripts/calibrate_committee_routing.py` refits it
+  daily (`data_refresh`), held out on blocks of consecutive days per kind,
+  the threshold the precision rule's lowest passing one, and installs it
+  only under `precision_rule.accept`; its reference and embeddings sit on
+  the data volume beside it. The row is worded as a likely match only while
+  the fit in use misses the bar held out (`precision_rule_met`, stored on
+  each action as `likely`). Measured 2026-10-23: held out 0.817 (bound
+  0.803) against the hand-labelled fit's 0.632 on the same decisions, and on
+  the 136 newest hand-labelled issues 36 of 38 right against 36 of 44. The
+  460 hand-labelled issues (`committee_routing_examples.json`) are the
+  bundled fallback until the first refit and every refit's held-out check,
+  never fitted to. The rules' subjects alone were measured at 0.38 held-out
+  precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
 - **"On the ballot"** for the states and races the issue's own words name
@@ -2512,7 +2531,7 @@ the pending list).
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | Claim composer (verbatim spans, actor check: capitalised rule + prototype margin, threshold refit daily) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_threshold.json`, `backend/scripts/calibrate_claim_actor.py` |
-| Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
+| Committee routing for issues (rules' jurisdictions + bills labelled by their committee referrals, refit daily) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
@@ -2588,7 +2607,7 @@ the pending list).
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
 | Find your members (Congress › Members: Senate and House by state, town or county; `/politicians` redirects here) | `frontend/src/app/congress/members/MembersDirectory.tsx`, `GET /api/politicians`, `GET /api/politicians/house-districts` |
-| The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
+| The chamber measure by measure (`/congress/members/measures`: five rows, the fifth votes with the president on its own interval rule, linking its full page `/congress/president/<chamber>`, which is no menu's view; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, "Entered into the record" front page: lead, tier and Congress/Agencies/news columns by a fixed rule, task boxes and registration closing) | `frontend/src/components/home/Masthead.tsx`, `FrontPage.tsx` and `YourMembersLink.tsx` (from `GET /api/front-page`, `backend/app/api/notable.py`), `HomeTasks.tsx`, `StateJump.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |

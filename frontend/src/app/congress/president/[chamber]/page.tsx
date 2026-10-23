@@ -59,7 +59,9 @@ export default async function PresidentSupportPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <SectionTabs section="congress" active="president" />
+          {/* By the numbers' fifth row, in full: under that view, as a
+              record page sits under its tab. */}
+          <SectionTabs section="congress" active="measures" />
           <PageMasthead
             eyebrow={`${CHAMBERS[chamber]} · ${view ? `${congressOrdinal(view.congress)} Congress` : "This Congress"}`}
             title="Votes with the president"

@@ -84,22 +84,27 @@ export function StripAxis({
   start,
   end,
   tick,
+  ticks,
 }: {
   /** The axis's ends as printed; absent from an older API, none shown. */
   start?: string;
   end?: string;
   tick?: { at: number; text: string } | null;
+  /** Several ticks (a party's median each), each label on its own line. */
+  ticks?: { at: number; text: string }[];
 }) {
+  const labels = ticks ?? (tick ? [tick] : []);
   return (
     <div aria-hidden="true" className="text-small text-ink-min">
-      {tick && (
+      {labels.map((t) => (
         <span
+          key={t.text}
           className="relative block w-max max-w-full font-semibold text-ink-lo"
-          style={{ left: `${tick.at}%`, transform: `translateX(-${tick.at}%)` }}
+          style={{ left: `${t.at}%`, transform: `translateX(-${t.at}%)` }}
         >
-          {tick.text}
+          {t.text}
         </span>
-      )}
+      ))}
       <div className="flex justify-between gap-x-3">
         <span className="min-w-0">{start}</span>
         <span className="min-w-0 text-right">{end}</span>

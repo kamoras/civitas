@@ -16,7 +16,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import committee_routing, scoring_revisions
+from app import scoring_revisions
 from app.api import feed as feed_api
 from app import data_refresh as dr
 from app.config import settings
@@ -245,12 +245,15 @@ def test_jurisdictions_are_reread_weekly_until_they_are_the_sitting_congresses(m
     assert not dr._jurisdictions_due(_ctx(doc={"congress": 120}, last=datetime(2027, 1, 12)))
 
 
-def test_the_routing_fit_is_refit_when_its_inputs_change(monkeypatch):
-    monkeypatch.setattr(committee_routing, "data_hash", lambda: "new-inputs")
-    assert dr._routing_due(_ctx(doc={"data_hash": "old-inputs"}))
-    assert not dr._routing_due(_ctx(doc={"data_hash": "new-inputs"}))
-    assert dr._routing_gate({"data_hash": "new-inputs", "k": 5, "threshold": 0.4}, {}) == []
-    assert dr._routing_gate({"data_hash": "old-inputs", "k": 5, "threshold": 0.4}, {})
+def test_the_routing_fit_is_refit_daily_from_the_data_under_the_acceptance_rule():
+    spec = next(f for f in dr.DATA_FILES if f.name == "committee_routing_calibration.json")
+    argv = spec.command(_ctx(spec.name))
+    assert "{in_use}" in argv and "{out}" in argv and spec.accept is dr.precision_rule_accepts
+    assert spec.due(_ctx(spec.name, last=datetime(2000, 1, 1)))
+    good = {"reference": "data", "k": 15, "threshold": 0.5, "labels": {"bill": 9, "none": 3}}
+    assert dr._routing_gate(good, {}) == []
+    assert dr._routing_gate({**good, "reference": None}, {})
+    assert dr._routing_gate({**good, "labels": {"bill": 9, "none": 0}}, {})
 
 
 # ── gates ────────────────────────────────────────────────────────────
@@ -551,6 +554,40 @@ def test_a_refit_that_reproduces_the_parameters_in_use_installs_its_new_measurem
     spec = dr.DataFile("t_same.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
     assert dr.refresh_one(spec, _ctx("t_same.json", dr.read("t_same.json"))) == "refreshed"
     assert dr.read("t_same.json")["kinds"] == ["a", "b"]
+
+
+def _side(passed, correct, bound, recall):
+    return {"passed": passed, "correct": correct, "precision": correct / passed if passed else None,
+            "precision_exact_lower": bound, "recall": recall}
+
+
+@pytest.mark.parametrize("comparison,installed", [
+    ({"candidate": _side(100, 90, 0.82, 0.3), "in_use": _side(80, 60, 0.64, 0.2), "recall_delta": 0.1,
+      "recall_se": 0.01}, True),
+    ({"candidate": _side(100, 70, 0.61, 0.3), "in_use": _side(80, 60, 0.64, 0.2), "recall_delta": 0.1,
+      "recall_se": 0.01}, False),
+    ({"candidate": _side(10, 9, 0.82, 0.1), "in_use": _side(80, 70, 0.80, 0.2), "recall_delta": -0.1,
+      "recall_se": 0.01}, False),
+    ({"unchanged": True}, True),
+    ({"unchanged": True, "refused": ["no threshold meets the precision rule"]}, False),
+])
+def test_a_gate_refit_from_data_labels_installs_only_under_the_precision_rule(alerts, comparison, installed):
+    _write_runtime("t_gate.json", {"threshold": 0.4})
+    candidate = {"threshold": 0.5, "_comparison": comparison}
+    spec = dr.DataFile("t_gate.json", command=lambda ctx: _writer(candidate), accept=dr.precision_rule_accepts)
+    outcome = dr.refresh_one(spec, _ctx("t_gate.json", dr.read("t_gate.json")))
+    assert (outcome == "refreshed") is installed, outcome
+    assert dr.read("t_gate.json")["threshold"] == (0.5 if installed else 0.4)
+    alerts.send.assert_not_called()
+
+
+def test_a_requested_refit_is_due_at_the_next_run(db_session):
+    with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
+        dr._record_try("t_req.json", "refreshed")
+        assert not dr._every(1)(_ctx("t_req.json", last=dr._last_try("t_req.json")[0]))
+        dr.request_refit("t_req.json", "drift")
+        assert dr._last_try("t_req.json")[0] is None
+        assert dr._every(1)(_ctx("t_req.json", last=dr._last_try("t_req.json")[0]))
 
 
 def test_the_script_is_handed_the_copy_in_use(alerts):
