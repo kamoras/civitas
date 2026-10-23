@@ -84,10 +84,29 @@ export interface ChamberPoint {
   gap: number | null;
   /** The place on this measure's strip ("3rd highest of 100"), for its hover label. */
   rank: string;
+  /** Votes with the president: the hover label's line in place of the
+   *  place ("Range 11% to 41% · seat's expected rate 18% · within the seat's
+   *  expected rate"), and the comparison's words, null for a thin record. */
+  context?: string;
+  word?: string | null;
+  thin?: boolean;
 }
 
+/** The rule a row's words follow: the peer percentile rule (member pages),
+ *  or, for votes with the president, the member's 95% range against the
+ *  seat's expected rate. `ruleText` states it on the page. */
+export type MeasureRule =
+  | {
+      kind: "percentile";
+      wellOutside: number[];
+      outside: number[];
+      wellGapSd: number;
+      minRecord: number;
+    }
+  | { kind: "interval"; interval: number; minRecord: number };
+
 export interface ChamberMeasure {
-  key: PeerMeasure["key"];
+  key: PeerMeasure["key"] | "presidentSupport";
   label: string;
   question: string;
   why: string;
@@ -104,6 +123,12 @@ export interface ChamberMeasure {
   /** The three members furthest above, and below, the figure expected for them. */
   mostAbove: ChamberPoint[];
   mostBelow: ChamberPoint[];
+  /** Votes with the president: each party's median, drawn in place of a
+   *  chamber median (null there), which would fall between the parties. */
+  partyMedians?: { party: string; value: number; n: number; shown: string }[];
+  /** Absent from a backend older than the page. */
+  rule?: MeasureRule;
+  ruleText?: string;
 }
 
 export interface ChamberMember {
@@ -123,6 +148,9 @@ export interface ChamberMember {
   bills: number | null;
   passed: number | null;
   law: number | null;
+  /** Counted votes on the president's stated side, of `presidentVotes`. */
+  withPresident?: number | null;
+  presidentVotes?: number | null;
 }
 
 export interface ChamberMeasures {

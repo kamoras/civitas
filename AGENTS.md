@@ -309,7 +309,12 @@ evaluative word per measure ("well above / above / near / below / well below
 peers") from a fixed percentile rule whose cut points are conventions, served
 with every comparison as `rule`. The words are neutral about direction (above
 and below, never better and worse). Never add a page that ranks members by a
-blend of unlike measures, or a word not from that rule.
+blend of unlike measures, or a word not from that rule. The one row with
+words of its own is votes with the president on the measures page
+(`peer_comparison.president_row`, 2026-10): a senator has a few dozen such
+votes, too few for a percentile, so it says "more than / within / less than
+the seat's expected rate" from the member's 95% range, and every row there
+serves its rule (`rule`, `ruleText`) so the page states which one it follows.
 
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
@@ -2588,7 +2593,7 @@ the pending list).
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
 | Find your members (Congress › Members: Senate and House by state, town or county; `/politicians` redirects here) | `frontend/src/app/congress/members/MembersDirectory.tsx`, `GET /api/politicians`, `GET /api/politicians/house-districts` |
-| The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
+| The chamber measure by measure (`/congress/members/measures`: five rows, the fifth votes with the president on its own interval rule, linking its full page `/congress/president/<chamber>`, which is no menu's view; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, "Entered into the record" front page: lead, tier and Congress/Agencies/news columns by a fixed rule, task boxes and registration closing) | `frontend/src/components/home/Masthead.tsx`, `FrontPage.tsx` and `YourMembersLink.tsx` (from `GET /api/front-page`, `backend/app/api/notable.py`), `HomeTasks.tsx`, `StateJump.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
