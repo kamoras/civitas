@@ -770,3 +770,18 @@ def test_deprecated_csv_columns_stop_after_the_sunset(client, freeze_utcnow):
     assert "overall" not in header and "rank" not in header and "id" in header
     header = client.get("/api/public/v1/presidents.csv").text.splitlines()[0].split(",")
     assert "public_mandate" not in header and "avg_approval" in header
+
+
+@pytest.mark.parametrize("path", ["/senators", "/representatives"])
+def test_the_composite_trend_goes_with_the_composite(client, freeze_utcnow, path):
+    """A row's trend is the composite's movement (direction, change, the
+    earlier score): deprecated with it, and left out after the sunset."""
+    props = PublicSenatorRowSchema.model_json_schema()["$defs"]["ScoreTrendSchema"]["properties"]
+    assert all(props[f]["deprecated"] is True for f in ("direction", "change", "previousScore"))
+    sunset = datetime.fromisoformat(schemas_module.API_V1_SUNSET)
+    freeze_utcnow(sunset + timedelta(hours=12))
+    trend = client.get(f"/api/public/v1{path}").json()["entries"][0]["trend"]
+    assert {"change", "previousScore"} <= set(trend)
+    freeze_utcnow(sunset + timedelta(days=1, hours=1))
+    trend = client.get(f"/api/public/v1{path}").json()["entries"][0].get("trend", {})
+    assert not {"direction", "change", "previousScore"} & set(trend)

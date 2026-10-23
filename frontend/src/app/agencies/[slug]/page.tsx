@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { absoluteUrl, agencyFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { CARD_ALT, agencyJsonLd, cardImage, describeAgency } from "@/lib/seo";
 import { fetchAgency } from "@/lib/agencyServer";
 import { fiscalYearLabel, money, readOn } from "@/lib/agencies";
 import { commentPeriodToday, safeHref } from "@/lib/formatting";
-import { agencyDocumentsHref, agencyHref } from "@/lib/routes";
+import {
+  AGENCY_BUDGETS_HREF,
+  LEGACY_BUDGETS_SLUG,
+  agencyDocumentsHref,
+  agencyHref,
+} from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -330,6 +335,9 @@ function Overview({ a }: { a: AgencyDetail }) {
 export default async function AgencyPage({ params }: PageProps) {
   const { slug } = await params;
   const a = await fetchAgency(slug);
+  // The Budgets page's old address: a permanent redirect, but only while no
+  // agency holds the slug, so it can never hide one.
+  if (!a && slug === LEGACY_BUDGETS_SLUG) permanentRedirect(AGENCY_BUDGETS_HREF);
   if (!a) notFound();
   const today = commentPeriodToday();
   const docs = a.documents;
