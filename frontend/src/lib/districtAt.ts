@@ -148,12 +148,3 @@ export async function loadDistrictLookup(
   if (!res.ok) return null;
   return (await res.json()) as Topology;
 }
-
-/** The Congress whose House lines a cycle's ballot is on: the one the
- * November election seats (2026 seats the 120th; the 1st was elected in
- * 1788) when the state votes on new lines, else the sitting one's, which
- * are the same lines. */
-export function ballotHouseLines(cycleYear: number, newDistrictLines: boolean): string {
-  const seated = (cycleYear - 1786) / 2;
-  return `congress-${newDistrictLines ? seated : seated - 1}`;
-}

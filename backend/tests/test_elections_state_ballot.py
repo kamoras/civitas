@@ -356,6 +356,9 @@ def test_a_redrawn_state_says_its_district_lines_are_new(db_session):
 
     assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is True
     assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+    # Each ballot names the lookup folder of its own lines (the map's).
+    assert _body(elections.state_ballot("TX", db_session))["houseLookupLines"] == "congress-120"
+    assert _body(elections.state_ballot("GA", db_session))["houseLookupLines"] == "congress-119"
 
 
 def test_new_lines_stay_new_until_the_members_elected_on_them_sit(db_session, monkeypatch):
@@ -370,6 +373,9 @@ def test_new_lines_stay_new_until_the_members_elected_on_them_sit(db_session, mo
     tx = _body(elections.state_ballot("TX", db_session))
     assert tx["cycleYear"] == 2028
     assert tx["newDistrictLines"] is True
+    # 2028's maps aren't listed yet: no folder is named for its ballot
+    # (asking for congress-120 by number found nothing for GA).
+    assert tx["houseLookupLines"] is None
     assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
 
     # From Jan 3 the 120th sits on the 2026 lines, and 2028 lists no new map.

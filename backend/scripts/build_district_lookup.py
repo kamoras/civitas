@@ -15,14 +15,13 @@ NAMED BY THE LINES THEY HOLD, so a file can never answer for other lines:
     crosswalk lists under more than one of those districts, `n` its name
     as the crosswalk writes it; `roads`: TIGER's primary and secondary
     roads inside them, `n` the road's name), for the split-town map.
-    congress-119 for every state: the districts the members now serving
-    were elected on. The member directory reads the Congress the API says
-    is in office, so when the 120th is seated it finds no file for a state
-    until this is rerun with --sitting-congress 120, and says it can't
-    place the reader. congress-120 for the states voting on new lines this
+    One folder per map: congress-119 for every state on its 119th
+    Congress lines, congress-120 for the states voting on new lines this
     cycle (`map_for_state`, as build_county_district_crosswalk chooses
-    them; Missouri's stayed map is not one), which the ballot reads there;
-    a state voting on its sitting lines reads congress-119.
+    them; Missouri's stayed map is not one). The API names the folder for
+    a state and a Congress (district_lines.lookup_lines, the map that
+    state is on), so a state that kept its map is found in its earlier
+    folder when a new Congress sits, with nothing rebuilt.
   * election-<cycle>/<ST>.legislature.json: `sldu` and `sldl`, the state
     senate and house districts the cycle's election is on, `d` the key the
     ballot pages use (fetch_state_leg_crosswalk.district_key; a district

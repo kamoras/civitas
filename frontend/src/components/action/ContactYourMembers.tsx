@@ -329,7 +329,7 @@ export default function ContactYourMembers({
         : [],
     [finder, lines, place]
   );
-  const linesName = lines ? `congress-${lines.congress}` : "";
+  const linesName = lines?.lookupLines ?? "";
   const located =
     finder && yourDistrict.district?.state === state && yourDistrict.district.lines === linesName
       ? yourDistrict.district.house

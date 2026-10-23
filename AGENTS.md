@@ -1047,6 +1047,25 @@ Corollaries that follow from the same rule, all enforced in code:
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
   past the wall itself is not an option: it is the state saying no.
+  The Internet Archive's capture of the state's own URL is the same kind
+  of republication (`web_archive.py`, `ARCHIVED_STRATEGIES`; Ohio, 2026-10):
+  the Archive's crawler copied the state's document on the date it
+  records, on its own schedule and before Civitas asked, and publishes
+  that copy to everyone; reading it from archive.org sends nothing to the
+  walled host and asks nobody to fetch it now. That is why Save Page Now
+  (the Archive fetching the walled host on our request) is never used: that
+  would be a proxy past the wall. Only a 200 capture is read (a capture of
+  the wall's own 403 is not a copy), its bytes must match the capture's
+  recorded digest, the reader's every check applies, the text must equal
+  what is stored from the state's own read, it is tried only on
+  `SourceBlocked` after the `republished_by` offices, and the card says
+  "as archived by the Internet Archive on <date>". A wall that also turns
+  the Archive's crawler away (Ohio's did) leaves no copy, and the state
+  stays ingest_failed.
+  A refusal that a request naming its contact passes is not a wall:
+  maine.gov's CloudFront answers 403 to a User-Agent with no contact in it
+  (robots.txt included) and 200 to the pipeline's (2026-10-23), so an
+  unset `CONTACT_EMAIL`, not the state, is what a script sees there.
   A wall is not a dead link, though. A voting step's link (the state
   page's "Your vote, step by step", one official link per task,
   `ballot_lookup.vote_steps`) the nightly link check is refused on
@@ -1134,10 +1153,15 @@ What this rules in and out:
   tap are never sent, logged or stored; the House district is kept for
   the tab at most (`hooks/useYourDistrict.ts`: state, map name and
   number, in `sessionStorage`), and the legislative ones not at all. Each
-  surface reads its own map, never the other's: `congress-<N>/` (the
-  Congress in office, from the API) for who represents the reader; on the
-  ballot, the Congress its election seats where the state redrew
-  (`ballotHouseLines`), and `election-<year>/` for the legislature. The shapes are built and gated by
+  surface reads its own map, never the other's: `congress-<N>/` for who
+  represents the reader and, on the ballot, for the Congress its election
+  seats, the folder named by the API (`lookupLines`, `houseLookupLines`:
+  `district_lines.lookup_lines`). Folders are named by the map, the
+  Congress whose block file drew the lines, so a state that kept its map
+  keeps its earlier folder when a new Congress sits (until 2026-10 the
+  page asked for the sitting Congress's number, which from Jan 3, 2027
+  would have found nothing for 41 states); and `election-<year>/` for the
+  legislature. The shapes are built and gated by
   `backend/scripts/build_district_lookup.py`, which places every
   populated 2020 block's internal point in the simplified and the
   unsimplified shapes and refuses to write if simplifying costs more than

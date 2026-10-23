@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ballotHouseLines, districtsAt, featureAt, type Topology } from "./districtAt";
+import { districtsAt, featureAt, type Topology } from "./districtAt";
 import fixture from "./districtAt.fixture.json";
 
 // Two districts side by side, sharing the edge x = 1, the second with a
@@ -48,14 +48,6 @@ const TOPO: Topology = {
     sldu: { geometries: [{ type: "Polygon", arcs: [[0, 1]], properties: { d: "1A" } }] },
   },
 };
-
-describe("ballotHouseLines", () => {
-  it("reads the seated Congress's lines on a new map, else the sitting ones", () => {
-    expect(ballotHouseLines(2026, true)).toBe("congress-120");
-    expect(ballotHouseLines(2026, false)).toBe("congress-119");
-    expect(ballotHouseLines(2028, false)).toBe("congress-120");
-  });
-});
 
 describe("districtsAt", () => {
   it("places points on either side of a shared line", () => {

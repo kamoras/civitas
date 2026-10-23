@@ -46,6 +46,25 @@ describe("BallotMeasureCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("credits the Internet Archive's capture of the state's own document with its date", () => {
+    render(
+      <BallotMeasureCard
+        measure={measure({
+          sourceName: "Ohio Secretary of State",
+          republishedBy: "the Internet Archive",
+          archivedOn: "2026-10-21",
+          sourceUrl:
+            "https://web.archive.org/web/20261021090000/https://www.ohiosos.gov/assets/ballot.pdf",
+        })}
+      />
+    );
+    expect(
+      screen.getByText(
+        /Quoted verbatim from Ohio Secretary of State, as archived by the Internet Archive on October 21, 2026/
+      )
+    ).toBeInTheDocument();
+  });
+
   it("names only the state when its own copy was read", () => {
     render(<BallotMeasureCard measure={measure({})} />);
     expect(screen.queryByText(/republished/)).not.toBeInTheDocument();
