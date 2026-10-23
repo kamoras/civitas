@@ -2,7 +2,6 @@
 
 import HowToRead from "@/components/shared/HowToRead";
 import { membersHref } from "@/lib/routes";
-import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import ClosingLine from "@/components/elections/ClosingLine";
 import { INLINE_LINK } from "@/lib/controlStyles";
@@ -12,7 +11,7 @@ import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
-import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
+import { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import OffSeasonLead from "@/components/elections/specials/OffSeasonLead";
@@ -36,7 +35,6 @@ import {
   serverTimeOf,
   showsResults,
   stateFeedBehind,
-  FAINT,
 } from "@/lib/results";
 import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
@@ -47,41 +45,10 @@ import { useYourState } from "@/hooks/useYourState";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import { TYPE } from "@/lib/typeStyles";
 
-/*
-  Second page onto the records palette, after the homepage. Same recipe:
-  drop the canvas animation and the glitch heading, set headings in the
-  display face, move figures to mono, carry hierarchy on the three rule
-  weights, and state the provenance instead of burying it at 9px.
-
-  The map itself (RaceMap) is untouched — only the frame around it and the
-  key beside it change.
-*/
-
-// Flat, unchanging fill — no hover-brighten variant — so DC reads as
-// visibly non-interactive rather than inviting a click that silently
-// does nothing (see onStateClick below).
-const DC_FILL = overlay(0.06);
-
-// Partisan fills from the map party marks (chartColors), the same as the
-// seat and results maps, so the lean map follows the theme with them. FAINT
-// is the faintest party fill that keeps 3:1 off the page in both themes.
-function pviFillColor(pvi: number | null): string {
-  if (pvi == null) return overlay(0.07);
-  if (pvi === 0) return overlay(0.22);
-  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), FAINT);
-}
-
-function pviHoverColor(pvi: number | null): string {
-  if (pvi == null) return fade("var(--phos)", 0.3);
-  if (pvi === 0) return overlay(0.42);
-  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), 0.85);
-}
-
 // DC has no voting House/Senate race (the backend's
 // election_calendar.federal_states(), read from the Senate's classes,
-// excludes it the same way) even though it's clickable on the map's SVG —
-// filtered out of both the map's click target and the state grid, which
-// list the states with federal contests. By name: a reader looks for
+// excludes it the same way), so the state grid, which lists the states with
+// federal contests, leaves it out. By name: a reader looks for
 // "Nebraska", not "NE", and a screen reader reads the name.
 const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
@@ -434,23 +401,25 @@ export default function ElectionsPage() {
               <>
                 The {season?.heldCycle} count has settled. What Civitas kept of it comes first, with
                 how much each state lists as official, then the specials, vacant seats and every
-                federal date ahead. Shading below is partisan lean, not a forecast.
+                federal date ahead. The lean beside each state is partisan lean, not a forecast.
               </>
             ) : primarySeason ? (
               <>
                 Primary season: each state picks its nominees on its own date. Pick a state for who
-                has filed and its ballot so far. Shading is partisan lean, not a forecast.
+                has filed and its ballot so far. The lean beside each state is partisan lean, not a
+                forecast.
               </>
             ) : betweenCycles ? (
               <>
                 No general election is in its campaign yet. Special elections, vacant seats and
                 every federal date ahead come first; pick a state below for whatever is filed for
-                its next general. Shading is partisan lean, not a forecast.
+                its next general. The lean beside each state is partisan lean, not a forecast.
               </>
             ) : campaignMode ? (
               <>
                 Pick a state for its candidates, their filings, statewide ballot measures, and the
-                coverage we have ingested. Shading is partisan lean, not a forecast.
+                coverage we have ingested. The lean beside each state is partisan lean, not a
+                forecast.
               </>
             ) : null}
           </PageMasthead>
@@ -458,7 +427,7 @@ export default function ElectionsPage() {
           {/* ── Pick a state ── First in every mode, right under the
               masthead: a voter came for one state's ballot (or, from
               election day, its count). One way to pick, the state tiles
-              (the map below is the lean picture); the header's state, when
+              with each state's lean; the header's state, when
               set, is the first tap. An explicit, unremembered choice
               (AGENTS.md section 8). */}
           <section aria-labelledby="pick-state-heading" className="mb-6">
@@ -469,6 +438,12 @@ export default function ElectionsPage() {
               {resultsMode
                 ? "Pick a state for its count and ballot"
                 : "Pick a state for its ballot"}
+              {campaignMode && pvi && leans.length > 0 && (
+                <span className="font-sans text-small font-normal text-ink-lo">
+                  <span className={pviColor(-1)}>{dLean} lean Democratic</span> ·{" "}
+                  <span className={pviColor(1)}>{rLean} lean Republican</span> · {even} even
+                </span>
+              )}
             </h2>
             {yours.state && (
               <p className="mt-2 flex flex-wrap items-center gap-x-5 text-body">
@@ -520,6 +495,9 @@ export default function ElectionsPage() {
                   returns). D+5 is the same toward Democrats; EVEN matches the nation. It describes
                   past votes, not a forecast.
                 </p>
+                <div className="mt-2">
+                  <PviMethodologyNote meta={pvi.meta} />
+                </div>
               </HowToRead>
             )}
           </section>
@@ -564,65 +542,11 @@ export default function ElectionsPage() {
 
           {!error && (!pvi || !phaseKnown) && !resultsMode && (
             <p role="status" aria-live="polite" className="mt-8 font-mono text-small text-ink-min">
-              Reading the lean map…
+              Reading each state&apos;s lean…
             </p>
           )}
 
-          {pvi && campaignMode && (
-            <>
-              {/* ── Map ── */}
-              <section className="mt-6 border border-phos/20 bg-surface">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
-                  <h2 className={TYPE.kicker}>Partisan lean by state · click one for its ballot</h2>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
-                      <span
-                        className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: pviFillColor(-1) }}
-                        aria-hidden="true"
-                      />
-                      D-leaning <span className="text-ink-min">{dLean}</span>
-                    </span>
-                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
-                      <span
-                        className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: pviFillColor(1) }}
-                        aria-hidden="true"
-                      />
-                      R-leaning <span className="text-ink-min">{rLean}</span>
-                    </span>
-                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
-                      <span
-                        className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: pviFillColor(0) }}
-                        aria-hidden="true"
-                      />
-                      Even <span className="text-ink-min">{even}</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="px-4 pt-3">
-                  <RaceMap
-                    label="Partisan lean by state"
-                    marks={pvi.stateMarks ?? {}}
-                    getFillColor={(state) =>
-                      state === "DC" ? DC_FILL : pviFillColor(leanByState[state] ?? null)
-                    }
-                    getHoverFillColor={(state) =>
-                      state === "DC" ? DC_FILL : pviHoverColor(leanByState[state] ?? null)
-                    }
-                  />
-                </div>
-
-                <div className="border-t border-white/[0.07] px-4 py-3">
-                  <PviMethodologyNote meta={pvi.meta} />
-                </div>
-              </section>
-            </>
-          )}
-
-          {/* ── Reference ── After the states and the map: useful to
+          {/* ── Reference ── After the states: useful to
               know about the cycle, but not what a voter came for. The
               FEC's filing deadline is for candidates and researchers. */}
           {season?.season === "off_season" && campaignMode && (

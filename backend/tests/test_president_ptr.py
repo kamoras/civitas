@@ -15,6 +15,7 @@ direct PDF.
 """
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -438,3 +439,74 @@ class TestTradesEndpoint:
 
         assert body["total"] == 0
         assert body["trades"] == []
+
+
+class TestSelfCheckAndRouteAround:
+    """OGE moved its index API from v2 to v3 in 2026-10 (v2 answers an HTML
+    session page). The endpoint is read from OGE's own search page when the
+    known one stops answering, and a zero is told from a broken reader by
+    the same request for the most recent former president."""
+
+    PAGE = (Path(__file__).parent / "fixtures" / "oge_search_page_script.html").read_text()
+
+    @staticmethod
+    def _resp(json_body=None, text=""):
+        resp = MagicMock(status_code=200, text=text)
+        if json_body is None:
+            resp.json.side_effect = ValueError("not JSON")
+        else:
+            resp.json.return_value = json_body
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_a_moved_endpoint_is_read_from_the_search_page(self, db_session, monkeypatch):
+        import app.pipeline.fetch.president_ptr as pp
+
+        monkeypatch.setattr(pp, "OGE_API_URL", "https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v2/rest")
+        asked = []
+
+        async def fetch(rl, method, url, **kw):
+            asked.append(url)
+            if url == pp.OGE_SEARCH_PAGE:
+                return self._resp(text=self.PAGE)
+            if url.endswith("/v3/rest"):
+                return self._resp({"data": _SAMPLE_ROWS})
+            return self._resp(text="<html>This page is used to allow access to REST Services.</html>")
+
+        with patch.object(pp, "fetch_with_retry_requests", fetch), patch.object(pp, "api_cache_set"):
+            filings = await fetch_ptr_filing_index(db_session, "Donald Trump")
+        assert [f["kind"] for f in filings] == ["periodic", "annual"]
+        assert asked[-1] == "https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v3/rest"
+
+    @pytest.mark.asyncio
+    async def test_a_zero_with_a_passing_self_check_is_not_alerted(self, db_session, monkeypatch):
+        import app.pipeline.fetch.president_ptr as pp
+
+        db_session.add(President(id="obama-44", name="Barack Obama", party="D", number=44,
+                                 term_start="2009-01-20", term_end="2017-01-20", is_current=False))
+        db_session.flush()
+        former = [dict(r, name="Obama, Barack", title="President") for r in _SAMPLE_ROWS]
+
+        async def fetch(rl, method, url, **kw):
+            if url == pp.OGE_SEARCH_PAGE:
+                return self._resp(text=self.PAGE)
+            surname = kw["params"]["columns[3][search][value]"]
+            return self._resp({"data": former if surname == "obama" else []})
+
+        alerts, resolved = [], []
+        monkeypatch.setattr(pp, "_alert", lambda *a, **kw: alerts.append(a))
+        import app.ops_alerts as ops_alerts
+
+        monkeypatch.setattr(ops_alerts, "resolve_ops_alert", resolved.append)
+        with patch.object(pp, "fetch_with_retry_requests", fetch):
+            assert await fetch_ptr_filing_index(db_session, "Donald Trump") == []
+        assert alerts == [] and resolved == ["president-ptr-empty-index-donald-trump"]
+
+        async def empty(rl, method, url, **kw):
+            return self._resp(text=self.PAGE) if url == pp.OGE_SEARCH_PAGE else self._resp({"data": []})
+
+        with patch.object(pp, "fetch_with_retry_requests", empty):
+            assert await fetch_ptr_filing_index(db_session, "Donald Trump") == []
+        [(subject, body)] = alerts
+        assert "Barack Obama" in body and "reads the index again tomorrow" in body
+        assert "check the" not in body.lower() and "look" not in body.lower()
