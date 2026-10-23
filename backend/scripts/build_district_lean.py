@@ -1062,7 +1062,7 @@ def two_party(v) -> float:
 
 # The two elections this build's precinct inputs are (VEST 2020, MEDSL
 # 2024), earlier then later, weighted as fetch_state_pvi weights its window.
-CYCLES = ("2020", "2024")
+CYCLES = WINDOW
 
 
 def lean(d20, d24, n20: float, n24: float) -> float:
