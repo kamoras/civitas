@@ -30,7 +30,10 @@ from sqlalchemy.orm import Session
 from app.models import (
     Candidate, ElectionResultEvent, LiveResultRead, Race, RaceResult, Representative, Senator,
 )
+from app.atomic_write import runtime_data_path
+from app.census_lines import map_in
 from app.config import settings
+from app.file_cache import new_reload_lock, read_json_preferring, reload_if_moved
 from app.pipeline.candidate_dedup import normalized_surname
 from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
@@ -105,25 +108,36 @@ def _party_group(code: str | None) -> str | None:
     return PARTY_CODE_MAP.get(code) or fec_party(code) or code
 
 
+MAPS_NAME = "redrawn_congressional_maps.json"
 _redrawn_cache: dict | None = None
+_redrawn_stamp = None
+_redrawn_lock = new_reload_lock()
 
 
 def _maps() -> dict:
-    global _redrawn_cache
-    if _redrawn_cache is None:
-        path = Path(__file__).resolve().parent.parent / "data" / "redrawn_congressional_maps.json"
-        _redrawn_cache = json.loads(path.read_text())
-    return _redrawn_cache.get("cycles", {})
+    """Each cycle's maps: the copy in use — the one the data refresh wrote
+    on the data volume (the bundled cycles plus each later election's,
+    derived from the Census Bureau's block equivalency files by
+    scripts/derive_redrawn_maps.py), else the bundled one. Re-read when
+    either file changes (the refresh runs in the pipeline process)."""
+    global _redrawn_cache, _redrawn_stamp
+    paths = [Path(runtime_data_path(MAPS_NAME)), Path(__file__).resolve().parent.parent / "data" / MAPS_NAME]
+    with _redrawn_lock:
+        _redrawn_cache, _redrawn_stamp = reload_if_moved(
+            paths, _redrawn_cache, _redrawn_stamp,
+            lambda: read_json_preferring(*paths, default={}, accept=lambda d: isinstance(d, dict)),
+        )
+        return (_redrawn_cache or {}).get("cycles", {})
 
 
-def _map_in(cycles: dict, cycle: int, state: str) -> str:
-    """The map `state` votes on in `cycle`: the newest listed cycle at or
-    before it that names the state (a map stands until replaced), else the
-    CD119 lines every unlisted state is on."""
-    for year in sorted((int(y) for y in cycles), reverse=True):
-        if year <= cycle and state in cycles[str(year)]:
-            return cycles[str(year)][state].get("map", "CD119")
-    return "CD119"
+def maps_pending() -> dict[str, str]:
+    """{cycle: why it isn't derived yet} from the copy in use."""
+    _maps()
+    return dict((_redrawn_cache or {}).get("_pending") or {})
+
+
+# The map `state` votes on in a cycle (one rule, app/census_lines.py).
+_map_in = map_in
 
 
 def redrawn_states(cycle: int) -> set[str]:

@@ -44,7 +44,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
           <p className="font-mono text-small text-ink-min">{seat(m)}</p>
         </div>
       </div>
-      <p className="text-small text-ink">
+      <p className="text-body text-ink">
         Voted on <strong className="text-ink-hi">{n(m.voted)}</strong> of {n(m.chamberRollCalls)}{" "}
         roll calls this Congress, missed <strong className="text-ink-hi">{n(m.missed)}</strong>;
         sponsored <strong className="text-ink-hi">{n(m.billsSponsored)}</strong>{" "}

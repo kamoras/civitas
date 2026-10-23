@@ -1401,7 +1401,7 @@ class TestStatePviData:
         raw = json.loads(
             (pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json").read_text()
         )
-        assert set(raw["inputs"]) == set(mod.CYCLES)
+        assert set(raw["inputs"]) == set(raw["_window"].split("+"))
         assert mod.compute_pvi(raw["inputs"]) == raw["states"]
         assert "tonmcg" not in raw["_source"]
 
@@ -1414,13 +1414,13 @@ class TestStatePviData:
         # compute_pvi derives the national two-party split by summing the
         # states it is given (no separate "national" key since the 2026-07
         # rewrite), so ZZ is a huge 50/50 anchor state pinning the national
-        # D share to ~50%. Keyed by the generator's own CYCLES (2020+2024
-        # window) so a future window bump fails loudly here.
+        # D share to ~50%. Two cycles, earlier then later.
+        cycles = ("2020", "2024")
         counts = {
             cycle: {"ZZ": {"D": 1_000_000, "R": 1_000_000},
                     "XX": {"D": 50, "R": 50},    # exactly national -> EVEN
                     "YY": {"D": 40, "R": 60}}    # 10pts more R -> R+10
-            for cycle in mod.CYCLES
+            for cycle in cycles
         }
         out = mod.compute_pvi(counts)
         assert out["XX"] == 0
@@ -1429,7 +1429,7 @@ class TestStatePviData:
         # The recent election weighs three times the earlier: 8 points
         # more R in 2024 and none in 2020 is R+6, where a plain mean
         # would say R+4.
-        first, last = mod.CYCLES
+        first, last = cycles
         counts[first]["WW"] = {"D": 50, "R": 50}
         counts[last]["WW"] = {"D": 42, "R": 58}
         assert mod.compute_pvi(counts)["WW"] == 6
@@ -1458,3 +1458,58 @@ class TestLeadershipZeroIsAScore:
         detail = {c["label"]: c for c in core["components"]}["Legislative leadership"]["detail"]
         assert "percentile" not in detail
         assert "within the chamber" in detail
+
+
+class TestStatePviSources:
+    """fetch_state_pvi finds its sources by rule: an FEC table's party
+    columns by their labels, checked against MEDSL's count of the cycle."""
+
+    @staticmethod
+    def _workbook(header: list[str], rows: list[list]) -> bytes:
+        import io
+        import zipfile
+
+        strings: list[str] = []
+
+        def cell(ref, v):
+            if isinstance(v, str):
+                strings.append(v)
+                return f'<c r="{ref}" t="s"><v>{len(strings) - 1}</v></c>'
+            return f'<c r="{ref}"><v>{v}</v></c>'
+
+        table = [["STATE", "POPULAR VOTE", "POPULAR VOTE"], ["", *header], *rows]
+        xml_rows = "".join(f'<row r="{i}">' + "".join(cell(f"{'ABC'[j]}{i}", v) for j, v in enumerate(r)) + "</row>"
+                           for i, r in enumerate(table, 1))
+        ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("xl/workbook.xml", f'<workbook {ns} xmlns:r="r"><sheets><sheet name="Table 1" r:id="rId1"/>'
+                                           f'<sheet name="3. Table 2 Electoral &amp; Pop Vote" r:id="rId2"/></sheets></workbook>')
+            zf.writestr("xl/_rels/workbook.xml.rels",
+                        '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/>'
+                        '<Relationship Id="rId2" Target="worksheets/sheet3.xml"/></Relationships>')
+            zf.writestr("xl/worksheets/sheet3.xml", f"<worksheet {ns}><sheetData>{xml_rows}</sheetData></worksheet>")
+            zf.writestr("xl/sharedStrings.xml", f"<sst {ns}>" + "".join(f"<si><t>{s}</t></si>" for s in strings)
+                        + "</sst>")
+        return buf.getvalue()
+
+    def test_party_columns_are_read_by_their_labels(self, monkeypatch):
+        from app.state_names import STATE_NAMES
+
+        mod = TestStatePviData._generator()
+        rows = [[st, 60, 40] for st in STATE_NAMES]
+        total = ["Total:", 60 * len(rows), 40 * len(rows)]
+        # The 2016 table lists the Republican first: read by label, not position.
+        counts = mod.fec_counts(self._workbook(["Trump (R)", "Clinton (D)"], rows + [total]))
+        assert counts["AL"] == {"D": 40, "R": 60}
+        counts = mod.fec_counts(self._workbook(["Biden (D)", "Trunp (R)"], rows + [total]))
+        assert counts["AL"] == {"D": 60, "R": 40}
+        with pytest.raises(SystemExit):  # states not summing to the table's total
+            mod.fec_counts(self._workbook(["Biden (D)", "Trunp (R)"], rows + [["Total:", 1, 1]]))
+
+    def test_a_column_swap_fails_the_cross_check(self):
+        mod = TestStatePviData._generator()
+        medsl = {"AL": {"D": 40, "R": 60}}
+        mod.cross_check({"AL": {"D": 40, "R": 60}}, medsl, 2024)
+        with pytest.raises(SystemExit):
+            mod.cross_check({"AL": {"D": 60, "R": 40}}, medsl, 2024)

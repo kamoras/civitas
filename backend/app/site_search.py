@@ -22,7 +22,8 @@ A query goes straight to its page ("direct") when the best match is at
 least `direct_floor` and leads the next page by at least `direct_margin`:
 a wrong jump is worse than a list. Every parameter is fitted on known-item
 queries built from the index itself by scripts/calibrate_site_search.py and
-read from app/data/site_search_calibration.json.
+read from site_search_calibration.json (data_refresh.read: the pipeline's
+refit when one was accepted, else the bundled copy).
 
 Nothing here logs or keeps a query (AGENTS.md §8).
 """
@@ -40,6 +41,7 @@ from urllib.parse import quote
 
 from sqlalchemy import text
 
+from app import data_refresh
 from app.pipeline.analyze.document_authority import (
     _EO_ABBR_RE, _EO_RE, _EO_TITLE_RE, _FR_CITE_RE, _FR_DOC_RE, _PROC_RE, _RIN_RE, _normalize_rin,
 )
@@ -84,15 +86,27 @@ class Params:
     enough: float = 20
 
 
-@lru_cache(maxsize=1)
+_fitted: dict[str, tuple[dict, object]] = {}
+
+
+def _fitted_params(path: Path, cls):
+    """`cls` from the `params` of the copy of `path` in use (refreshed or
+    bundled, data_refresh.read), its defaults where it has none. Rebuilt
+    when that copy is rewritten, from either process."""
+    doc = data_refresh.read(path.name)
+    hit = _fitted.get(path.name)
+    if hit is not None and hit[0] is doc:
+        return hit[1]
+    fitted = doc.get("params") if isinstance(doc.get("params"), dict) else {}
+    value = cls(**{k: float(v) for k, v in fitted.items() if k in cls.__dataclass_fields__})
+    _fitted[path.name] = (doc, value)
+    return value
+
+
 def params() -> Params:
     """The fitted parameters (scripts/calibrate_site_search.py), or the
     defaults above before it has run."""
-    try:
-        fitted = json.loads(CALIBRATION_PATH.read_text())["params"]
-    except (OSError, ValueError, KeyError):
-        return Params()
-    return Params(**{k: float(v) for k, v in fitted.items() if k in Params.__dataclass_fields__})
+    return _fitted_params(CALIBRATION_PATH, Params)
 
 
 _STOP = {"the", "from", "where", "comes", "by", "of", "and", "to", "a", "in", "on", "for", "with", "top"}
@@ -443,12 +457,16 @@ def answer(raw: str, path: str | None = None, db=None, p: Params | None = None) 
     ("H.R. 1 votes", "<member> donors")."""
     p = p or params()
     q = normalize((raw or "")[:QUERY_MAX])
-    for kind, anchor, heading, rest in _section_intent(q):
-        sub = rank(" ".join(rest), path, db, p)
-        if is_direct(sub, p) and sub[0].kind in _SECTION_KINDS[kind]:
-            top = replace(sub[0], url=f"{sub[0].url.split('#')[0]}#{anchor}", section=heading)
-            return Answer([top] + sub[1:], top)
     ranked = rank(raw or "", path, db, p)
+    # A query that is a page's whole name or identifier means that page,
+    # not a section: "Bill Huizenga" read "bill" as Legislative
+    # Effectiveness's section words and jumped to it (2026-10-23).
+    if not (ranked and ranked[0].match >= EXACT):
+        for kind, anchor, heading, rest in _section_intent(q):
+            sub = rank(" ".join(rest), path, db, p)
+            if is_direct(sub, p) and sub[0].kind in _SECTION_KINDS[kind]:
+                top = replace(sub[0], url=f"{sub[0].url.split('#')[0]}#{anchor}", section=heading)
+                return Answer([top] + sub[1:], top)
     return Answer(ranked, ranked[0] if is_direct(ranked, p) else None)
 
 
@@ -484,15 +502,10 @@ class Fusion:
     weak_weight: float = 1.0
 
 
-@lru_cache(maxsize=1)
 def fusion() -> Fusion:
     """The fitted fusion (scripts/calibrate_search_fusion.py), or the
     defaults above (plain RRF) before it has run."""
-    try:
-        fitted = json.loads(FUSION_PATH.read_text())["params"]
-    except (OSError, ValueError, KeyError):
-        return Fusion()
-    return Fusion(**{k: float(v) for k, v in fitted.items() if k in Fusion.__dataclass_fields__})
+    return _fitted_params(FUSION_PATH, Fusion)
 
 
 def document_url(doc_id: int | str) -> str:
@@ -564,8 +577,13 @@ def results(raw: str, db=None, path: str | None = None, documents=None, limit: i
     for it in items:
         counts[it["kind"]] = counts.get(it["kind"], 0) + 1
     # A close call: a match good enough to jump to, but with one to three
-    # others too near it. More than that is a list, not a close call.
-    near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin] if a.ranked else []
+    # others too near it (within the jump margin, or naming the query as
+    # exactly: two members of one name). More than that is a list, not a
+    # close call. The exact clause keeps the close call from depending on
+    # the fitted margin alone, which a refit can make narrow (0.02 on
+    # 2026-10-23).
+    near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin
+                or (h.match >= EXACT and a.ranked[0].match >= EXACT)] if a.ranked else []
     close = ([h.public() for h in near_top]
              if a.direct is None and a.ranked and a.ranked[0].match >= p.direct_floor and 2 <= len(near_top) <= 4
              else [])

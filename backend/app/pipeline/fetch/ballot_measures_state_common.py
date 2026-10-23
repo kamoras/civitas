@@ -149,6 +149,19 @@ async def get_bytes_unless_walled(client: httpx.AsyncClient, url: str, label: st
     return resp.content
 
 
+async def get_text_unless_walled(client: httpx.AsyncClient, url: str, label: str) -> str | None:
+    """get_text, except that a bot wall's challenge raises SourceBlocked
+    (the text counterpart of get_bytes_unless_walled)."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, bot_challenge_ok=True,
+    )
+    if resp is None:
+        return None
+    if is_bot_challenge(resp):
+        raise SourceBlocked(f"{label} answered with a bot challenge")
+    return resp.text
+
+
 async def get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | list | None:
     return await fetch_json_with_retry(client, _rate_limiter, url, label)
 

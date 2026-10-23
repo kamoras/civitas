@@ -32,7 +32,7 @@ function Strip({ m, me }: { m: PresidentPeerMeasure; me: Self }) {
     ...m.distribution.map((v, i) => ({
       id: m.distributionIds[i],
       name: m.distributionNames[i],
-      detail: m.distributionYears[i],
+      detail: m.distributionDetails?.[i] ?? m.distributionYears[i],
       shown: m.distributionShown[i],
       rank: m.distributionRanks[i],
       href: `/politicians/${m.distributionIds[i]}`,
@@ -42,7 +42,7 @@ function Strip({ m, me }: { m: PresidentPeerMeasure; me: Self }) {
     {
       id: me.id,
       name: me.name,
-      detail: me.years,
+      detail: m.detail ?? me.years,
       shown: m.shown,
       rank: m.rank,
       href: `/politicians/${me.id}`,
@@ -122,7 +122,7 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
         )}
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-small text-ink">{m.why}</p>
+        <p className="mb-1 text-body text-ink">{m.why}</p>
         <Strip m={m} me={me} />
       </div>
       <p
@@ -132,7 +132,7 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
       </p>
       <figcaption id={captionId} className="text-small text-ink md:col-span-3">
         <span className="sr-only">{m.label}: </span>
-        {m.sentence} Compared with {m.peerGroup.n} {m.peerGroup.label}.
+        {m.sentence} Compared with {m.peerGroup.n} {m.peerGroup.label}.{m.aside && ` ${m.aside}`}
         {word && <span className="sr-only"> {word}.</span>}{" "}
         <a
           href={m.source.url}
@@ -281,7 +281,7 @@ export default function PresidentStanding({
             </span>
             <span>┆ the median, or what presidents starting from the same level saw</span>
           </p>
-          <p className="mt-2 max-w-prose text-small text-ink-lo">
+          <p className="mt-2 max-w-prose text-body text-ink-lo">
             Each figure is compared with every other presidency that has it, within the era its
             series covers. The word is a fixed rule: outside the middle half ({lo}th to {hi}th
             percentile) reads &ldquo;above&rdquo; or &ldquo;below&rdquo;, and only with at least{" "}

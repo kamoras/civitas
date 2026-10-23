@@ -326,6 +326,10 @@ jobs:
       - run: "pip install --only-binary=:all: -r requirements.txt -r scripts/requirements-research.txt"
       - name: Pins match the combined dependency tree
         run: python -m pytest tests/test_requirements_pins.py -v
+      - name: The data refresh's ports give the research scripts' numbers
+        # The refreshes run numpy ports of research code in the image; the
+        # comparison with the research code needs its pandas and statsmodels.
+        run: python -m pytest tests/test_court_finding.py tests/test_data_refresh_sources.py -v
       - name: Every script's imports resolve
         # Runs each script's module body (imports, constants), never main():
         # a script importing a package no requirements file declares fails

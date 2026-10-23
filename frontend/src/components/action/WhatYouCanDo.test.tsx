@@ -55,9 +55,13 @@ const VT: IssueMembers = {
 
 beforeEach(() => {
   vi.mocked(api.fetchIssueMembers).mockReset().mockResolvedValue(VT);
-  vi.mocked(api.fetchHouseDistrictsByCounty)
-    .mockReset()
-    .mockResolvedValue({ state: "VT", congress: 119, available: true, districts: [] });
+  vi.mocked(api.fetchHouseDistrictsByCounty).mockReset().mockResolvedValue({
+    state: "VT",
+    congress: 119,
+    available: true,
+    districts: [],
+    lookupLines: "congress-119",
+  });
   vi.mocked(api.sendActionTap).mockReset();
 });
 
@@ -347,6 +351,32 @@ describe("WhatYouCanDo", () => {
       "href",
       "/politicians/S8"
     );
+  });
+  it("words the committee as a fact once the routing fit meets the precision rule", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          actions: [
+            {
+              text: "Contact the Senate Committee on Finance",
+              type: "contact_committee",
+              url: "https://www.finance.senate.gov/",
+              committee: {
+                code: "SSFI",
+                name: "Senate Committee on Finance",
+                chamber: "senate",
+                url: "https://www.finance.senate.gov/",
+                likely: false,
+              },
+            },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    const row = screen.getByRole("link", { name: "Committee ↗" }).closest("li")!;
+    expect(row).toHaveTextContent("The committee for this, matched by its jurisdiction");
+    expect(row).not.toHaveTextContent("Likely");
   });
 });
 

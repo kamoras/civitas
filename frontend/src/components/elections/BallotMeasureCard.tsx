@@ -1,5 +1,5 @@
 import { measureStatusLabel } from "@/lib/elections";
-import { safeHref } from "@/lib/formatting";
+import { formatUtcDate, safeHref } from "@/lib/formatting";
 import type { BallotMeasure } from "@/types/election";
 import { TYPE } from "@/lib/typeStyles";
 
@@ -65,7 +65,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         // Shown, not hidden. Someone who saw this measure last week needs
         // to be told it was struck; a card that simply disappeared cannot
         // say that.
-        <p className="text-small text-signal-red mb-3">
+        <p className="text-body text-signal-red mb-3">
           This measure is no longer on the ballot. It is kept here so a change since your last visit
           is visible rather than silent.
         </p>
@@ -128,7 +128,11 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
       <footer className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-white/[0.07]">
         <p className="text-small text-ink-min">
           Quoted verbatim from {measure.sourceName || "the source"}
-          {measure.republishedBy ? `, as republished by ${measure.republishedBy}` : ""}
+          {measure.republishedBy
+            ? measure.archivedOn
+              ? `, as archived by ${measure.republishedBy} on ${formatUtcDate(measure.archivedOn)}`
+              : `, as republished by ${measure.republishedBy}`
+            : ""}
           {measure.asOf ? ` · as of ${measure.asOf.slice(0, 10)}` : ""}
         </p>
         {sourceHref && (

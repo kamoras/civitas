@@ -1,0 +1,17 @@
+{
+  "_source": "Real answers of the Internet Archive's CDX index (https://web.archive.org/cdx/search/cdx), read 2026-10-23 with fl=timestamp,original,statuscode,digest. ohiosos_rules_2025: url=www.ohiosos.gov/elections/elections-officials/rules/, the last five captures of 2025 (limit=-5), all 200. ohiosos_rules_2026: the same URL from=2026 with no status filter (read with fl=timestamp,statuscode,digest; `original` is the queried URL): the Archive's own crawler was refused (403) by the wall on both 2026 visits. ohiosos_sample_ballot_2026: url=https://www.ohiosos.gov/assets/dir2026-45-official-sample-ballot-november-3-2026.pdf, no capture held (the index answers an empty list).",
+  "ohiosos_rules_2025": [
+    ["timestamp", "original", "statuscode", "digest"],
+    ["20250308035235", "https://www.ohiosos.gov/elections/elections-officials/rules/", "200", "6DRUYWS6NRLZ7OADRDFWBBPCN7CZIRQ3"],
+    ["20250729161332", "https://www.ohiosos.gov/elections/elections-officials/rules/", "200", "ITQUY4SD4L5KFW7ALQWKOWWFVKLZGP4C"],
+    ["20250820135655", "https://www.ohiosos.gov/elections/elections-officials/rules/", "200", "CNTZHDEAMKQQTVIDJ6EG4B3T3ABXBIDO"],
+    ["20250820171500", "https://www.ohiosos.gov/elections/elections-officials/rules/", "200", "RAJMNUHTDSXW7X5UAOHIEEVNH52VQ3I5"],
+    ["20250823141739", "https://www.ohiosos.gov/elections/elections-officials/rules/", "200", "54K62XZA2LC3AO3QPUKMA5G6S6QGZDJN"]
+  ],
+  "ohiosos_rules_2026": [
+    ["timestamp", "original", "statuscode", "digest"],
+    ["20260718202936", "https://www.ohiosos.gov/elections/elections-officials/rules/", "403", "YAI65TE2GA7XF64BX3JXP2VFQBBXENHA"],
+    ["20261015202759", "https://www.ohiosos.gov/elections/elections-officials/rules/", "403", "ZFD33F3Z4O63YG3AW6IZM57MB7LJDL7G"]
+  ],
+  "ohiosos_sample_ballot_2026": []
+}

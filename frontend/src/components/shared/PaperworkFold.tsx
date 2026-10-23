@@ -22,7 +22,7 @@ export default function PaperworkFold({
       <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-signal-cyan hover:text-phos">
         Paperwork notices ({count})
       </summary>
-      <p className="mt-2 text-small text-ink-lo">
+      <p className="mt-2 text-body text-ink-lo">
         Requests to renew or change a form the agency collects, under the Paperwork Reduction Act.
         {shown < count ? ` These are the ${shown} closing soonest.` : ""}
       </p>

@@ -1,10 +1,10 @@
 {
- "_as_of": "2026-10-22",
+ "_as_of": "2026-10-23",
  "_first_year": {
   "LUX": 1950
  },
  "_peer_rule": "Every member of the OECD before its 1994 enlargement (the 20 signatories of the 1960 Convention and Japan, Finland, Australia and New Zealand), the US aside; membership dates from the OECD's record of ratifications and accessions.",
- "_source": "Maddison Project Database 2023 (Bolt & van Zanden 2024), GDP per capita in 2011 international dollars, dataverse.nl doi:10.34894/INZBF2 file mpd2023_web.xlsx, years 1946-2022. Written by backend/scripts/fetch_peer_gdp.py; app/pipeline/fetch/peer_gdp.py takes growth and the income gap with the US from it through its last year, and the World Bank's live series after.",
+ "_source": "Maddison Project Database 2023 (MPD version 2023: Bolt, Jutta and Jan Luiten van Zanden (2024). Maddison style estimates of the evolution of the world economy: A new 2023 update. Journal of Economic Surveys, 1\u201341), GDP per capita, dataverse.nl doi:10.34894/INZBF2 file mpd2023_web.xlsx version 1.0, years 1946-2022. Written by backend/scripts/fetch_peer_gdp.py; app/pipeline/fetch/peer_gdp.py takes growth and the income gap with the US from it through its last year, and the World Bank's live series after.",
  "countries": {
   "AUS": {
    "1946": 10512.0,
@@ -1923,5 +1923,6 @@
   "PRT",
   "SWE",
   "TUR"
- ]
+ ],
+ "release": 2023
 }

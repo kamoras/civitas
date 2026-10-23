@@ -546,7 +546,7 @@ def _alert_missing_house_lines(data: dict, cycle: int) -> None:
         send_ops_alert("Election map: no district lean for the House lines",
                        f"The {cycle} House election is fought on the {ordinal(congress)} Congress's lines, and "
                        f"app/data/district_lean.json has no table for them, so every House seat shows no "
-                       f"usual vote. Add the lines with backend/scripts/build_district_lean.py.",
+                       f"usual vote until the file has them (its data-refresh check names what it waits on).",
                        dedupe_key=f"{HOUSE_LINES_CONDITION}-{congress}", condition=HOUSE_LINES_CONDITION)
     else:
         resolve_ops_alert(HOUSE_LINES_CONDITION)

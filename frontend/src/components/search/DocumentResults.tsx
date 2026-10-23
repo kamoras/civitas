@@ -313,7 +313,7 @@ export default function DocumentResults({
         {semanticDown && results.length > 0 && (
           <p
             role="status"
-            className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-small text-signal-amber"
+            className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-body text-signal-amber"
           >
             Showing keyword matches only: the meaning-based index is rebuilding after a data
             refresh. Searches by topic will return more once it finishes, usually within a few

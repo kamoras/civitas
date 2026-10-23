@@ -178,8 +178,8 @@ def freeze(db: Session, election_day: date) -> ElectionArchive | None:
         # campaign; once the next cycle's build overwrites it, it is gone.
         send_ops_alert(f"Election archive {cycle}: no pre-election map",
                        f"The {cycle} archive found no map for {election_day.isoformat()} at {map_path()}, so the "
-                       "archive will have no pre-election map unless the file is restored before the next "
-                       "cycle's first build.",
+                       "archive keeps no pre-election map for this cycle; every other part of the archive is "
+                       "stored as usual.",
                        dedupe_key=f"election-archive-map-{cycle}", condition="election-archive-map")
     if row.map_json is None and row.record_json is None:
         return None

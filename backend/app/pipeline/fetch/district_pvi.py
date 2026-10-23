@@ -2171,13 +2171,13 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
     older_than_every_pin = bool(configured) and sitting < configured[0]
     served = _served_lines(path)
     if older_than_every_pin:
-        # Only an environment pin can put the sitting Congress before
+        # Only an archive-mode pin can put the sitting Congress before
         # every configured one (the clock only moves forward past them).
         on = served + (
             f", which are NOT the {ordinal(sitting)}'s" if _scoring_lines().congress is not None else ""
         )
         why = (
-            f"CURRENT_CONGRESS is pinned in the environment to {sitting}"
+            f"CURRENT_CONGRESS is pinned in archive mode to {sitting}"
             if settings.current_congress_pinned else f"The sitting Congress is the {ordinal(sitting)}"
         )
         text = (
@@ -2185,9 +2185,8 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
             f"is the {ordinal(configured[0])}), so no pinned table describes its district lines. "
             f"Member scoring is on {on}. Until this is fixed, every weekly District PVI refresh "
             f"fetches and checks the pinned tables but writes none of them (none describes the "
-            f"{ordinal(sitting)}'s lines) and adopts nothing. For an archived-DB "
-            f"re-run of the {ordinal(sitting)} Congress, add an entry for it (see the file's "
-            f"_contract); otherwise remove or correct the CURRENT_CONGRESS pin."
+            f"{ordinal(sitting)}'s lines) and adopts nothing; its live-drift check still runs. An archived-DB "
+            f"re-run of the {ordinal(sitting)} Congress has its lines only once the file has an entry for it."
         )
     else:
         redrawn = redrawn_between(sitting, lines) if lines is not None else None

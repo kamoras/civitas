@@ -154,3 +154,61 @@ async def test_the_fetch_reads_the_presidents_own_page_for_a_missing_end(db_sess
     with patch.object(roster, "fetch_with_retry_requests", new=AsyncMock(return_value=page)):
         await fetch_presidential_roster(db_session)
     assert garfield.term_end == "1881-09-19" and not garfield.end_from_successor
+
+
+class TestReconcileWithRegister:
+    """UCSB's roster completed from the Federal Register's signer and
+    Wikidata's record of the office when it is behind an inauguration."""
+
+    @staticmethod
+    def _roster():
+        return [roster.RosterEntry(id="outgoing-47", name="Outgoing A. President, Jr.", term_start="2025-01-20",
+                                   term_end=None, number=47)]
+
+    async def _run(self, db_session, signer, holders, first="2029-01-20"):
+        with patch.object(roster, "newest_presidential_signer", new=AsyncMock(return_value=signer)), \
+             patch.object(roster, "_office_holders", new=AsyncMock(return_value=holders)), \
+             patch.object(roster, "_first_signing", new=AsyncMock(return_value=first)):
+            entries = await roster.reconcile_with_register(db_session, self._roster())
+        return entries, roster.register_check(db_session)
+
+    @pytest.mark.asyncio
+    async def test_a_new_president_is_added_from_the_register_and_wikidata(self, db_session):
+        signer = {"name": "Incoming President", "identifier": "incoming-president", "signed": "2029-01-21"}
+        holders = [{"ordinal": 48, "start": "2029-01-20", "name": "Incoming Q. President", "party": "D"}]
+        entries, check = await self._run(db_session, signer, holders)
+        assert [e.id for e in entries] == ["outgoing-47", "president-48"]
+        assert entries[0].term_end == "2029-01-20"
+        new = entries[1]
+        assert (new.name, new.term_start, new.term_end, new.number, new.party) == (
+            "Incoming President", "2029-01-20", None, 48, "D")
+        assert check["problem"] is None
+
+    @pytest.mark.asyncio
+    async def test_the_same_person_or_a_register_behind_changes_nothing(self, db_session):
+        same = {"name": "Outgoing President", "identifier": "x", "signed": "2026-10-07"}
+        entries, check = await self._run(db_session, same, None)
+        assert len(entries) == 1 and entries[0].term_end is None and check["problem"] is None
+        behind = {"name": "Earlier President", "identifier": "y", "signed": "2025-01-17"}
+        entries, _ = await self._run(db_session, behind, None)
+        assert len(entries) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_source_not_caught_up_is_recorded_not_guessed(self, db_session):
+        signer = {"name": "Incoming President", "identifier": "incoming-president", "signed": "2029-01-21"}
+        entries, check = await self._run(db_session, signer, [
+            {"ordinal": 47, "start": "2025-01-20", "name": "Outgoing President", "party": "R"}])
+        assert len(entries) == 1 and entries[0].term_end is None
+        assert "does not yet record Incoming President" in check["problem"]
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_register_changes_nothing(self, db_session):
+        entries, check = await self._run(db_session, None, None)
+        assert len(entries) == 1 and check is None
+
+
+def test_party_codes_follow_the_roster_convention():
+    assert roster.party_code("Republican Party") == "R"
+    assert roster.party_code("Democratic-Republican Party") == "D-R"
+    assert roster.party_code("Whig Party") == "W"
+    assert roster.party_code("") is None

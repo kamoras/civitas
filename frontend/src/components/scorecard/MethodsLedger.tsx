@@ -232,7 +232,7 @@ export default function MethodsLedger({
       </h2>
 
       <div id={bodyId} hidden={!open} className="flex flex-col gap-8 px-5 py-5">
-        <p className="max-w-3xl text-small leading-relaxed text-ink-lo">
+        <p className="max-w-3xl text-body leading-relaxed text-ink-lo">
           Every figure on this page is read from public sources by fixed rules, with no model
           judging the member, and refreshed each night. &ldquo;Record behind it&rdquo; says how much
           record the figures rest on (full, partial or thin, by fixed counts of votes, bills and

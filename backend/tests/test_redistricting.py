@@ -29,7 +29,6 @@ def _load(name: str):
 
 
 script = _load("build_redistricting_overlap")
-cw = _load("build_county_district_crosswalk")
 
 _BUNDLED = json.loads((_DATA / "redistricting_overlap.json").read_text())
 _MAPS = json.loads((_DATA / "redrawn_congressional_maps.json").read_text())["cycles"]
@@ -61,7 +60,7 @@ def test_overlap_reports_residents_without_a_district():
 
 def test_the_bundled_file_covers_exactly_the_states_on_new_lines():
     on_cd120 = sorted(st for st, e in _MAPS[_BUNDLED["cycle"]].items() if e["map"] == "CD120")
-    assert sorted(_BUNDLED["states"]) == on_cd120 == script.redrawn()
+    assert sorted(_BUNDLED["states"]) == on_cd120 == sorted(script.redrawn(int(_BUNDLED["cycle"]), _MAPS))
     assert "MO" not in _BUNDLED["states"]  # stayed map: votes on its old lines
     assert _BUNDLED["minResidents"] == 50
     assert (_BUNDLED["fromCongress"], _BUNDLED["toCongress"]) == (119, 120)
@@ -105,7 +104,7 @@ def toy(monkeypatch):
         ]},
     }
     tables = {119: {"ZZ-1": 3, "ZZ-2": -10, "ZZ-3": -1}, 120: {"ZZ-1": 9, "ZZ-2": -10, "ZZ-3": 2}}
-    monkeypatch.setattr(rd, "_cache", doc)
+    monkeypatch.setattr(rd, "overlap_file", lambda: doc)
     monkeypatch.setattr(rd, "district_pvi_for_congress", lambda c: (tables[c], {"congress": c}))
     computed = {119: {"ZZ-1": 3.4, "ZZ-2": -9.6, "ZZ-3": -0.7}, 120: {"ZZ-1": 8.8, "ZZ-2": -9.6, "ZZ-3": 2.3}}
     monkeypatch.setattr(rd.district_lean, "computed_lean", lambda c: computed[c])

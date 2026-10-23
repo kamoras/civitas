@@ -465,7 +465,7 @@ class TestRefresh:
         pins) — but the pinned tables are still fetched and gated."""
         from app import config
 
-        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True))
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
         with patch.object(dp, "adopt_new_pins", AsyncMock(return_value=None)) as adopt, \
                 patch.object(dp, "build_payload", wraps=dp.build_payload) as build:
@@ -792,11 +792,11 @@ class TestEnsureSittingLines:
         assert config.settings.CURRENT_CONGRESS == 120
 
     async def test_a_pinned_current_congress_holds_the_lines(self, monkeypatch, tmp_path):
-        """An operator's env pin (archived-DB re-run) wins over the clock."""
+        """An archive-mode pin (archived-DB re-run) wins over the clock."""
         from app import config
 
         monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2027, 6, 1))
-        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=119))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=119, ARCHIVE_MODE=True))
         out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
         assert await dp.refresh_district_pvi() is True
         assert json.loads(out.read_text())["districts"] == base
@@ -922,13 +922,13 @@ class TestEnsureSittingLines:
         from app import config
 
         out, _, _ = await self._written(monkeypatch, tmp_path)
-        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True))
         monkeypatch.setattr(dp, "_sitting_congress", lambda: config.settings.CURRENT_CONGRESS)
         before = out.read_text()
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
         text = alert.call_args.args[1]
-        assert "CURRENT_CONGRESS is pinned in the environment to 118" in text
+        assert "CURRENT_CONGRESS is pinned in archive mode to 118" in text
         assert "the earliest is the 119th" in text
         assert "which are NOT the 118th's" in text and "latest pinned" not in text
         assert out.read_text() == before
@@ -941,7 +941,7 @@ class TestEnsureSittingLines:
         from app import config
 
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
-        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True))
         bundled = json.loads(dp.BUNDLED_PATH.read_text())
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
@@ -2191,7 +2191,7 @@ class TestJan3Boundary:
         from app import config
 
         monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2026, 10, 1))
-        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=120))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=120, ARCHIVE_MODE=True))
         out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
         assert await dp.refresh_district_pvi() is True
         assert json.loads(out.read_text())["congress"] == 120

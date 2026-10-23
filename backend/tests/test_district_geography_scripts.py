@@ -10,6 +10,8 @@ import json
 import pathlib
 import sys
 
+from app import census_lines
+
 _SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 
 
@@ -25,78 +27,59 @@ cw = _load("build_county_district_crosswalk")
 topo = _load("build_district_topology")
 
 FIPS = {"29": "MO", "49": "UT", "50": "VT", "11": "DC"}
-MAPS = {
-    "UT": (cw.CD120, "court-adopted map"),
-    "MO": (cw.CD119, "new map stayed"),
-}
+# The maps file's shape: UT redrew for 2026, MO's new map was stayed.
+CYCLES = {"2026": {"UT": {"map": "CD120", "reason": "court-adopted map"},
+                   "MO": {"map": "CD119", "reason": "new map stayed"}}}
 
 
-def test_map_for_state_defaults_to_cd119():
-    assert cw.map_for_state("UT", MAPS) == cw.CD120
-    assert cw.map_for_state("MO", MAPS) == cw.CD119
-    assert cw.map_for_state("VT", MAPS) == cw.CD119
+def test_each_state_s_lines_come_from_the_map_it_votes_on():
+    assert census_lines.state_maps(120, ["UT", "MO", "VT"], CYCLES) == {"UT": 120, "MO": 119, "VT": 119}
+    assert census_lines.state_maps(119, ["UT", "MO", "VT"], CYCLES) == {"UT": 119, "MO": 119, "VT": 119}
+    # A map stands until replaced: 2028 lists nothing, so 2026's carry.
+    assert census_lines.state_maps(121, ["UT"], {**CYCLES, "2028": {}}) == {"UT": 120}
+    # The real file keeps Missouri on its 2022 map.
+    real = census_lines.maps_cycles()
+    assert census_lines.state_maps(120, ["MO", "TX"], real) == {"MO": 119, "TX": 120}
 
 
-def test_real_cycle_keeps_missouri_on_its_2022_map():
-    # The 2025 Missouri map is in the Census CD120 file but was stayed.
-    assert cw.map_for_state("MO") == cw.CD119
-    assert cw.map_for_state("TX") == cw.CD120
-    assert cw.map_for_state("UT") == cw.CD120
+def test_an_unreviewed_election_gets_no_table():
+    assert census_lines.listed(CYCLES, 120) and census_lines.listed(CYCLES, 119)
+    assert not census_lines.listed(CYCLES, 121)
 
 
-def test_choose_assignment_takes_cd120_only_where_listed():
-    cd119 = {
-        "490010001001000": "01",
-        "490010001001001": "01",
-        "290010001001000": "05",
-        "500010001001000": "00",
-    }
-    cd120 = [
-        ("490010001001000", "03"),
-        ("490010001001001", "01"),
-        ("290010001001000", "04"),  # Missouri's stayed map: ignored
-        ("500010001001000", "00"),
-    ]
-    chosen, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
-    assert problems == []
-    assert chosen == {
-        "490010001001000": "03",
-        "490010001001001": "01",
-        "290010001001000": "05",
-        "500010001001000": "00",
-    }
+def _digests(**by_congress):
+    return {int(c[1:]): v for c, v in by_congress.items()}
 
 
-def test_choose_assignment_refuses_unlisted_state_that_changed():
-    cd119 = {"500010001001000": "00", "500010001001001": "00"}
-    cd120 = [("500010001001000", "01"), ("500010001001001", "00")]
-    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
-    assert problems == [
-        "VT: 1 blocks differ between CD119 and CD120 but VT has no CYCLE_MAPS entry"
-    ]
+def test_check_maps_allows_a_listed_stay_and_a_listed_redraw():
+    maps = {"UT": 120, "MO": 119, "VT": 119}
+    digests = _digests(c119={"UT": (1, 9), "MO": (2, 9), "VT": (3, 9)},
+                       c120={"UT": (4, 9), "MO": (5, 9), "VT": (3, 9)})
+    assert cw.check_maps(120, maps, digests, CYCLES["2026"], {"UT": 119, "MO": 119, "VT": 119}) == []
 
 
-def test_choose_assignment_flags_cd120_state_missing_blocks():
-    cd119 = {"490010001001000": "01", "490010001001001": "01"}
-    cd120 = [("490010001001000", "02")]
-    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
-    assert problems == ["UT: 1 blocks missing from CD120"]
+def test_check_maps_refuses_an_unlisted_state_whose_blocks_moved():
+    maps = {"UT": 120, "MO": 119, "VT": 119}
+    digests = _digests(c119={"UT": (1, 9), "MO": (2, 9), "VT": (3, 9)},
+                       c120={"UT": (4, 9), "MO": (2, 9), "VT": (6, 9)})
+    problems = cw.check_maps(120, maps, digests, CYCLES["2026"], {"UT": 119, "MO": 119, "VT": 119})
+    assert problems == ["VT: its blocks differ between the 119th and 120th Congress files but the maps file "
+                        "doesn't list it for the election that seats the 120th"]
 
 
-def test_choose_assignment_flags_an_unlisted_state_missing_from_cd120():
-    cd119 = {"500010001001000": "00", "500010001001001": "00"}
-    cd120 = [("500010001001000", "00")]
-    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
-    assert problems == ["VT: 1 blocks in CD119 missing from CD120 but VT has no CYCLE_MAPS entry"]
-
-
-def test_choose_assignment_flags_a_cd120_entry_whose_lines_did_not_change():
+def test_check_maps_flags_a_redraw_entry_whose_lines_did_not_change():
     """A stale entry would tell the live-results sync the state's seats
     have no holder."""
-    cd119 = {"490010001001000": "01"}
-    cd120 = [("490010001001000", "01")]
-    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
-    assert problems == ["UT: listed as CD120 but its lines are identical to CD119"]
+    maps = {"UT": 120}
+    digests = _digests(c119={"UT": (1, 9)}, c120={"UT": (1, 9)})
+    assert cw.check_maps(120, maps, digests, {"UT": {}}, {"UT": 119}) == [
+        "UT: listed as on the 120th Congress's map but its lines are identical to the 119th's"]
+
+
+def test_check_maps_flags_a_state_missing_from_its_map():
+    digests = _digests(c119={"MO": (2, 9)}, c120={"MO": (2, 9), "UT": (4, 9)})
+    assert cw.check_maps(120, {"UT": 119, "MO": 119}, digests, {"UT": {}}, {}) == [
+        "UT: no blocks in the 119th Congress's file"]
 
 
 def test_part_tag_is_any_block_in_a_second_district():
@@ -136,27 +119,34 @@ def test_district_keys_use_plain_string_order():
     assert list(districts) == ["CA-1", "CA-10", "CA-2"]
 
 
-def test_source_note_names_each_state_map_and_reason():
-    note = cw.source_note(MAPS, dt.date(2026, 9, 28), all_cd119=False)
-    assert "MO CD119 (new map stayed)" in note
-    assert "UT CD120 (court-adopted map)" in note
-    assert "built 2026-09-28" in note
-    assert "build_county_district_crosswalk.py" in note
-
-
-def test_congress_seated_by_a_cycle():
-    # The 2024 election seated the 119th Congress, 2026 seats the 120th.
-    assert cw.congress_seated_by("2024") == cw.SITTING_CONGRESS == 119
-    assert cw.congress_seated_by(cw.CYCLE) == 120
+def test_source_note_names_each_redrawn_state_and_its_file():
+    note = cw.source_note(120, {"UT": 120, "MO": 119}, {119: "https://x/cd119.zip", 120: "https://x/cd120.zip"},
+                          {"UT": "court-adopted map"}, dt.date(2026, 9, 28))
+    assert "UT on the 120th Congress's map (court-adopted map)" in note
+    assert "https://x/cd119.zip" in note and "https://x/cd120.zip" in note
+    assert "built 2026-09-28" in note and "build_county_district_crosswalk.py" in note
 
 
 def test_bundled_files_name_their_congress():
     data = _SCRIPTS.parent / "app" / "data"
     election = json.loads((data / "county_district_crosswalk.json").read_text())
     sitting = json.loads((data / "county_district_crosswalk_sitting.json").read_text())
-    assert election["congress"] == cw.congress_seated_by(cw.CYCLE)
-    assert sitting["congress"] == cw.SITTING_CONGRESS
+    assert election["congress"] == census_lines.seated_by(2026)
+    assert sitting["congress"] == census_lines.seated_by(2024)
     assert len(sitting["districts"]) == len(election["districts"]) == 435
+    # Each records the files it was read from, for the refresh's re-release check.
+    assert set(election["_inputs"]["bef"]) == {"119", "120"} and set(sitting["_inputs"]["bef"]) == {"119"}
+
+
+def test_bef_rows_take_a_state_s_own_file_over_the_national_rows(tmp_path):
+    import zipfile
+    z = tmp_path / "cd9.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("NationalCD9.txt", "GEOID,CDFP\r\n490010001001000,01\r\n500010001001000,00\r\n")
+        zf.writestr("CD9_49.txt", "GEOID,STATEFP,COUNTYFP,TRACTCE,BLOCKCE,CDFP\n490010001001000,49,001,000100,1000,03\n")
+    assert list(census_lines.bef_rows(z, "49", "UT")) == [("490010001001000", "03")]
+    assert list(census_lines.bef_rows(z, "50", "VT")) == [("500010001001000", "00")]
+    assert sorted(census_lines.bef_all_rows(z)) == [("490010001001000", "03"), ("500010001001000", "00")]
 
 
 def test_parse_threshold_reads_mapshaper_stats():

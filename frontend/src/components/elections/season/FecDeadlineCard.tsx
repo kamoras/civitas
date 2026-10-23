@@ -23,7 +23,7 @@ export default function FecDeadlineCard({ event }: { event: FecDeadlineEvent | n
       <h2 id="fec-deadline" className={TYPE.kicker}>
         FEC filing deadline
       </h2>
-      <p className="mt-1 text-small text-ink-lo">
+      <p className="mt-1 text-body text-ink-lo">
         The FEC&apos;s {what} reports{event.reportYear ? ` (${event.reportYear})` : ""} {when}.
         Every federal candidate and committee files them; the fundraising figures on each race
         update as they are read.{" "}

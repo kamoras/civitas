@@ -19,7 +19,9 @@ from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, CACHE
 from app.database import get_db
 from app.name_casing import candidate_display_name
 from app import district_lean
+from app import data_refresh
 from app.district_lean import lean_for as computed_lean_for
+from app.district_lines import lookup_lines
 from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
@@ -64,6 +66,7 @@ from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
+from app.pipeline.fetch.web_archive import captured_on
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
@@ -123,29 +126,23 @@ def _district_counties(cycle: int) -> dict[str, list[str]]:
     crosswalk describes those lines."""
     return counties_on_lines_of(congress_for_election(cycle)) or {}
 
-_STATE_LEG_CROSSWALK_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent / "data" / "state_leg_district_crosswalk.json"
-)
-_state_leg_towns_cache: dict[str, list[str]] | None = None
+STATE_LEG_CROSSWALK = "state_leg_district_crosswalk.json"
 
 
 def _state_leg_towns() -> dict[str, list[str]]:
     """"{ST}-{chamber}-{n}" -> the towns, places and counties that
     district covers (largest places first, counties last), so a reader
     can find their seat by a place they know instead of by a number
-    nobody memorises. The state-legislative twin of _district_counties(),
-    and static for the same reason: it changes only when a state
-    redistricts. Built by scripts/fetch_state_leg_crosswalk.py from the
-    Census Bureau's 2026 state legislative block equivalency files.
-    Empty dict — never a guess — if the file is missing."""
-    global _state_leg_towns_cache
-    if _state_leg_towns_cache is None:
-        try:
-            _state_leg_towns_cache = json.loads(_STATE_LEG_CROSSWALK_PATH.read_text())["districts"]
-        except Exception:
-            logger.exception("state_leg_district_crosswalk.json unavailable")
-            _state_leg_towns_cache = {}
-    return _state_leg_towns_cache
+    nobody memorises. The state-legislative twin of _district_counties().
+    Built by scripts/fetch_state_leg_crosswalk.py from the Census Bureau's
+    newest state legislative block equivalency files, rebuilt by the data
+    refresh when a newer one is published (data_refresh.read: the copy in
+    use). Empty dict — never a guess — if the file is missing."""
+    districts = data_refresh.read(STATE_LEG_CROSSWALK).get("districts")
+    if not isinstance(districts, dict):
+        logger.error("state_leg_district_crosswalk.json unavailable")
+        return {}
+    return districts
 
 
 _STATEWIDE_SEATS_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "statewide_seats.json"
@@ -1679,6 +1676,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # representative (house.gov, a member's name) can answer for the
         # old map.
         "newDistrictLines": state in redrawn_states(cycle),
+        # The lookup folder with this ballot's House lines (the Congress the
+        # election seats; district_lines.lookup_lines), null before the
+        # cycle's maps are listed.
+        "houseLookupLines": lookup_lines(state, congress_for_election(cycle)),
         "generalRunoffs": _election_rules(state, cycle, "generalRunoffs"),
         # Contests whose primary was not primaryDate (Alabama's House
         # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS
@@ -2168,6 +2169,9 @@ def _measure_json(measure) -> dict:
         "sourceName": measure.source_name,
         "sourceUrl": measure.source_url,
         "republishedBy": measure.republished_by,
+        # The capture date when the state's document was read from the
+        # Internet Archive's copy (its source is the capture's address).
+        "archivedOn": archived.isoformat() if (archived := captured_on(measure.source_url)) else None,
         "asOf": _iso_utc(measure.as_of),
     }
 

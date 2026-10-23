@@ -47,14 +47,14 @@ DIRECT = {
     "diff-cover", "fastapi", "httptools", "httpx", "huggingface-hub", "lxml", "mcp", "numpy",
     "opencv-python-headless",
     "packaging", "pdfplumber", "pillow", "playwright", "pydantic", "pypdfium2",
-    "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
+    "pydantic-settings", "pyproj", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pytest-xdist", "pyyaml", "requests", "scikit-learn", "scipy",
     "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette",
-    "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "xlrd",
+    "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "websockets", "xlrd",
 }
 # The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
 # by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py;
-# pyproj: build_district_lean.py; fonttools and brotli, which reads woff2:
+# fonttools and brotli, which reads woff2:
 # fetch_site_fonts.py's Open Graph fonts).
 RESEARCH_DIRECT = {
     "brotli",
@@ -62,12 +62,10 @@ RESEARCH_DIRECT = {
     "onnxruntime",
     "openpyxl",
     "pandas",
-    "pyproj",
     "pyreadr",
     "rdata",
     "statsmodels",
     "time-machine",
-    "websockets",
 }
 
 

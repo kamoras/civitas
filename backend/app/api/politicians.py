@@ -35,6 +35,7 @@ from app.api.elections import member_on_ballot, member_seat_race
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config import settings
 from app.database import get_db
+from app.district_lines import lookup_lines
 from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
@@ -556,7 +557,11 @@ def house_districts_by_county(
     # Available when some map on file describes this state's lines; a
     # table carried from an earlier Congress holds only the states whose
     # map didn't change (district_lines), so a redrawn state isn't.
-    return _cached_json({"state": st, "congress": congress, "available": bool(districts), "districts": districts})
+    return _cached_json({
+        "state": st, "congress": congress, "available": bool(districts), "districts": districts,
+        # Where the browser finds the same lines' shapes (district_lines.lookup_lines).
+        "lookupLines": lookup_lines(st, congress),
+    })
 
 
 # How alike a mistyped address must be to a politician's id, or to one word

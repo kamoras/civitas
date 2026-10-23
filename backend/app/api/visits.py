@@ -698,8 +698,8 @@ def check_visits_confirmed() -> None:
             f"{holds} page requests were held for confirmation in the last "
             f"{_UNCONFIRMED_HOURS} hours and none was confirmed: no router request "
             "(Sec-Fetch-Dest: empty, same-origin) reached the visit counter from the "
-            "frontend proxy. Visitor counts read zero until it is fixed "
-            "(frontend/src/proxy.ts, lib/visitSignal.ts, app/api/visits.py).",
+            "frontend proxy. Visitor counts read zero while this holds; the path is "
+            "frontend/src/proxy.ts and lib/visitSignal.ts to app/api/visits.py.",
             dedupe_key=f"{UNCONFIRMED_CONDITION}-{_today()}",
             condition=UNCONFIRMED_CONDITION,
         )

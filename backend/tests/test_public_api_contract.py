@@ -11,12 +11,13 @@ so drift in either direction fails here.
 import csv as csv_module
 import io as io_module
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app import schemas as schemas_module
 from app.api import public, public_mcp
 from app.api.router import api_router
 from app.database import get_db
@@ -644,7 +645,7 @@ def test_president_scores_are_marked_deprecated_in_the_schema():
     """Presidents' 0-100 scores, parts and rank went off the site too."""
     props = PublicPresidentSchema.model_json_schema()["properties"]
     assert props["score"]["deprecated"] is True and props["rank"]["deprecated"] is True
-    assert "removed in API v2" in props["score"]["description"]
+    assert "not after" in props["score"]["description"]
 
 
 def _csv_rows(client, path, **params):
@@ -718,3 +719,69 @@ def test_the_index_and_spec_name_the_data_license(client, monkeypatch):
 def test_csv_downloads_are_not_mcp_tools():
     names = set(public_mcp._operations())
     assert "senators_csv" not in names and "list_senators" in names and "get_roll_call" in names
+
+
+def _deprecated_sent(model) -> set[str]:
+    """Every deprecated field a validated response actually carried."""
+    found = set()
+
+    def walk(v):
+        if isinstance(v, schemas_module.BaseModel):
+            for name, info in type(v).model_fields.items():
+                if schemas_module.is_deprecated(info) and name in v.model_fields_set:
+                    found.add(f"{type(v).__name__}.{name}")
+                walk(getattr(v, name))
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+    walk(model)
+    return found
+
+
+@pytest.mark.parametrize("path,schema", [
+    ("/senators", PublicSenatorPageSchema),
+    ("/senators/S000001", PublicSenatorProfileSchema),
+    ("/senators/S000001/history", PublicHistorySchema),
+    ("/representatives/R000001/breakdown", PublicScoreBreakdownSchema),
+    ("/presidents", PublicPresidentListSchema),
+    ("/presidents/example-2", PublicPresidentSchema),
+])
+def test_deprecated_fields_stop_being_served_after_the_sunset(client, freeze_utcnow, path, schema):
+    """Through API_V1_SUNSET the deprecated fields are served with their
+    headers; from the next day they are not, by themselves, and the body
+    still matches its documented schema."""
+    sunset = datetime.fromisoformat(schemas_module.API_V1_SUNSET)
+    freeze_utcnow(sunset + timedelta(hours=12))
+    before = client.get(f"/api/public/v1{path}")
+    assert _deprecated_sent(schema.model_validate(before.json())) and "Sunset" in before.headers
+    freeze_utcnow(sunset + timedelta(days=1, hours=1))
+    after = client.get(f"/api/public/v1{path}")
+    assert after.status_code == 200 and "Sunset" not in after.headers
+    assert not _deprecated_sent(schema.model_validate(after.json()))
+
+
+def test_deprecated_csv_columns_stop_after_the_sunset(client, freeze_utcnow):
+    sunset = datetime.fromisoformat(schemas_module.API_V1_SUNSET)
+    freeze_utcnow(sunset + timedelta(days=1, hours=1))
+    header = client.get("/api/public/v1/senators.csv").text.splitlines()[0].split(",")
+    assert "overall" not in header and "rank" not in header and "id" in header
+    header = client.get("/api/public/v1/presidents.csv").text.splitlines()[0].split(",")
+    assert "public_mandate" not in header and "avg_approval" in header
+
+
+@pytest.mark.parametrize("path", ["/senators", "/representatives"])
+def test_the_composite_trend_goes_with_the_composite(client, freeze_utcnow, path):
+    """A row's trend is the composite's movement (direction, change, the
+    earlier score): deprecated with it, and left out after the sunset."""
+    props = PublicSenatorRowSchema.model_json_schema()["$defs"]["ScoreTrendSchema"]["properties"]
+    assert all(props[f]["deprecated"] is True for f in ("direction", "change", "previousScore"))
+    sunset = datetime.fromisoformat(schemas_module.API_V1_SUNSET)
+    freeze_utcnow(sunset + timedelta(hours=12))
+    trend = client.get(f"/api/public/v1{path}").json()["entries"][0]["trend"]
+    assert {"change", "previousScore"} <= set(trend)
+    freeze_utcnow(sunset + timedelta(days=1, hours=1))
+    trend = client.get(f"/api/public/v1{path}").json()["entries"][0].get("trend", {})
+    assert not {"direction", "change", "previousScore"} & set(trend)

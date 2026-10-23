@@ -250,8 +250,10 @@ def test_the_sitting_president_is_compared_over_the_same_elapsed_time():
     first = date(2001, 1, 20)
     # Twelve predecessors who started high and fell after day 90, and one
     # whose term ended before the window closed.
-    completed = [_series(first, [70 + i, 70 + i, 70 + i, 70 + i, 50, 50, 50, 50, 50, 50]) for i in range(12)]
-    completed.append(_series(first, [55, 55]))
+    completed = {
+        f"p{i}": _series(first, [70 + i, 70 + i, 70 + i, 70 + i, 50, 50, 50, 50, 50, 50]) for i in range(12)
+    }
+    completed["short"] = _series(first, [55, 55])
     current = _series(date(2025, 1, 20), [45, 45, 45, 45])  # 90 days in
     window = window_reference(current, completed)
     assert window["days"] == 90
@@ -259,6 +261,10 @@ def test_the_sitting_president_is_compared_over_the_same_elapsed_time():
     # full-term ~58, and the short presidency is left out.
     assert window["avg_approval"]["n"] == 12
     assert window["avg_approval"]["mean"] > 70
+    # Each predecessor's own window figures are kept by id for the page's
+    # ranking; the short presidency has none.
+    assert window["values"]["p3"] == {"avg": 73.0, "trend": 0.0}
+    assert set(window["values"]) == {f"p{i}" for i in range(12)}
 
 
 def test_a_sitting_presidents_partial_term_stays_out_of_the_full_term_population():

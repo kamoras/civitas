@@ -46,6 +46,9 @@ export interface CommitteeContact {
   url?: string | null;
   chair?: CommitteeLeader | null;
   rankingMember?: CommitteeLeader | null;
+  /** Worded as a likely match while the routing fit falls short of the
+   *  precision rule (backend committee_routing.precision_rule_met). */
+  likely?: boolean;
 }
 
 export interface ActionItem {

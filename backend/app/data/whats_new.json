@@ -2,6 +2,20 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "measures-votes-with-the-president",
+      "date": "2026-10-23",
+      "title": "Votes with the president on By the numbers",
+      "summary": "By the numbers now shows how often each member voted the way the president asked, set against the rate expected for the seat, beside party breaks, PAC money, small gifts and bills moved.",
+      "url": "/congress/members/measures"
+    },
+    {
+      "id": "larger-reading-text",
+      "date": "2026-10-22",
+      "title": "Larger text for reading",
+      "summary": "Running text across the site is now larger, and sentences meant to be read, such as findings, notes and box lines, use the reading size instead of the caption size.",
+      "url": "/"
+    },
+    {
       "id": "scanned-disclosure-pages",
       "date": "2026-10-22",
       "title": "Paper disclosures shown page by page",
@@ -97,7 +111,7 @@
       "date": "2026-10-20",
       "title": "A page for agency budgets",
       "summary": "Every federal agency's budget for the year, largest first, now has its own page under Executive, each bar linked to the agency's page.",
-      "url": "/agencies/budget"
+      "url": "/executive/budgets"
     },
     {
       "id": "president-portraits",

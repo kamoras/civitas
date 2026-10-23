@@ -28,8 +28,20 @@ and the measurement is where the page lands. Probe types:
 
 A query whose words name more than one page equally (two members with one
 surname, two pages called "Archive") is ambiguous: ranking it counts as
-right when the top result is any of them, and going straight to a page on
-it counts as a wrong jump.
+right when the top result is any of them. A jump is right only when it lands
+on the probe's own page, and wrong anywhere else. Each of an ambiguous
+query's pages has its own probe with the same words (both members are
+probed by the surname), so a jump on it is right for one and wrong for the
+other, and the zero-wrong-jumps rule below still refuses to jump on it.
+
+Until 2026-10-23 every jump on an ambiguous probe counted as wrong, even one
+landing on the probe's own page. Congressional Record speeches with bare
+titles ("Illinois", "ICE", "NOMINATIONS") then made a state's, an agency's
+and a site page's names ambiguous, though no probe looks for those speeches
+(only documents with a comment period are probed by title): on the
+2026-10-22 index all six "wrong" jumps on the fit half landed on the
+probe's own page, no floor and margin met the rule, and a refit turned off
+direct navigation (held-out jumps 0.927 to 0.334, #1248).
 
 Fit and report on different pages: entities split in two by a hash of their
 URL. The scoring parameters are chosen on the fit half by coordinate ascent
@@ -39,6 +51,15 @@ half, with the most right jumps among those whose wrong-jump rate is at or
 under WRONG_DIRECT_TARGET overall and WRONG_DIRECT_TYPE_CAP in every probe
 type. The report half is measured
 once, at the end.
+
+With --in-use (the pipeline's refresh, app/data_refresh.py), the copy in use
+is measured on the same held-out probes and the paired comparison written
+as `_comparison`: per probe, the fit's two objectives summed, the reciprocal
+rank of its page (a jump counting as rank 1 when it lands on the page and as
+a miss when it doesn't) plus 1 for a right jump; per type and as the macro
+mean over types. The refresh installs the refit only when it wins by more
+than one standard error and no type loses more than one, and never with a
+wrong jump on the fit half.
 
 Rerun when the index's shape changes (new kinds, new aliases) or the corpus
 grows a lot; it reads the live index, so run it in the pipeline container:
@@ -278,7 +299,7 @@ def fit_direct(gathered, p: Params) -> tuple[float, float]:
             for probe, r in ranked:
                 count[probe["type"]] = count.get(probe["type"], 0) + 1
                 if is_direct(r, trial):
-                    if not probe["ambiguous"] and r[0].url == probe["url"]:
+                    if r[0].url == probe["url"]:
                         right += 1
                     else:
                         wrong[probe["type"]] = wrong.get(probe["type"], 0) + 1
@@ -300,15 +321,12 @@ def measure(probes_: list[dict], index: str, db, p: Params) -> dict:
         times.append((time.perf_counter() - t0) * 1000)
         accept = set(probe["accept"]) | {probe["url"]}
         top = [h.url for h in a.ranked[: probe["k"]]]
-        s = by_type.setdefault(probe["type"], {"n": 0, "hit": 0, "direct_right": 0, "direct_wrong": 0,
-                                               "unambiguous": 0})
+        s = by_type.setdefault(probe["type"], {"n": 0, "hit": 0, "direct_right": 0, "direct_wrong": 0})
         s["n"] += 1
         s["hit"] += any(u in accept for u in top)
         if probe["k"] == 1:
-            if not probe["ambiguous"]:
-                s["unambiguous"] += 1
             if a.direct is not None:
-                if not probe["ambiguous"] and a.direct.url == probe["url"]:
+                if a.direct.url == probe["url"]:
                     s["direct_right"] += 1
                 else:
                     s["direct_wrong"] += 1
@@ -319,18 +337,79 @@ def measure(probes_: list[dict], index: str, db, p: Params) -> dict:
             f"success_at_{8 if t == 'prefix' else 1}": round(s["hit"] / s["n"], 3),
         }
         if t != "prefix":
-            report[t]["direct_hit_rate"] = round(s["direct_right"] / max(s["unambiguous"], 1), 3)
+            report[t]["direct_hit_rate"] = round(s["direct_right"] / max(s["n"], 1), 3)
             report[t]["wrong_direct_rate"] = round(s["direct_wrong"] / s["n"], 4)
     n1 = [s for t, s in by_type.items() if t != "prefix"]
     total = sum(s["n"] for s in n1)
     report["all"] = {
         "probes": total,
-        "direct_hit_rate": round(sum(s["direct_right"] for s in n1) / max(sum(s["unambiguous"] for s in n1), 1), 3),
+        "direct_hit_rate": round(sum(s["direct_right"] for s in n1) / max(total, 1), 3),
         "wrong_direct_rate": round(sum(s["direct_wrong"] for s in n1) / max(total, 1), 4),
     }
     times.sort()
     report["latency_ms"] = {"p50": round(times[len(times) // 2], 1), "p95": round(times[int(len(times) * 0.95)], 1)}
     return report
+
+
+def utility(probe: dict, a) -> float:
+    """One probe's share of the fit's two objectives: the reciprocal rank of
+    its page in the top 10 (a jump is the whole answer: rank 1 when it lands
+    on the probe's page, a miss when it doesn't), plus 1 for a right jump."""
+    if a.direct is not None and probe["k"] == 1:
+        return 2.0 if a.direct.url == probe["url"] else 0.0
+    accept = set(probe["accept"]) | {probe["url"]}
+    return next((1.0 / (i + 1) for i, h in enumerate(a.ranked[:10]) if h.url in accept), 0.0)
+
+
+def _se(xs: list[float]) -> float:
+    return statistics.stdev(xs) / len(xs) ** 0.5 if len(xs) > 1 else 0.0
+
+
+def paired_comparison(diffs: dict[str, list[float]], metric: str) -> dict:
+    """The candidate against the copy in use from per-probe differences
+    (candidate minus in use) by type: the macro mean over types and its
+    standard error (types independent), and each type's own."""
+    types = sorted(diffs)
+    if not types:
+        return {"metric": metric, "delta": 0.0, "se": 0.0, "subgroups": {}}
+    return {
+        "metric": metric,
+        "delta": round(statistics.fmean(statistics.fmean(diffs[t]) for t in types), 6),
+        "se": round(sum(_se(diffs[t]) ** 2 for t in types) ** 0.5 / len(types), 6),
+        "subgroups": {t: {"probes": len(diffs[t]), "delta": round(statistics.fmean(diffs[t]), 6),
+                          "se": round(_se(diffs[t]), 6)} for t in types},
+    }
+
+
+def compare(probes_: list[dict], index: str, db, candidate: Params, in_use: Params) -> dict:
+    diffs: dict[str, list[float]] = {}
+    for probe in probes_:
+        diffs.setdefault(probe["type"], []).append(
+            utility(probe, answer(probe["q"], index, db, candidate)) - utility(probe, answer(probe["q"], index, db, in_use)))
+    return paired_comparison(diffs, "held-out reciprocal rank plus right jumps, macro over probe types")
+
+
+def wrong_jumps(probes_: list[dict], index: str, db, p: Params) -> list[str]:
+    """The k=1 probes whose query jumps anywhere but the probe's page."""
+    out = []
+    for probe in probes_:
+        if probe["k"] == 1:
+            a = answer(probe["q"], index, db, p)
+            if a.direct is not None and a.direct.url != probe["url"]:
+                out.append(f"{probe['type']} {probe['q']!r} to {a.direct.url}")
+    return out
+
+
+def _params_of(path: str | None) -> Params:
+    """The parameters of a calibration file (the copy in use), or the code's
+    defaults when it holds none."""
+    fitted = {}
+    if path:
+        try:
+            fitted = json.loads(pathlib.Path(path).read_text()).get("params") or {}
+        except (OSError, ValueError, AttributeError):
+            fitted = {}
+    return Params(**{k: float(v) for k, v in fitted.items() if k in Params.__dataclass_fields__})
 
 
 def main() -> None:
@@ -340,15 +419,18 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--candidates-only", action="store_true",
                     help="fit pool and enough only, keeping the ranking parameters in use")
+    ap.add_argument("--in-use", default=None, help="the calibration in use, to measure the refit against")
+    ap.add_argument("--output", default=None, help="where to write (default: the bundled file)")
     args = ap.parse_args()
     db = Session(create_engine(args.database)) if args.database else None
 
     all_probes = probes(args.index, db)
     fit = [p for p in all_probes if p["half"] == 0 and p["type"] != "deep"]
     held = [p for p in all_probes if p["half"] == 1]
-    pool, enough = fit_pool(fit, args.index, fitted_params())
+    current = _params_of(args.in_use) if args.in_use else fitted_params()
+    pool, enough = fit_pool(fit, args.index, current)
     if args.candidates_only:
-        params = replace(fitted_params(), pool=pool, enough=enough)
+        params = replace(current, pool=pool, enough=enough)
     else:
         start = replace(Params(), pool=pool, enough=enough)
         gathered = [(probe, *gather(probe["q"], args.index, db, start)) for probe in fit]
@@ -372,9 +454,19 @@ def main() -> None:
         "held_out": report,
         "kinds": sorted(index_kinds(args.index) or ()),
     }
+    if args.in_use and asdict(params) == asdict(current):
+        out["_comparison"] = {"unchanged": True}  # the same parameters: only the measurements are new
+    elif args.in_use:
+        comparison = compare(held, args.index, db, params, current)
+        wrong = wrong_jumps(fit, args.index, db, params)
+        comparison["fit_half_wrong_jumps"] = len(wrong)
+        if wrong:
+            comparison["refused"] = [f"the refit jumps wrong on {len(wrong)} fit-half probes (allowed: none), "
+                                     f"e.g. {wrong[0]}"]
+        out["_comparison"] = comparison
     print(json.dumps(out, indent=2))
     if not args.dry_run:
-        CALIBRATION_PATH.write_text(json.dumps(out, indent=2) + "\n")
+        pathlib.Path(args.output or CALIBRATION_PATH).write_text(json.dumps(out, indent=2) + "\n")
 
 
 if __name__ == "__main__":

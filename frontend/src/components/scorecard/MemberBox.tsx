@@ -67,7 +67,7 @@ export default function MemberBox({
           children: (
             <>
               {more.children}
-              {about && <p className="mt-4 text-small text-ink-lo">{about}</p>}
+              {about && <p className="mt-4 text-body text-ink-lo">{about}</p>}
             </>
           ),
         }

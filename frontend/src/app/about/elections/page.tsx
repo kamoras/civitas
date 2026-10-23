@@ -1182,6 +1182,14 @@ export default async function ElectionsChapter() {
               backwards on a veto referendum, where approving <em>keeps</em> the law being
               challenged.
             </P>
+            <P>
+              When a state&apos;s website blocks automated reading, we never get around the block.
+              We read the state&apos;s own document where another public office has posted it, or
+              where the Internet Archive saved a copy of the state&apos;s page on its own, and the
+              measure says so (&ldquo;as archived by the Internet Archive on&rdquo; a date). The
+              copy must match the state&apos;s document exactly and pass every check the
+              state&apos;s copy would.
+            </P>
           </Box>
           <Box
             title="One click to any measure"

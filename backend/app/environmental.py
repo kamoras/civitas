@@ -13,8 +13,8 @@ again rather than typed where the site can read it:
   with each figure's source and date: the board's power (a dated reading of
   the Pi's power chip, which no container can read; see that file), the
   whole-machine budget (an assumption, labelled), one day's language-model
-  log, the EPA grid factor (`data_refresh` alerts when a newer eGRID edition
-  is published) and the EPA and Epoch AI comparisons.
+  log, the EPA grid factor (reread monthly from the EPA's newest eGRID
+  edition by `data_refresh`) and the EPA and Epoch AI comparisons.
 
 Everything worked out from these (energy a day and a year, carbon, the car
 and phone comparisons, one request's energy) is computed here, and every

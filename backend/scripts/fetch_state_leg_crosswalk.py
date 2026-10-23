@@ -80,6 +80,7 @@ import io
 import json
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 import zipfile
@@ -89,14 +90,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 # Runs from the repo root on a bare python3: app.contact is standard library only.
 sys.path.insert(0, str(REPO / "backend"))
+from app import census_lines  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402
 
 OUTPUT = REPO / "backend" / "app" / "data" / "state_leg_district_crosswalk.json"
 
-_BEF = (
-    "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files/2027/"
-    "2026-state-legislative-bef/{chamber}26.zip"
-)
 _CHAMBER_FILES = {"upper": "sldu", "lower": "sldl"}
 _PL = (
     "https://www2.census.gov/programs-surveys/decennial/2020/data/"
@@ -104,12 +102,28 @@ _PL = (
 )
 
 # Today's names for the 2020 codes (UTF-8, unlike the P.L. file, which
-# writes "Utqiagvik" for Utqiaġvik).
-_GAZETTEER = {
-    kind: "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/"
-    f"2025_Gaz_{file}_national.zip"
-    for kind, file in (("place", "place"), ("cousub", "cousubs"))
-}
+# writes "Utqiagvik" for Utqiaġvik): the Census Gazetteer national files of
+# a year (`gazetteer_urls`), the newest unless a year is given.
+def gazetteer_urls(year: int | None = None) -> dict[str, str]:
+    base = "https://www2.census.gov/geo/docs/maps-data/data/gazetteer"
+    if year is None:
+        return {kind: census_lines.newest_gazetteer(kind) for kind in ("place", "cousub")}
+    return {kind: f"{base}/{year}_Gazetteer/{year}_Gaz_{file}_national.zip"
+            for kind, file in (("place", "place"), ("cousub", "cousubs"))}
+
+
+def sld_befs(cycle: int) -> dict[str, tuple[str, str, int]]:
+    """{"upper"/"lower": (URL, modified, cycle)} of the newest state
+    legislative BEFs for an election at or before `cycle`
+    (census_lines.find_sld_bef); raises when none is published."""
+    out = {}
+    for chamber, prefix in _CHAMBER_FILES.items():
+        found = census_lines.find_sld_bef(cycle, prefix)
+        if found is None:
+            raise LookupError(f"no state legislative block equivalency file ({prefix}) for {cycle} or before")
+        out[chamber] = found
+    return out
+
 
 # Current boundaries, for the places and towns created since 2020 (see
 # reassign): incorporated places are layer 4, CDPs layer 5, county
@@ -373,8 +387,17 @@ def _query(url: str, params: dict) -> dict:
     req = urllib.request.Request(
         url, data=urllib.parse.urlencode(params).encode(), headers={"User-Agent": BOT_USER_AGENT}
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        payload = json.loads(resp.read())
+    # TIGERweb drops a slow query now and then (a read timed out in a
+    # full build, 2026-10-23): a build that runs unattended tries again.
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                payload = json.loads(resp.read())
+            break
+        except OSError:
+            if attempt == 2:
+                raise
+            time.sleep(30 * (attempt + 1))
     if "error" in payload:
         raise RuntimeError(f"TIGERweb query failed: {payload['error']}")
     return payload
@@ -405,27 +428,12 @@ def new_unit_polygons(state_fips: str, units: Iterable[tuple[str, str]]) -> dict
 def bef_rows(zip_path: Path, state: str, fips: str) -> Iterator[tuple[str, str]]:
     """(GEOID, district code) for one state's blocks: from the state's
     corrected file when the archive has one ("27_MN_SLDU26.txt"), else
-    from the national file, which is sorted by GEOID so reading stops
-    once the state is passed."""
-    with zipfile.ZipFile(zip_path) as zf:
-        members = zf.namelist()
-        corrected = [m for m in members if m.startswith(f"{fips}_{state}_")]
-        member = corrected[0] if corrected else next(m for m in members if m.startswith("National"))
-        with zf.open(member) as raw:
-            reader = io.TextIOWrapper(raw, encoding="utf-8-sig")
-            next(reader)
-            seen = False
-            for line in reader:
-                if not line.startswith(fips):
-                    if seen:
-                        return
-                    continue
-                seen = True
-                parts = line.rstrip("\r\n").split(",")
-                yield parts[0], parts[5]
+    from the national file (census_lines.bef_rows, which reads the code by
+    its column name: the 2024 files have two columns, the 2026 files six)."""
+    return census_lines.bef_rows(zip_path, fips, state)
 
 
-def state_units(state: str, cache: Path) -> tuple[dict, dict]:
+def state_units(state: str, cache: Path, gazetteer: dict[str, str]) -> tuple[dict, dict]:
     """(blocks, names) for one state, as read_geo returns them, with
     today's names and the places and towns created since 2020 moved in.
     Also read by scripts/build_district_place_crosswalk.py."""
@@ -436,7 +444,7 @@ def state_units(state: str, cache: Path) -> tuple[dict, dict]:
     with zipfile.ZipFile(pl) as zf, zf.open(f"{state.lower()}geo2020.pl") as raw:
         blocks, names = read_geo(io.TextIOWrapper(raw, encoding="latin-1"), strong_mcd, points)
     created: dict[tuple, str] = {}
-    for kind, url in _GAZETTEER.items():
+    for kind, url in gazetteer.items():
         if kind == "cousub" and not strong_mcd:
             continue
         with zipfile.ZipFile(download(url, cache)) as zf, zf.open(zf.namelist()[0]) as raw:
@@ -457,13 +465,12 @@ def state_units(state: str, cache: Path) -> tuple[dict, dict]:
     return blocks, names
 
 
-def build_state(state: str, cache: Path) -> dict[str, list[str]]:
+def build_state(state: str, cache: Path, befs: dict, gazetteer: dict[str, str]) -> dict[str, list[str]]:
     fips = _STATES[state][0]
-    blocks, names = state_units(state, cache)
+    blocks, names = state_units(state, cache, gazetteer)
     out: dict[str, list[str]] = {}
-    for chamber, prefix in _CHAMBER_FILES.items():
-        bef = download(_BEF.format(chamber=prefix), cache)
-        seats = crosswalk(blocks, names, bef_rows(bef, state, fips))
+    for chamber, (url, _, _) in befs.items():
+        seats = crosswalk(blocks, names, bef_rows(download(url, cache), state, fips))
         print(f"   {state} {chamber}: {len(seats)} districts")
         out.update({f"{state}-{chamber}-{number}": listed for number, listed in seats.items()})
     if not out:
@@ -473,49 +480,59 @@ def build_state(state: str, cache: Path) -> dict[str, list[str]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("states", nargs="*")
-    parser.add_argument("--existing", action="store_true", help="rebuild every state already in the file")
-    parser.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "civitas-census")
+    parser.add_argument("states", nargs="*", help="the states to build (default: those in --existing)")
+    parser.add_argument("--existing", type=Path, help="build every state this crosswalk file holds")
+    parser.add_argument("--cycle", type=int, required=True,
+                        help="the election the site is on: the newest block files for it or before are read")
+    parser.add_argument("--out", type=Path, default=OUTPUT)
+    parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--gazetteer-year", type=int, help="names from this year's Gazetteer (default: the newest)")
+    parser.add_argument("--keep-downloads", action="store_true", help="keep each state's P.L. file in --cache")
     args = parser.parse_args(argv)
-
-    existing = json.loads(OUTPUT.read_text()).get("districts", {}) if OUTPUT.exists() else {}
     states = [s.upper() for s in args.states]
     if args.existing:
-        states += sorted({key.split("-")[0] for key in existing})
-    if not states:
-        parser.print_help()
-        return 2
+        states += sorted({key.split("-")[0] for key in json.loads(args.existing.read_text())["districts"]})
     unknown = [s for s in states if s not in _STATES]
-    if unknown:
-        print(f"unknown state(s): {', '.join(unknown)}")
-        return 1
+    if not states or unknown:
+        parser.error(f"unknown state(s): {', '.join(unknown)}" if unknown else "no states given")
     args.cache.mkdir(parents=True, exist_ok=True)
-
-    districts_out = dict(existing)
+    befs = sld_befs(args.cycle)
+    gazetteer = gazetteer_urls(args.gazetteer_year)
+    districts_out: dict[str, list[str]] = {}
     for state in dict.fromkeys(states):
-        built = build_state(state, args.cache)
-        # Rebuild this state from scratch so a district that disappeared
-        # in a remap doesn't survive as a stale entry.
-        districts_out = {k: v for k, v in districts_out.items() if not k.startswith(f"{state}-")}
-        districts_out.update(built)
-
-    OUTPUT.write_text(json.dumps({
+        districts_out.update(build_state(state, args.cache, befs, gazetteer))
+        if not args.keep_downloads:
+            _drop_state_download(state, args.cache)
+    year = befs["upper"][2]
+    args.out.write_text(json.dumps({
         "_source": (
-            "U.S. Census Bureau: the Redistricting Data Office's 2026 state legislative "
-            "Block Equivalency Files (sldu26.zip / sldl26.zip, August 2026, national files "
+            f"U.S. Census Bureau: the Redistricting Data Office's {year} state legislative "
+            f"Block Equivalency Files ({befs['upper'][0]}, published {befs['upper'][1][:10] or 'n.d.'}; "
+            f"{befs['lower'][0]}, published {befs['lower'][1][:10] or 'n.d.'}; national files "
             "with the corrected per-state files replacing their rows), joined on the 2020 "
             "Census block to the 2020 P.L. 94-171 geographic header (block population, "
             "county, county subdivision and place, with their names). A district lists the "
             "county subdivisions (strong-MCD states only), places (incorporated places and "
             f"Census Designated Places) and counties with at least {_MIN_RESIDENTS} 2020 "
             "residents inside the district (or half the residents of a smaller place), "
-            "named as in the Census Bureau's 2025 Gazetteer files. Generated by "
-            "backend/scripts/fetch_state_leg_crosswalk.py."
+            f"named as in the Census Bureau's Gazetteer files ({gazetteer['place'].rsplit('/', 1)[1]}). "
+            "Generated by backend/scripts/fetch_state_leg_crosswalk.py."
         ),
+        # The election whose lines these are, and the files read: the data
+        # refresh rebuilds when a newer file is published.
+        "cycle": year,
+        "_inputs": {"sldu": befs["upper"][:2], "sldl": befs["lower"][:2], "gazetteer": gazetteer},
         "districts": dict(sorted(districts_out.items())),
     }, indent=1) + "\n")
-    print(f"wrote {OUTPUT} ({len(districts_out)} districts)")
+    print(f"wrote {args.out} ({len(districts_out)} districts)")
     return 0
+
+
+def _drop_state_download(state: str, cache: Path) -> None:
+    """A state's P.L. file (4-100MB) is read once per build: removed after,
+    so a full build on the Pi holds one state's at a time."""
+    fips, folder = _STATES[state]
+    (cache / _PL.format(folder=folder, st=state.lower()).rsplit("/", 1)[1]).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

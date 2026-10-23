@@ -178,7 +178,7 @@ function Script({
         </button>
         <CopyStatus feedback={feedback} />
       </div>
-      <p className="mt-1 text-small text-ink-min">
+      <p className="mt-1 text-body text-ink-min">
         Fill in the bracketed parts. Offices count calls from their own state or district.
       </p>
     </div>
@@ -329,7 +329,7 @@ export default function ContactYourMembers({
         : [],
     [finder, lines, place]
   );
-  const linesName = lines ? `congress-${lines.congress}` : "";
+  const linesName = lines?.lookupLines ?? "";
   const located =
     finder && yourDistrict.district?.state === state && yourDistrict.district.lines === linesName
       ? yourDistrict.district.house
@@ -358,7 +358,7 @@ export default function ContactYourMembers({
           ? "Or contact your own senators and representative"
           : "Your senators and representative"}
       </p>
-      <p className="mt-0.5 text-small text-ink-lo">
+      <p className="mt-0.5 text-body text-ink-lo">
         Pick your state for each office&apos;s phone and contact form
         {(issue.voteCount ?? 0) > 0 ? ", and how each member voted on this" : ""}. Your pick stays
         in this tab only.

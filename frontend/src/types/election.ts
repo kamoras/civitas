@@ -318,6 +318,9 @@ export interface BallotMeasure {
   /** The county election office whose copy of the state's document was read, when the
    * state's own site couldn't be (Georgia, Nevada). sourceName stays the state's. */
   republishedBy: string | null;
+  /** The capture date (YYYY-MM-DD) when the state's document was read from the
+   * Internet Archive's copy of it (republishedBy then names the Archive). */
+  archivedOn?: string | null;
   asOf: string | null;
 }
 
@@ -656,6 +659,9 @@ export interface StateBallot {
    * (house.gov, a member's name) can answer for the old map.
    * Optional for an older backend: absent reads as false. */
   newDistrictLines?: boolean;
+  /** The lookup folder with this ballot's House lines, null before the
+   *  cycle's maps are listed (district_lines.lookup_lines). */
+  houseLookupLines?: string | null;
   /** Where November does not settle a contest by plurality (Georgia's
    * majority rule; Louisiana's House open primary, where its law makes one), with the
    * runoff's date. Optional for an older backend. */

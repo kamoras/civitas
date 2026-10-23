@@ -181,7 +181,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               Open comment form ↗
             </a>
           </div>
-          <p className="text-small text-ink-min leading-relaxed">
+          <p className="text-body text-ink-min leading-relaxed">
             Copy your comment above, then paste it into the form on regulations.gov. Your comment
             becomes part of the official public record.
           </p>
@@ -321,7 +321,7 @@ function CommentsSection({
           {/* Comment Form */}
           {showForm && commentOpen && (
             <div className="mb-6 p-4 border border-phos/20 bg-phos/5">
-              <p className="text-small text-ink-lo mb-3 leading-relaxed">
+              <p className="text-body text-ink-lo mb-3 leading-relaxed">
                 Your comment will be submitted to regulations.gov and become part of the official
                 public record. Agency officials review these comments when making final decisions.
               </p>
@@ -415,7 +415,7 @@ function CommentsSection({
                 </button>
               </div>
 
-              <p className="text-small text-ink-min mt-3 leading-relaxed">
+              <p className="text-body text-ink-min mt-3 leading-relaxed">
                 By submitting, you acknowledge this comment will be publicly visible on
                 regulations.gov. Do not include personal information you do not wish to be public.
               </p>
@@ -800,13 +800,13 @@ export default function ExploreDocumentView({
                   )}
 
                   {summary?.partial && (
-                    <p className="text-small text-ink-lo">
+                    <p className="text-body text-ink-lo">
                       This analysis was cut short before it finished. Try again later for the whole
                       of it.
                     </p>
                   )}
                   {summary?.truncated && (
-                    <p className="text-small text-ink-lo">
+                    <p className="text-body text-ink-lo">
                       This analysis reached its length limit; the section it was writing is left
                       out.
                     </p>

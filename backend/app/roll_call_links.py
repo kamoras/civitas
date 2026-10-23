@@ -39,7 +39,13 @@ Why hand labels: no data-supplied label existed. The articles named a bill
 one of the candidate votes was on in 0 of the replay's stories, and a vote's
 record was an issue's primary source in 2 (the committee-routing precedent).
 Every structural link found from now on is kept as one
-(record_structural_labels, RollCallLinkLabel) for the next recalibration.
+(record_structural_labels, RollCallLinkLabel), and the gate refits itself
+from them once a day (refit): the precision rule's choice on those labels,
+held out on blocks of days, replaces the threshold in use only under
+precision_rule.accept, and a refit not adopted is stored with why
+(calibration_in_use reads it). On 2026-10-23 production held 0 such labels
+(2 of 569 issues named a bill, 7 had a primary source, none in a vote's
+window), so the hand-labelled threshold stands.
 
 Person names are masked as NAME_MASK in both texts (NameMask: every name the
 site holds a record of) and left out of what is compared, as they are in the
@@ -64,7 +70,7 @@ from typing import Callable
 
 import numpy as np
 
-from app import calibration_drift
+from app import calibration_drift, precision_rule
 from app.models import (
     ActionIssue,
     Candidate,
@@ -78,6 +84,7 @@ from app.models import (
 )
 from app.person_names import record_name
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.time_utils import utcnow
 from app.pipeline.transform.normalize_votes import is_housekeeping
 from app.pipeline.vector_store import get_embedding_model, get_similarity_model
 
@@ -117,6 +124,74 @@ def examples() -> dict:
 
 def calibration() -> dict:
     return _load(CALIBRATION_PATH)
+
+
+# The daily refit from data-supplied labels (refit), kept beside the bundled
+# calibration; adopted ones are used in its place (calibration_in_use).
+_REFIT_TIER, _REFIT_KEY = "roll-call-links", "refit"
+_REFIT_HOURS = 24 * 400
+REFIT_FOLDS = 4
+# The thresholds a refit may choose from: the calibration script's grid.
+REFIT_GRID = [round(0.30 + 0.005 * i, 3) for i in range(121)]
+
+
+def calibration_in_use(db, fit: dict | None = None) -> dict:
+    """The bundled calibration, with an adopted refit's threshold in its
+    place (refit; the stored one unless `fit` is given)."""
+    bundled = calibration()
+    if fit is None:
+        fit = api_cache_get(db, _REFIT_TIER, _REFIT_KEY, max_age_hours=_REFIT_HOURS) or {}
+    if fit.get("adopted") and "threshold" in fit:
+        return {**bundled, "threshold": fit["threshold"], "data_hash": fit["labels_hash"]}
+    return bundled
+
+
+def label_pairs(db) -> tuple[list[str], list[str], np.ndarray, np.ndarray]:
+    """(stories, votes, correct, days) for every pair the data-supplied
+    labels hold: each labelled issue against every linkable vote in its
+    window, right when the structural link names it."""
+    stories, votes, correct, days = [], [], [], []
+    for row in db.query(RollCallLinkLabel).order_by(RollCallLinkLabel.issue_id):
+        related = set(json.loads(row.related or "[]"))
+        for ref, text in sorted(json.loads(row.candidates or "{}").items()):
+            stories.append(_unmasked(row.story))
+            votes.append(text)
+            correct.append(ref in related)
+            days.append(date.fromisoformat(row.date).toordinal())
+    return stories, votes, np.array(correct, bool), np.array(days, int)
+
+
+def refit(db, encode=None, in_use: dict | None = None) -> dict:
+    """Refit the threshold on the data-supplied labels: the precision rule's
+    best-bound choice, compared with the threshold in use on the same pairs
+    held out on REFIT_FOLDS blocks of days, adopted only under
+    precision_rule.accept (`kept` says why one was not). Reads and model
+    work only; the caller stores it (store_refit) after its own model work,
+    so no write is held across an encode."""
+    in_use = in_use or calibration_in_use(db)
+    stories, votes, correct, days = label_pairs(db)
+    fit: dict = {"date": utcnow().date().isoformat(), "pairs": len(correct), "positives": int(correct.sum()),
+                 "labels_hash": "labels:" + hashlib.sha256(json.dumps([stories, votes, correct.tolist()])
+                                                            .encode()).hexdigest()[:16],
+                 "in_use": in_use.get("threshold")}
+    if not correct.any():
+        fit.update(adopted=False, kept="no data-supplied label yet (RollCallLinkLabel holds no structural link)")
+    else:
+        encode = encode or encoders()
+        s = sum((encode[m](stories) * encode[m](votes)).sum(axis=1) for m in MODELS) / len(MODELS)
+        threshold, _ = precision_rule.choose(s, correct, REFIT_GRID)
+        current = in_use.get("threshold")
+        comparison = precision_rule.compare(
+            correct, precision_rule.held_out_passed(s, correct, days, REFIT_GRID, REFIT_FOLDS),
+            s >= current if current is not None else np.zeros(len(s), bool))
+        kept = ("no threshold meets the precision rule on the data-supplied labels" if threshold is None
+                else precision_rule.accept(comparison))
+        fit.update(threshold=threshold, held_out=comparison, adopted=kept is None, kept=kept)
+    return fit
+
+
+def store_refit(db, fit: dict) -> None:
+    api_cache_set(db, _REFIT_TIER, _REFIT_KEY, fit, normal_ttl_hours=_REFIT_HOURS, commit=False)
 
 
 def data_hash() -> str:
@@ -320,7 +395,14 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
     Action Center refresh, where both models are loaded; the API only reads
     the stored refs."""
 
-    cal = cal or calibration()
+    fit = None
+    if cal is None:
+        # Once a day, while both models are loaded: refit on the data's own
+        # labels (refit), then match with the calibration in use.
+        stored = api_cache_get(db, _REFIT_TIER, _REFIT_KEY, max_age_hours=_REFIT_HOURS) or {}
+        if stored.get("date") != today:
+            fit = refit(db, encode)
+        cal = calibration_in_use(db, fit)
     version = _version(cal)
     # A new calibration redoes every stored link: those rows count as
     # unmatched below, and are reset with the writes at the end.
@@ -359,6 +441,8 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
     if reset:
         db.query(ActionIssue).update({ActionIssue.related_roll_call_refs: None}, synchronize_session="evaluate")
         db.query(MonitorUpdate).update({MonitorUpdate.roll_call_refs: None}, synchronize_session="evaluate")
+    if fit is not None:
+        store_refit(db, {**fit, "date": today})
     # Rewritten every run, so the 60-day api_cache prune never takes it.
     api_cache_set(db, _MARKER_TIER, _MARKER_KEY, {"version": version}, commit=False)
     if not rows:

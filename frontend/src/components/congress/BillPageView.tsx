@@ -251,7 +251,7 @@ export default function BillPageView({
                 </ul>
               </nav>
               {unavailable.length > 0 && (
-                <p className="text-small text-signal-amber">
+                <p className="text-body text-signal-amber">
                   {/* Not asked, or not answered: the site's hourly share of
                       Congress.gov can be spent, and the page then shows
                       what it has stored (api/bills.py). */}

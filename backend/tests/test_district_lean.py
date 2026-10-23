@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import district_lean
+from app import census_lines, district_lean
 from app.api.router import api_router
 
 _BACKEND = pathlib.Path(__file__).resolve().parent.parent
@@ -132,6 +132,33 @@ def test_swing_transfer_is_exact_for_a_whole_cell_and_keeps_cell_totals():
     out, stats = bl.swing_transfer(county, b119, b120, sld, v20, pop, cell24, fine24)
     assert out["1"] == pytest.approx([20, 40]) and out["2"] == pytest.approx([80, 20])
     assert stats["blocksInFineCells"] == 4
+
+
+_CYCLES = {"2026": {"TX": {"map": "CD120"}, "MO": {"map": "CD119"}}}
+
+
+def test_a_per_congress_exception_holds_while_the_state_keeps_its_map():
+    keyed = bl.by_map([{"congress": 120, "district": "TX-9", "ratio": 0.8},
+                       {"congress": 119, "district": "NY-3", "ratio": 0.8}], _CYCLES)
+    assert set(keyed) == {(120, "TX-9"), (119, "NY-3")}
+    # The 121st's lines in a 2028 with no redraw: the same maps, the same keys.
+    assert census_lines.state_maps(121, ["TX", "NY"], {**_CYCLES, "2028": {}}) == {"TX": 120, "NY": 119}
+
+
+def test_a_redraw_rebuilds_only_the_states_that_redrew():
+    existing = {"_window": "2020+2024", "corrections": [{"state": "TX", "action": "x"}],
+                "congresses": {"119": {"districts": {"TX-1": 5.0, "NY-1": -3.0}},
+                               "120": {"districts": {"TX-1": 7.0, "NY-1": -3.0}}},
+                "unavailable": {"119": {}, "120": {"NY-2": "behind a wall"}}}
+    corrections = {"fixes": [{"state": "TX", "action": "x"}]}
+    cycles = {**_CYCLES, "2028": {"NY": {"map": "CD121"}}}
+    carry = bl.carried(existing, corrections, cycles, [120, 121], ["TX", "NY"])
+    assert carry[(121, "TX")] == ({"TX-1": 7.0}, {})  # kept the 120th's map
+    assert carry[(120, "NY")] == ({"NY-1": -3.0}, {"NY-2": "behind a wall"})
+    assert (121, "NY") not in carry  # redrew: computed
+    # A changed correction, or another window, carries nothing for that state.
+    assert not [k for k in bl.carried(existing, {"fixes": []}, cycles, [120], ["TX"]) if k[1] == "TX"]
+    assert bl.carried({**existing, "_window": "2024+2028"}, corrections, cycles, [120], ["TX"]) == {}
 
 
 # --- the shipped file ---------------------------------------------------------

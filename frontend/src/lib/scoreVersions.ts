@@ -2,8 +2,10 @@
  * Scoring algorithm version history — the public methodology changelog.
  *
  * Keep in sync with ALGORITHM_VERSION in
- * backend/app/pipeline/analyze/score_calculator.py (and the president and
- * justice scorers' own versions).
+ * backend/app/pipeline/analyze/score_version.py (and the president and
+ * justice scorers' own versions). Refits installed between versions by the
+ * data refresh's acceptance rule ("v6.38.1") are not typed here: the
+ * changelog page reads them from GET /api/score-revisions.
  *
  * `date` is the RELEASE date: the UTC day the change reached main, read from
  * git (`git log -S'ALGORITHM_VERSION = "v6.23"'`). Scores move on the first
