@@ -2168,7 +2168,22 @@ and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
 `is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
-`unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
+`unrecognized` layout) and linked, not OCR'd. A `scanned` one is shown on the
+member's page as its own pages (2026-10): the stock run's fourth holdings
+step (`holdings_pipeline.ingest_scan_pages`, `fetch/scan_pages.py`) fetches
+the House PDF or the eFD paper filing's page images (`img.filingImage`, on
+efd-media-public.senate.gov only) and renders them in a child process
+(`fetch/scan_render.py`, which nothing in `app/` imports) as lossless 1-bit
+WebP at 200 dpi, the House scans' own resolution, into
+`/data/disclosure_scans/<filing_id>/` with a manifest (source, fetch date,
+page sizes, last failure; `app/disclosure_scans.py`). Served same-origin by
+`GET /api/disclosure-scans/<filing_id>/<n>.webp` (ids, never URLs), viewed
+in `components/checker/ScannedFiling.tsx` with alt text naming the page and
+report. A failed fetch keeps the stored pages and records `failed_at`; with
+none stored the page says so beside the link, never an empty viewer; no
+filing tried stored fails the step. A filing's stored pages are not fetched
+again, and scans no stored report names are pruned. 34 reports, about 1,100
+pages, measured at about 33 MiB (2026-10). A Senate paper filing states
 no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's
