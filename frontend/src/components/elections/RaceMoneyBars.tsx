@@ -74,7 +74,7 @@ function FundingLegend() {
 function FundingStrip({ sources }: { sources: FundingSources }) {
   if (!sources.addsUp) {
     return (
-      <p className="mt-2 text-small text-ink-min">
+      <p className="mt-2 text-body text-ink-min">
         No split shown: the categories in this FEC filing don&apos;t add up to its total.
       </p>
     );

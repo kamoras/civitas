@@ -416,7 +416,7 @@ export default function VotingRecord({
           />
         ) : (
           <>
-            <p className="text-small text-ink-lo">
+            <p className="text-body text-ink-lo">
               Each vote links to its bill.{" "}
               <span className="font-mono text-signal-magenta">Against party</span> marks a vote with
               the other side on a roll call the parties split on, including votes against the party

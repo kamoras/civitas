@@ -39,7 +39,8 @@ from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import is_general_day, live_results_states
 from app.pipeline.fetch.poll_close import last_poll_close
 from app.live_results.sync import (
-    NO_COUNT_ALERT_AFTER, StateRead, _FUTURE_SKEW, _scoped_version, contest_is_sane, read_state, refusal_kind,
+    NO_COUNT_ALERT_AFTER, StateRead, _FUTURE_SKEW, _scoped_version, _surnames, contest_is_sane, read_state,
+    refusal_kind,
 )
 from app.time_utils import eastern_date, utcnow
 
@@ -122,6 +123,16 @@ def apply_special(db: Session, row: FederalElectionDate, read: StateRead) -> str
     elif read.status == "read":
         count = read.count
         contests = [c for c in _seat_contests(row, count.contests) if contest_is_sane(c)]
+        if not contests and row.tallies:
+            # The seat's contest renamed past the reader mid-count: the one
+            # contest it could not place whose candidates are the stored
+            # count's (sync.place_by_candidates' rule, against this row).
+            names = _surnames(t.get("name") for t in json.loads(row.tallies or "[]"))
+            hits = [
+                c for c in count.unplaced
+                if len(names) >= 2 and contest_is_sane(c) and _surnames(n for n, _, _ in c.candidates) == names
+            ]
+            contests = hits[:1] if len(hits) == 1 else []
         problem = _went_back(row, count)
         if problem:
             logger.warning("Special %s not stored: %s", row.id, problem)
@@ -164,16 +175,18 @@ def _alerts(row: FederalElectionDate, previous: str | None, read: StateRead) -> 
         # mid-read is refused once and reads cleanly on the next pass.
         send_ops_alert(
             f"Live results: {row.state} special refused",
-            f"{row.id}: {read.reason}. Refused on consecutive reads; nothing from it was stored.",
+            f"{row.id}: {read.reason}. Refused on consecutive reads; nothing from it was stored, and the sync "
+            "reads the feed again every five minutes, storing the count once a read passes every check.",
             dedupe_key=f"special-untrusted-{row.id}-{refusal_kind(read.reason)}",
         )
     if row.read_status == "not_listed" and row.votes_counted is not None:
-        # The feed stopped listing a contest it had counted (renamed past
-        # the reader?): its last count stays shown, and someone looks.
+        # The feed stopped listing a contest it had counted, under the
+        # seat's label or its candidates: its last count stays shown.
         send_ops_alert(
             f"Live results: {row.state} feed no longer lists the special",
-            f"{row.id} had a count but the state's latest read did not list its contest. The page keeps "
-            "its last count. Check the contest's label in the feed.",
+            f"{row.id} had a count but the state's latest read lists no contest with the seat's label or its "
+            "candidates. The page keeps its last count, and the sync reads the feed again every five minutes, "
+            "storing the count once the feed lists the contest again.",
             dedupe_key=f"special-dropped-{row.id}",
         )
     day = date.fromisoformat(row.election_date)
@@ -182,8 +195,8 @@ def _alerts(row: FederalElectionDate, previous: str | None, read: StateRead) -> 
     send_ops_alert(
         f"Live results: no count stored for the {row.state} special",
         f"{row.id}: polls closed over {int(NO_COUNT_ALERT_AFTER.total_seconds() // 3600)}h ago and no count is "
-        f"stored; the last read was '{row.read_status}'. Check the state's results feed: blocked, moved, not "
-        "published, or the special's contest not matched to its seat.",
+        f"stored; the last read was '{row.read_status}'. The sync reads the state's feed every five minutes "
+        "and stores the count as soon as the feed serves the special's contest.",
         dedupe_key=f"special-missing-{row.id}",
     )
 

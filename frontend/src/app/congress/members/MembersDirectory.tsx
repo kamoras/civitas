@@ -181,7 +181,7 @@ function CountyFinder({
       <label htmlFor={id} className="block text-small font-semibold text-ink-hi">
         Find your House member by city, town or county
       </label>
-      <p className="mt-1 text-small text-ink-lo">
+      <p className="mt-1 text-body text-ink-lo">
         Districts as of the current Congress: the ones today&apos;s members were elected in. Nothing
         you type leaves this page.
       </p>
@@ -226,7 +226,7 @@ function CountyFinder({
         onFound={(found) => onPick(found.state, found.house)}
         onOtherState={onOtherState}
       />
-      <p className="mt-2 text-small text-ink-min">
+      <p className="mt-2 text-body text-ink-min">
         {/* No cycle year: it would go stale when the ballot page moves on. */}
         Voting in the coming election?{" "}
         <Link

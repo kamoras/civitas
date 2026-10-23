@@ -142,7 +142,7 @@ function Row({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
         <BigFigure shown={m.shown} className={`${TYPE.figure} text-ink-hi`} />
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-small text-ink">{m.why}</p>
+        <p className="mb-1 text-body text-ink">{m.why}</p>
         <Strip m={m} justiceId={justiceId} />
       </div>
       <figcaption id={`figure-${m.key}`} className="text-small text-ink md:col-span-2">

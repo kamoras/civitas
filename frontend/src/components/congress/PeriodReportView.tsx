@@ -155,7 +155,7 @@ export default function PeriodReportView({
           <PageMasthead className="mb-6" eyebrow="What happened on the floor" title={title}>
             <p>{report.sentence}</p>
             {pending > 0 && (
-              <p className="mt-1 font-sans text-small text-ink-min">
+              <p className="mt-1 font-sans text-body text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
                 log; its passed and confirmed measures are added when the Daily Digest is published.
               </p>

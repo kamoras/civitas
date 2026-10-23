@@ -185,7 +185,7 @@ function ComingUp({ events, asOf }: { events: UpcomingEvent[]; asOf: number }) {
                 >
                   {ev.title}
                 </Link>
-                <span className="mt-0.5 block font-sans text-small leading-snug text-ink-lo">
+                <span className="mt-0.5 block font-sans text-body leading-snug text-ink-lo">
                   {ev.description}
                 </span>
               </span>

@@ -48,6 +48,16 @@ def _first_names(*sources: str | None) -> set[str]:
     return names
 
 
+def first_name_agrees(filer_first: str | None, member_name: str) -> bool:
+    """A word of the filer's first-name field ("Dr. Aisha", "Everton") is a
+    word of the member's name: _pick's tie-break test, over every word of
+    the field, since it can lead with a title. For a report a namesake
+    could file under the member's district (a candidate report for the
+    seat), where a lone surname match is not enough."""
+    member = set(_fold(member_name).split())
+    return any(len(word) > 1 and word in member for word in _fold(filer_first).split())
+
+
 def _office_first_name(office: str | None) -> str | None:
     """"Scott, Rick (Senator)" -> "Rick"."""
     if not office or "," not in office:

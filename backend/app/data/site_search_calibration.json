@@ -1,11 +1,11 @@
 {
-  "_source": "scripts/calibrate_site_search.py on the live index (2026-10-22): parameters fitted on half the entities' known-item probes, measured on the other half. pool and enough: the smallest on their grids that change no fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: known-item probes say whether an answer is listed, never whether the rest of a list is junk. Ranking parameters kept from the calibration in use (--candidates-only).",
+  "_source": "scripts/calibrate_site_search.py on a copy of the production index (2026-10-23): parameters fitted on half the entities' known-item probes, measured on the other half. pool and enough: the smallest on their grids that change no fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: known-item probes say whether an answer is listed, never whether the rest of a list is junk.",
   "params": {
     "prefix_credit": 0.7,
     "fuzzy_credit": 0.7,
     "label_floor": 0.45,
-    "importance_weight": 0.05,
-    "direct_margin": 0.3,
+    "importance_weight": 0.15,
+    "direct_margin": 0.02,
     "direct_floor": 0.6,
     "list_floor": 0.3,
     "pool": 240,
@@ -17,19 +17,19 @@
     "acronym": {
       "probes": 214,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.936,
+      "direct_hit_rate": 0.949,
       "wrong_direct_rate": 0.0
     },
     "deep": {
       "probes": 410,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.998,
+      "direct_hit_rate": 1.0,
       "wrong_direct_rate": 0.0
     },
     "document": {
       "probes": 397,
       "success_at_1": 0.955,
-      "direct_hit_rate": 0.933,
+      "direct_hit_rate": 0.713,
       "wrong_direct_rate": 0.0
     },
     "identifier": {
@@ -41,39 +41,39 @@
     "name": {
       "probes": 403,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.957,
+      "direct_hit_rate": 0.985,
       "wrong_direct_rate": 0.0
     },
     "page": {
       "probes": 96,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.892,
-      "wrong_direct_rate": 0.0104
+      "direct_hit_rate": 0.979,
+      "wrong_direct_rate": 0.0
     },
     "prefix": {
       "probes": 413,
-      "success_at_8": 0.998
+      "success_at_8": 1.0
     },
     "surname": {
       "probes": 309,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.976,
-      "wrong_direct_rate": 0.0
+      "direct_hit_rate": 0.812,
+      "wrong_direct_rate": 0.0032
     },
     "typo": {
       "probes": 408,
       "success_at_1": 0.995,
-      "direct_hit_rate": 0.718,
-      "wrong_direct_rate": 0.0025
+      "direct_hit_rate": 0.966,
+      "wrong_direct_rate": 0.0
     },
     "all": {
       "probes": 2654,
-      "direct_hit_rate": 0.927,
-      "wrong_direct_rate": 0.0008
+      "direct_hit_rate": 0.923,
+      "wrong_direct_rate": 0.0004
     },
     "latency_ms": {
-      "p50": 8.1,
-      "p95": 39.9
+      "p50": 9.0,
+      "p95": 42.4
     }
   },
   "kinds": [
@@ -93,5 +93,58 @@
     "race",
     "rollcall",
     "state"
-  ]
+  ],
+  "_comparison": {
+    "metric": "held-out reciprocal rank plus right jumps, macro over probe types",
+    "delta": 0.059234,
+    "se": 0.00499,
+    "subgroups": {
+      "acronym": {
+        "probes": 214,
+        "delta": 0.060748,
+        "se": 0.016367
+      },
+      "deep": {
+        "probes": 410,
+        "delta": 0.002439,
+        "se": 0.002439
+      },
+      "document": {
+        "probes": 397,
+        "delta": 0.047859,
+        "se": 0.010727
+      },
+      "identifier": {
+        "probes": 417,
+        "delta": 0.0,
+        "se": 0.0
+      },
+      "name": {
+        "probes": 403,
+        "delta": 0.042184,
+        "se": 0.010025
+      },
+      "page": {
+        "probes": 96,
+        "delta": 0.104167,
+        "se": 0.031341
+      },
+      "prefix": {
+        "probes": 413,
+        "delta": 0.007076,
+        "se": 0.002929
+      },
+      "surname": {
+        "probes": 309,
+        "delta": 0.016181,
+        "se": 0.008526
+      },
+      "typo": {
+        "probes": 408,
+        "delta": 0.252451,
+        "se": 0.021533
+      }
+    },
+    "fit_half_wrong_jumps": 0
+  }
 }

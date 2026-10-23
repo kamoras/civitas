@@ -82,7 +82,7 @@ export default async function AgencyBudgetsPage() {
             </PageMasthead>
 
             {!budget ? (
-              <p className="text-small text-ink-lo">
+              <p className="text-body text-ink-lo">
                 USAspending.gov&apos;s budgets haven&apos;t been read yet, so no spending is shown.
                 That is a gap on Civitas, not a government without a budget.
               </p>
@@ -102,7 +102,7 @@ export default async function AgencyBudgetsPage() {
                     </h2>
                     <ShareSectionButton label="Agency budgets" />
                   </div>
-                  <p className="mt-2 max-w-2xl text-small leading-relaxed text-ink">
+                  <p className="mt-2 max-w-2xl text-body leading-relaxed text-ink">
                     Budgetary resources are the money an agency can commit in a fiscal year: new
                     funding from Congress plus what it carried over. {formatCurrency(budget.total)}{" "}
                     across the {budget.reportedCount} agencies that have reported {fy}
@@ -135,7 +135,7 @@ export default async function AgencyBudgetsPage() {
                       <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-ink-min hover:text-phos">
                         [Budgets without an agency page here: {budget.unmatched.length}]
                       </summary>
-                      <p className="mt-2 max-w-2xl text-small leading-relaxed text-ink-lo">
+                      <p className="mt-2 max-w-2xl text-body leading-relaxed text-ink-lo">
                         Agency pages come from the Federal Register&apos;s list, which names some
                         agencies differently from USAspending.gov. Where the two names don&apos;t
                         clearly match, the budget is shown without a link rather than on the wrong
