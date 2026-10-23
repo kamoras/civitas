@@ -23,25 +23,31 @@ INPUTS (every one open-licensed or public domain; nothing share-alike):
     github.com/MEDSL/2024-elections-official, per-state precinct returns,
     CC0 (as declared on Dataverse), pinned to a commit.
   * U.S. Census Bureau (public domain): 2020 P.L. 94-171 block population
-    and internal points; the 119th- and 120th-Congress block equivalency
-    files (BEFs).
+    and internal points; the block equivalency files (BEFs) of every map
+    the tables need, found by rule (app.census_lines).
   * Each state's or county's own certified canvass, for the MEDSL errors
     listed in app/data/district_lean_corrections.json (one entry per fix,
     with its URL).
 
 METHOD.
 
+  WHICH LINES. `--congress N` (repeatable; app/data_refresh.py passes the
+  Congresses the site needs, by rule) gets a table on N's lines: each
+  state on the map it votes on in the election that seats N
+  (redrawn_congressional_maps.json, the copy in use). A map is named by
+  the Congress whose BEF drew it.
+
   2020: every populated Census block's internal point is placed in the
   VEST precinct that contains it (even-odd point in polygon, in the
-  shapefile's own projection), and the precinct's Biden and Trump votes
-  are shared among its blocks by population. A precinct that contains no
-  block point (a sliver) gives its votes to the block point nearest its
-  vertices' centre. Blocks then sum to districts through the BEFs, on
-  both maps.
+  shapefile's own projection, through pyproj), and the precinct's Biden
+  and Trump votes are shared among its blocks by population. A precinct
+  that contains no block point (a sliver) gives its votes to the block
+  point nearest its vertices' centre. Blocks then sum to districts through
+  the BEFs, on every map.
 
-  2024, 119th lines: MEDSL's precincts carry the U.S. House district each
-  voted in (the 2024 election was held on the 119th Congress's lines), so
-  a precinct's Harris and Trump votes go to its own district. A reporting
+  2024, on the map each state voted on in 2024 (the 119th Congress's
+  everywhere): MEDSL's precincts carry the U.S. House district each voted
+  in, so a precinct's Harris and Trump votes go to its own district. A reporting
   unit that spans several districts (a county-wide early-vote or mail
   row, a vote centre) is split by the House votes it cast in each district
   times the party's share in that district among the county's
@@ -49,12 +55,13 @@ METHOD.
   ballot (an unopposed seat) goes to the districts of its county that no
   other precinct is labelled with, the same way.
 
-  2024, 120th lines (only the states that redrew; every other state's
-  lines are the same): swing transfer. Each block's 2024 vote is its 2020
-  vote times the 2024/2020 ratio of the smallest cell it shares with
-  labelled 2024 precincts — county x 119th district x state house
-  district where the precincts' labels make that cell exact, else county x
-  119th district — rescaled so every county x 119th district cell keeps
+  2024, on any other map (only the states that redrew since; every other
+  state's lines are the same): swing transfer. Each block's 2024 vote is
+  its 2020 vote times the 2024/2020 ratio of the smallest cell it shares
+  with labelled 2024 precincts — county x voted district x state house
+  district (the state house lines of the 2024 election, its BEF found by
+  rule) where the precincts' labels make that cell exact, else county x
+  voted district — rescaled so every county x voted district cell keeps
   its exact 2024 total, then summed on the new lines.
 
 CORRECTIONS. app/data/district_lean_corrections.json lists every MEDSL
@@ -77,11 +84,16 @@ GATES (any failure: the script prints every failure and writes nothing):
   * every district's 2024/2020 two-party vote ratio between 0.85 and 1.15,
     unless the corrections file records it as an evidenced exception, which
     then holds only at its recorded ratio;
-  * every district of both maps present exactly once;
-  * Texas's (Red-206, both plans, both years) and California's official
-    per-district presidential tables reproduced: within 0.1 point of
-    two-party share where the votes were cast on those lines, within 1
-    point where both sides are estimates (2020, and the 120th lines).
+  * every district of every map present exactly once (Cook's count where
+    Cook has published that Congress's table, else the map's own seats);
+  * Texas's and California's official per-district presidential tables
+    reproduced, both found by rule: for each Texas map, the Texas
+    Legislative Council's Red-206 reports of the plan whose block file is
+    that map's (the newest plans in its CKAN catalogue, compared block by
+    block), both years; California's Supplement to the Statement of Vote
+    for the 2024 general. Within 0.1 point of two-party share where the
+    votes were cast on those lines, within 1 point where both sides are
+    estimates (2020, and any other map's lines).
 
   Districts more than 1.5 points from the pinned Cook value are listed as
   an alert, not a failure: the two are different measurements.
@@ -92,11 +104,17 @@ filled from a scrape.
 
 Memory: one state at a time; nothing national is held in memory.
 
-Run from the repo (network required on the first run; about 1.5 GB of
-downloads, cached):
+A per-Congress turnout exception or unavailable district recorded in the
+corrections file holds on every later Congress's lines while the state
+keeps that map (`by_map`).
 
-    pip install -r requirements.txt -r scripts/requirements-research.txt
-    python backend/scripts/build_district_lean.py [--cache DIR] [--states AL,AK,...]
+Run from the repo (network required; about 1.5 GB of downloads, each
+state's removed after it is read unless --keep-downloads). The data
+refresh runs it when a Congress the site needs has a state no table
+covers (app/data_refresh.py):
+
+    python backend/scripts/build_district_lean.py --congress 119 --congress 120 --cache DIR \
+        [--out PATH] [--states AL,AK,...] [--keep-downloads]
 
 `--states` builds a subset for inspection and never writes the data file.
 """
@@ -116,26 +134,24 @@ import statistics
 import struct
 import sys
 import time
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
 
 import numpy as np
 import pdfplumber
+from pyproj import CRS, Transformer
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_county_district_crosswalk as cw  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
-from app.contact import BOT_USER_AGENT  # noqa: E402  (cw put backend/ on sys.path)
+from app import census_lines  # noqa: E402
+from app.contact import BOT_USER_AGENT  # noqa: E402  (sl put backend/ on sys.path)
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
 
-try:  # research-only dependency (scripts/requirements-research.txt)
-    from pyproj import CRS, Transformer
-except ImportError:  # pragma: no cover - the unit tests never project
-    CRS = Transformer = None
 
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 OUTPUT = DATA / "district_lean.json"
@@ -161,18 +177,22 @@ MEDSL_PRECINCTS_URL = (
     "/individual_states/{st}24.zip"
 )
 
-# Official per-district presidential tables, the independent cross-check.
-TX_RED206 = {  # Texas Legislative Council Red-206, (Congress, year) -> PDF
-    (119, "2024"): "https://data.capitol.texas.gov/dataset/b806b39a-4bab-4103-a66a-9c99bcaba490/resource/"
-                   "f033e126-e7ee-43d7-95c5-c9fe3a2079d7/download/planc2193_r206_election24g.pdf",
-    (119, "2020"): "https://data.capitol.texas.gov/dataset/b806b39a-4bab-4103-a66a-9c99bcaba490/resource/"
-                   "05ead8c8-9184-4b95-8574-c3594b08d9a4/download/planc2193r206_20g.pdf",
-    (120, "2024"): "https://data.capitol.texas.gov/dataset/748c952b-e926-4f44-8d01-a738884b3ec8/resource/"
-                   "94a2fff0-39ca-46f9-9e40-dd72addde245/download/planc2333_r206_election24g.pdf",
-    (120, "2020"): "https://data.capitol.texas.gov/dataset/748c952b-e926-4f44-8d01-a738884b3ec8/resource/"
-                   "d3af6493-38d0-4f92-89d8-cc858784e6ae/download/planc2333_r206_election20g.pdf",
-}
-CA_SSOV_2024 = "https://elections.cdn.sos.ca.gov/sov/2024-general/ssov/pres-by-congress.xlsx"  # 119th lines
+# The window's two presidential elections (Cook's formula weights them
+# 25/75): the earlier read from VEST, the later from MEDSL, both pinned
+# above. The later one was held on the lines of the map each state voted
+# on that year (redrawn_congressional_maps.json), which its precincts'
+# House labels name.
+WINDOW = ("2020", "2024")
+LATER = int(WINDOW[1])
+
+# Official per-district presidential tables, the independent cross-check,
+# found by rule: the Texas Legislative Council's Red-206 report for the
+# plan whose block file is the map's (its CKAN catalogue), and California's
+# Supplement to the Statement of Vote for the later election (its URL is
+# the Secretary of State's pattern for each general).
+TX_CKAN = "https://data.capitol.texas.gov/api/3/action"
+TX_PLAN_CANDIDATES = 30  # newest congressional plans compared with the map's blocks
+CA_SSOV = "https://elections.cdn.sos.ca.gov/sov/{year}-general/ssov/pres-by-congress.xlsx"
 
 # Gates (module docstring).
 STATE_TOLERANCE = 0.002
@@ -186,7 +206,7 @@ STRAY_SHARE = 1e-4
 COOK_ALERT = 1.5
 # The official tables' 2024 counts are the same certified canvass MEDSL
 # transcribes, so a 2024 figure on the lines the votes were cast on must
-# agree closely. 2020 and the 120th lines are estimates on both sides
+# agree closely. 2020 and any other map's lines are estimates on both sides
 # (Red-206 too disaggregates precinct votes to blocks), so they are
 # reported, and gated only against a gross error.
 CROSS_TOLERANCE = {"exact": 0.1, "estimate": 1.0}
@@ -368,32 +388,25 @@ def state_blocks(st: str, cache: Path) -> tuple[list[str], np.ndarray, np.ndarra
     return geoids, np.array([blocks[g][0] for g in geoids], float), np.array([points[g] for g in geoids]), counties
 
 
-def _bef_member(zf: zipfile.ZipFile, member: str, fips: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    with zf.open(member) as raw:
-        reader = io.TextIOWrapper(raw, encoding="utf-8-sig")
-        next(reader)
-        for line in reader:
-            if line.startswith(fips):
-                out[line[:15]] = line.rstrip("\r\n").rsplit(",", 1)[1]
-            elif out:
-                break  # the national files are sorted by GEOID
-    return out
+BEFS_READ: dict[str, list[str]] = {}  # map -> [URL, published], recorded in the output
 
 
-def state_befs(st: str, cache: Path) -> tuple[dict[str, str], dict[str, str]]:
-    """(block -> 119th district, block -> 120th-election district) for one
-    state: the corrected per-state 119th file where Census issued one, and
-    the map the state votes on in 2026 (cw.map_for_state — Missouri's
-    stayed 2025 map is not it)."""
+def bef_zip(congress: int, cache: Path) -> Path:
+    """The Census block equivalency file of `congress`'s map, found by rule."""
+    if str(congress) not in BEFS_READ:
+        found = census_lines.find_congress_bef(congress)
+        if found is None:
+            raise SystemExit(f"no Census block equivalency file for the {congress}th Congress")
+        BEFS_READ[str(congress)] = list(found)
+    return fetch(BEFS_READ[str(congress)][0], cache / f"cd{congress}.zip")
+
+
+def state_befs(st: str, cache: Path, maps: set[int]) -> dict[int, dict[str, str]]:
+    """{map: block -> district} for one state on each map (a map named by
+    the Congress whose file drew it; a state's own file in a zip replaces
+    its national rows)."""
     fips = sl._FIPS[st]
-    with zipfile.ZipFile(fetch(cw.CD119_URL, cache / "cd119.zip")) as zf:
-        corrected = f"{fips}_{st}_CD119.txt"
-        b119 = _bef_member(zf, corrected if corrected in zf.namelist() else "NationalCD119.txt", fips)
-    if cw.map_for_state(st) == cw.CD119:
-        return b119, b119
-    with zipfile.ZipFile(fetch(cw.CD120_URL, cache / "cd120.zip")) as zf:
-        return b119, _bef_member(zf, "NationalCD120.txt", fips)
+    return {m: dict(census_lines.bef_rows(bef_zip(m, cache), fips, st)) for m in sorted(maps)}
 
 
 # ---------------------------------------------------------------------------
@@ -835,7 +848,7 @@ class Official:
 
 
 # ---------------------------------------------------------------------------
-# 2024 units -> 119th districts
+# 2024 units -> the districts they voted in
 # ---------------------------------------------------------------------------
 
 
@@ -843,7 +856,7 @@ def allocate_2024(units: list[Unit], seats: set[str], county_20: dict) -> tuple[
     """(district -> [D, R], (county, district) -> [D, R], (county, district,
     state house district) -> [D, R] for the exactly-labelled units, stats).
 
-    county_20: (county, district) -> [D, R] 2020 votes on the 119th lines,
+    county_20: (county, district) -> [D, R] 2020 votes on the voted lines,
     the fallback weight where 2024 offers none."""
     single = len(seats) == 1
     lab = collections.defaultdict(lambda: [0.0, 0.0])  # (county, d), single-district units
@@ -909,25 +922,25 @@ def allocate_2024(units: list[Unit], seats: set[str], county_20: dict) -> tuple[
 
 
 # ---------------------------------------------------------------------------
-# 2024 on the 120th lines: swing transfer
+# 2024 on another map's lines: swing transfer
 # ---------------------------------------------------------------------------
 
 
-def swing_transfer(block_county: list[str], b119: list[str | None], b120: list[str | None],
+def swing_transfer(block_county: list[str], b_voted: list[str | None], b_new: list[str | None],
                    block_sld: list[str | None], v20: np.ndarray, pop: np.ndarray,
                    cell24: dict, fine24: dict) -> tuple[dict, dict]:
-    """2024 on the 120th lines.
+    """2024 on another map's lines (`b_new`) from the map it was cast on (`b_voted`).
 
     Each block's 2024 vote is its 2020 vote times a 2024/2020 ratio, party
-    by party: its county x 119th district x state house district cell's,
+    by party: its county x voted district x state house district cell's,
     where labelled precincts give that cell an exact 2024 count
-    (`fine24`), else its county x 119th district cell's. Each county x
-    119th district cell is then rescaled to its exact 2024 total
-    (`cell24`) and the blocks summed on the 120th lines, so the result is
+    (`fine24`), else its county x voted district cell's. Each county x
+    voted district cell is then rescaled to its exact 2024 total
+    (`cell24`) and the blocks summed on the new lines, so the result is
     exact for every cell the new map keeps whole. A cell with no 2020 vote
     falls back to block population. Returns (district -> [D, R], stats)."""
     cells = collections.defaultdict(list)
-    for i, (c, d) in enumerate(zip(block_county, b119)):
+    for i, (c, d) in enumerate(zip(block_county, b_voted)):
         if d is not None:
             cells[(c, d)].append(i)
     out = collections.defaultdict(lambda: [0.0, 0.0])
@@ -952,8 +965,8 @@ def swing_transfer(block_county: list[str], b119: list[str | None], b120: list[s
                     fine_blocks += len(members) if k == 0 else 0
             share = target[k] * est / est.sum() if est.sum() > 0 else np.zeros(len(idx))
             for i, v in zip(idx, share):
-                if b120[i] is not None:
-                    out[b120[i]][k] += v
+                if b_new[i] is not None:
+                    out[b_new[i]][k] += v
                 else:
                     lost += v
     unplaced = {k: v for k, v in cell24.items() if k not in cells}
@@ -967,48 +980,61 @@ def swing_transfer(block_county: list[str], b119: list[str | None], b120: list[s
 # ---------------------------------------------------------------------------
 
 
-def build_state(st: str, cache: Path, files: dict, fixes: list[dict], official: Official) -> dict:
+def build_state(st: str, cache: Path, files: dict, fixes: list[dict], official: Official,
+                targets: list[int], cycles: dict) -> dict:
+    """One state's votes on each target Congress's lines. A target's lines
+    are the map the state votes on in the election that seats it; the
+    later election's votes are counted on the map it was held on (`voted`)
+    and carried to any other map by swing transfer."""
     t0 = time.time()
     geoids, pop, lonlat, county_fips = state_blocks(st, cache)
-    bef119, bef120 = state_befs(st, cache)
-    b119 = [seat(bef119.get(g, "")) for g in geoids]
-    b120 = [seat(bef120.get(g, "")) for g in geoids]
-    missing_bef = sum(1 for g in geoids if g not in bef119 or g not in bef120)
+    voted = census_lines.map_congress(census_lines.map_in(cycles, LATER, st))
+    maps = {c: census_lines.state_maps(c, [st], cycles)[st] for c in targets}
+    used = sorted(set(maps.values()) | {voted})
+    befs = state_befs(st, cache, set(used))
+    labels = {m: [seat(befs[m].get(g, "")) for g in geoids] for m in used}
+    missing_bef = sum(1 for g in geoids if any(g not in befs[m] for m in used))
     county = [g[:5] for g in geoids]
     v20, stats20 = votes_2020(st, cache, files, lonlat, pop)
-    d20 = {119: collections.defaultdict(lambda: [0.0, 0.0]), 120: collections.defaultdict(lambda: [0.0, 0.0])}
+    d20 = {m: collections.defaultdict(lambda: [0.0, 0.0]) for m in used}
     county_20 = collections.defaultdict(lambda: [0.0, 0.0])
     for i in range(len(geoids)):
-        for cong, b in ((119, b119), (120, b120)):
-            if b[i] is not None:
-                d20[cong][b[i]][0] += v20[i, 0]
-                d20[cong][b[i]][1] += v20[i, 1]
-        if b119[i] is not None:
-            county_20[(county[i], b119[i])][0] += v20[i, 0]
-            county_20[(county[i], b119[i])][1] += v20[i, 1]
+        for m in used:
+            d = labels[m][i]
+            if d is not None:
+                d20[m][d][0] += v20[i, 0]
+                d20[m][d][1] += v20[i, 1]
+        if labels[voted][i] is not None:
+            county_20[(county[i], labels[voted][i])][0] += v20[i, 0]
+            county_20[(county[i], labels[voted][i])][1] += v20[i, 1]
     units, notes = medsl_units(st, cache, fixes, official)
     for f in fixes:
         if f["action"] == "county_total":
-            for cong, b in ((119, b119), (120, b120)):
-                touched = {d for c, d in zip(county, b) if c == f["county"] and d is not None}
+            for m in used:
+                touched = {d for c, d in zip(county, labels[m]) if c == f["county"] and d is not None}
                 if len(touched) != 1:
                     raise SystemExit(f"{st} {f['county']}: a county total is exact only for a county in one "
-                                     f"district; it is in {sorted(touched)} on the {cong}th lines")
-    seats119 = {d for d in b119 if d is not None}
-    d24_119, cell24, fine24, stats24 = allocate_2024(units, seats119, dict(county_20))
+                                     f"district; it is in {sorted(touched)} on the {m}th Congress's map")
+    seats = {d for d in labels[voted] if d is not None}
+    d24_voted, cell24, fine24, stats24 = allocate_2024(units, seats, dict(county_20))
     if any(f["action"] == "district_cells" for f in fixes):
-        cell24, d24_119 = _official_cells(cell24, official.california_cells(county_fips), notes)
+        cell24, d24_voted = _official_cells(cell24, official.california_cells(county_fips), notes)
     if any(f["action"] == "district_totals" for f in fixes):
-        d24_119 = official.maine_districts()
-        notes.append(f"district totals set to the official counts {d24_119}")
-    redrawn = bef120 is not bef119
-    if redrawn:
-        sld_bef = dict(sl.bef_rows(fetch(sl._BEF.format(chamber="sldl"), cache / "sldl26.zip"), st, sl._FIPS[st]))
+        d24_voted = official.maine_districts()
+        notes.append(f"district totals set to the official counts {d24_voted}")
+    d24 = {voted: d24_voted}
+    moved: dict[int, dict] = {}
+    if any(m != voted for m in used):
+        # The state house lines the later election was held on: the fine
+        # cells' labels are its precincts'.
+        sld = census_lines.find_sld_bef(LATER, "sldl")
+        sld_bef = dict(sl.bef_rows(fetch(sld[0], cache / sld[0].rsplit("/", 1)[1]), st, sl._FIPS[st]))
         block_sld = [sl.district_key(sld_bef[g]) if g in sld_bef else None for g in geoids]
-        d24_120, stats120 = swing_transfer(county, b119, b120, block_sld, v20, pop, cell24, fine24)
-    else:
-        d24_120, stats120 = d24_119, {}
-    tot24 = [sum(v[k] for v in d24_119.values()) for k in (0, 1)]
+        for m in used:
+            if m != voted:
+                d24[m], moved[m] = swing_transfer(county, labels[voted], labels[m], block_sld, v20, pop,
+                                                  cell24, fine24)
+    tot24 = [sum(v[k] for v in d24_voted.values()) for k in (0, 1)]
     county24 = collections.defaultdict(lambda: [0.0, 0.0])
     for u in units:
         county24[u.county][0] += u.votes[0]
@@ -1016,11 +1042,12 @@ def build_state(st: str, cache: Path, files: dict, fixes: list[dict], official: 
     print(f"{st}: {len(geoids)} blocks, {stats20['precincts']} VEST precincts, {len(units)} 2024 units, "
           f"{time.time() - t0:.0f}s", flush=True)
     return {
-        "state": st, "redrawn": redrawn, "blocksWithoutBef": missing_bef,
-        "d20": {c: {d: v for d, v in t.items()} for c, t in d20.items()},
-        "d24": {119: d24_119, 120: d24_120},
+        "state": st, "voted": voted, "maps": maps, "blocksWithoutBef": missing_bef,
+        "seats": {m: {d for d in labels[m] if d is not None} for m in used},
+        "d20": {m: dict(t) for m, t in d20.items()},
+        "d24": d24,
         "total20": [float(v20[:, 0].sum()), float(v20[:, 1].sum())], "total24": tot24,
-        "county24": dict(county24), "stats20": stats20, "stats24": stats24, "stats120": stats120, "notes": notes,
+        "county24": dict(county24), "stats20": stats20, "stats24": stats24, "statsMoved": moved, "notes": notes,
     }
 
 
@@ -1087,23 +1114,69 @@ def ca_ssov(path: Path) -> dict[str, list[float]]:
     return {str(i + 1): t for i, t in enumerate(totals)}
 
 
+def _ckan(action: str, **params) -> dict:
+    url = f"{TX_CKAN}/{action}?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read())["result"]
+
+
+def tx_plan_reports(blocks: dict[str, str], cache: Path) -> tuple[str, dict[str, str]] | None:
+    """(plan name, {"2020": URL, "2024": URL}) of the Texas Legislative
+    Council's Red-206 reports for the plan whose block assignment file is
+    exactly `blocks` (a map's Texas rows: GEOID -> district code), from the
+    newest congressional plans in its catalogue; None when none matches."""
+    want = {g: str(int(d)) for g, d in blocks.items() if d.strip().isdigit()}
+    found = _ckan("package_search", q="planc", sort="metadata_modified desc", rows=TX_PLAN_CANDIDATES)
+    for pkg in found["results"]:
+        if not re.fullmatch(r"planc\d+", pkg["name"]):
+            continue
+        urls = {r["url"].rsplit("/", 1)[1].lower(): r["url"] for r in pkg["resources"] if r.get("url")}
+        blk = next((u for n, u in urls.items() if n.endswith("_blk.zip")), None)
+        if blk is None:
+            continue
+        with zipfile.ZipFile(fetch(blk, cache / "official" / blk.rsplit("/", 1)[1])) as zf, \
+                zf.open(zf.namelist()[0]) as raw:
+            rows = csv.reader(io.TextIOWrapper(raw, encoding="utf-8-sig"))
+            next(rows)
+            plan = {g: str(int(d)) for g, d in rows if d.strip().isdigit()}
+        if plan != want:
+            continue
+        reports = {}
+        for year in WINDOW:
+            m = [u for n, u in urls.items() if re.search(rf"r206_(?:election)?{year[2:]}g\.pdf$", n)]
+            if m:
+                reports[year] = m[0]
+        return pkg["name"], reports
+    return None
+
+
 def cross_checks(results: dict, cache: Path) -> tuple[dict, list[str]]:
     report, failures = {}, []
     tables = []
     if "TX" in results:
-        for (cong, year), url in TX_RED206.items():
-            tables.append(("TX", cong, year, red206(fetch(url, cache / "official" / url.rsplit("/", 1)[1])),
-                           "exact" if (cong, year) == (119, "2024") else "estimate", url))
+        r = results["TX"]
+        fips = sl._FIPS["TX"]
+        for m in sorted(set(r["maps"].values()) | {r["voted"]}):
+            match = tx_plan_reports(dict(census_lines.bef_rows(bef_zip(m, cache), fips, "TX")), cache)
+            if match is None:
+                failures.append(f"cross-check TX: no Texas Legislative Council plan has the {m}th Congress map's blocks")
+                continue
+            for year, url in sorted(match[1].items()):
+                tables.append(("TX", m, year, red206(fetch(url, cache / "official" / url.rsplit("/", 1)[1])),
+                               "exact" if (m, year) == (r["voted"], WINDOW[1]) else "estimate", url))
     if "CA" in results:
-        tables.append(("CA", 119, "2024", ca_ssov(fetch(CA_SSOV_2024, cache / "official" / "ca_ssov_pres_by_congress.xlsx")),
-                       "exact", CA_SSOV_2024))  # also CA's correction source: a check that it was applied
-    for st, cong, year, table, kind, url in tables:
-        ours = results[st]["d24" if year == "2024" else "d20"][cong]
+        url = CA_SSOV.format(year=LATER)
+        tables.append(("CA", results["CA"]["voted"], WINDOW[1],
+                       ca_ssov(fetch(url, cache / "official" / f"ca_ssov_{LATER}_pres_by_congress.xlsx")),
+                       "exact", url))  # also CA's correction source: a check that it was applied
+    for st, m, year, table, kind, url in tables:
+        ours = results[st]["d24" if year == WINDOW[1] else "d20"][m]
         diffs = {d: 100 * (two_party(ours[d]) - two_party(v)) for d, v in table.items() if d in ours}
         if set(diffs) != set(ours):
-            failures.append(f"cross-check {st} {cong} {year}: districts differ {sorted(set(ours) ^ set(table))}")
+            failures.append(f"cross-check {st} {m} {year}: districts differ {sorted(set(ours) ^ set(table))}")
         worst = max(diffs, key=lambda d: abs(diffs[d]))
-        report[f"{st}-{cong}-{year}"] = {
+        report[f"{st}-{m}-{year}"] = {
             "source": url, "districts": len(diffs), "kind": kind,
             # California's table is also its correction source (district_cells),
             # so agreement there only confirms the correction was applied.
@@ -1112,15 +1185,27 @@ def cross_checks(results: dict, cache: Path) -> tuple[dict, list[str]]:
             "maxAbsDiffPts": round(abs(diffs[worst]), 3), "worst": f"{st}-{worst}",
         }
         if abs(diffs[worst]) > CROSS_TOLERANCE[kind]:
-            failures.append(f"cross-check {st}-{worst} ({cong}th lines, {year}): two-party D share off the official "
-                            f"table by {diffs[worst]:+.2f} pts (> {CROSS_TOLERANCE[kind]})")
+            failures.append(f"cross-check {st}-{worst} ({m}th Congress's map, {year}): two-party D share off the "
+                            f"official table by {diffs[worst]:+.2f} pts (> {CROSS_TOLERANCE[kind]})")
     return report, failures
 
 
+def by_map(entries: list[dict], cycles: dict) -> dict[tuple[int, str], dict]:
+    """Corrections-file entries keyed by (congress, district) -> keyed by
+    (the map that district's state is on for that Congress, district): an
+    exception recorded on the 120th's lines holds on every later
+    Congress's lines while the state keeps that map."""
+    out = {}
+    for e in entries:
+        st = e["district"].split("-")[0]
+        out[(census_lines.state_maps(int(e["congress"]), [st], cycles)[st], e["district"])] = e
+    return out
+
+
 def gates(results: dict, inputs: dict, official: Official, fixes: list[dict],
-          turnout_exceptions: list[dict]) -> list[str]:
+          turnout_exceptions: list[dict], cycles: dict) -> list[str]:
     failures = []
-    excused = {(str(e["congress"]), e["district"]): e["ratio"] for e in turnout_exceptions}
+    excused = {k: e["ratio"] for k, e in by_map(turnout_exceptions, cycles).items()}
     cook = json.loads(DISTRICT_PVI.read_text())["congresses"]
     for st, r in results.items():
         refs = (("2020", r["total20"], (inputs["2020"][st]["D"], inputs["2020"][st]["R"]), "FEC official"),
@@ -1132,18 +1217,24 @@ def gates(results: dict, inputs: dict, official: Official, fixes: list[dict],
                                     f"({100 * (got[k] / ref[k] - 1):+.2f}%)")
         if r["blocksWithoutBef"]:
             failures.append(f"{st}: {r['blocksWithoutBef']} populated blocks missing from a block equivalency file")
-        stray = r["stats120"].get("votesInCellsWithNoBlock", 0) if r["redrawn"] else 0
-        if stray > STRAY_SHARE * sum(r["total24"]):
-            failures.append(f"{st}: {stray:,} 2024 votes are in county x district cells no populated block is in, "
-                            "so the 120th-line transfer cannot place them")
-        for cong in (119, 120):
-            want = {k.split("-", 1)[1] for k in cook[str(cong)]["districts"] if k.startswith(st + "-")}
-            have = set(r["d24"][cong]) & set(r["d20"][cong])
+        for m, stats in r["statsMoved"].items():
+            stray = stats.get("votesInCellsWithNoBlock", 0)
+            if stray > STRAY_SHARE * sum(r["total24"]):
+                failures.append(f"{st}: {stray:,} 2024 votes are in county x district cells no populated block is "
+                                f"in, so the transfer to the {m}th Congress's map cannot place them")
+        for m in sorted(set(r["maps"].values())):
+            cong = min(c for c, x in r["maps"].items() if x == m)
+            # Every seat once: Cook's table where Cook has published one for
+            # that Congress (an independent count), else the map's own seats.
+            ref = cook.get(str(cong), {}).get("districts")
+            want = ({k.split("-", 1)[1] for k in ref if k.startswith(st + "-")} if ref
+                    else r["seats"][m])
+            have = set(r["d24"][m]) & set(r["d20"][m])
             if have != want:
-                failures.append(f"{st} {cong}th lines: districts {sorted(have)} vs Cook's {sorted(want)}")
+                failures.append(f"{st} {cong}th lines: districts {sorted(have)} vs {sorted(want)}")
             for d in sorted(have):
-                ratio = sum(r["d24"][cong][d]) / sum(r["d20"][cong][d])
-                pinned = excused.get((str(cong), f"{st}-{d}"))
+                ratio = sum(r["d24"][m][d]) / sum(r["d20"][m][d])
+                pinned = excused.get((m, f"{st}-{d}"))
                 if pinned is not None:
                     if abs(ratio - pinned) > EXCEPTION_SLACK:
                         failures.append(f"{st}-{d} ({cong}th lines): ratio {ratio:.3f} moved from its recorded "
@@ -1175,6 +1266,8 @@ def compare_with_cook(leans: dict) -> tuple[dict, list[str]]:
     cook = json.loads(DISTRICT_PVI.read_text())["congresses"]
     summary, alerts = {}, []
     for cong, table in leans.items():
+        if str(cong) not in cook:
+            continue  # Cook hasn't published that Congress's yet
         ref = cook[str(cong)]["districts"]
         keys = sorted(k for k in table if k in ref)
         ours = [table[k] for k in keys]
@@ -1209,40 +1302,69 @@ METHOD = (
     "lean = -100 * (0.25 * (D20/(D20+R20) - N20) + 0.75 * (D24/(D24+R24) - N24)), positive = R lean; N = the "
     "national two-party Democratic share (MEDSL state returns). 2020 precinct votes shared among the Census "
     "blocks inside each precinct by population; 2024 precincts counted in the House district each voted in "
-    "(2024 was held on the 119th Congress's lines); the 120th lines in states that redrew by swing transfer "
-    "within county x 119th-district cells."
+    "(on the map each state voted on in 2024); any other map's lines by swing transfer within county x "
+    "voted-district cells."
 )
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "civitas-district-lean")
+    ap.add_argument("--congress", type=int, action="append", required=True,
+                    help="a Congress whose lines get a table (repeatable)")
+    ap.add_argument("--cache", type=Path, required=True)
+    ap.add_argument("--out", type=Path, default=OUTPUT)
     ap.add_argument("--states", help="comma-separated subset to build and report; never writes the data file")
+    ap.add_argument("--keep-downloads", action="store_true", help="keep each state's inputs in --cache")
+    ap.add_argument("--existing", type=Path,
+                    help="carry each state's figures from this file where it holds them on the same map")
     args = ap.parse_args(argv)
     args.cache.mkdir(parents=True, exist_ok=True)
+    cycles = census_lines.maps_cycles()
+    targets = sorted(set(args.congress))
+    unlisted = [c for c in targets if not census_lines.listed(cycles, c)]
+    if unlisted:
+        raise SystemExit(f"the elections that seat {unlisted} are not in redrawn_congressional_maps.json yet")
     corrections = json.loads(CORRECTIONS.read_text())
     official = Official(corrections["sources"], args.cache)
     inputs, n20, n24 = national_shares()
     states = args.states.split(",") if args.states else [s for s in sl._STATES if s != "DC"]
     files = vest_files(args.cache)
+    carry = (carried(json.loads(args.existing.read_text()), corrections, cycles, targets, states)
+             if args.existing and args.existing.exists() and not args.states else {})
     results = {}
     for st in states:
+        if all((c, st) in carry for c in targets):
+            continue
         fixes = [f for f in corrections["fixes"] if f["state"] == st]
-        results[st] = build_state(st, args.cache, files, fixes, official)
-    failures = gates(results, inputs, official, corrections["fixes"], corrections.get("turnout_exceptions", []))
+        results[st] = build_state(st, args.cache, files, fixes, official, targets, cycles)
+        if not args.keep_downloads:
+            drop_state_inputs(st, args.cache)
+    failures = gates(results, inputs, official, corrections["fixes"], corrections.get("turnout_exceptions", []),
+                     cycles)
     xcheck, xfail = cross_checks(results, args.cache)
     failures += xfail
-    unavailable = {str(c): {} for c in (119, 120)}
-    for u in corrections.get("unavailable", []):
-        unavailable[str(u["congress"])][u["district"]] = u["reason"]
+    off_map = by_map(corrections.get("unavailable", []), cycles)
+    unavailable = {str(c): {} for c in targets}
     leans = {}
-    for cong in (119, 120):
-        leans[cong] = {f"{st}-{d}": lean(r["d20"][cong][d], r["d24"][cong][d], n20, n24)
-                       for st, r in results.items() for d in r["d24"][cong] if d in r["d20"][cong]
-                       and f"{st}-{d}" not in unavailable[str(cong)]}
+    for cong in targets:
+        leans[cong] = {}
+        for (c, st), (vals, gone) in carry.items():
+            if c == cong and st not in results:
+                leans[cong].update(vals)
+                unavailable[str(cong)].update(gone)
+        for st, r in results.items():
+            m = r["maps"][cong]
+            for d in r["d24"][m]:
+                if d not in r["d20"][m]:
+                    continue
+                if (m, f"{st}-{d}") in off_map:
+                    unavailable[str(cong)][f"{st}-{d}"] = off_map[(m, f"{st}-{d}")]["reason"]
+                    continue
+                leans[cong][f"{st}-{d}"] = lean(r["d20"][m][d], r["d24"][m][d], n20, n24)
     summary, alerts = compare_with_cook(leans)
+    print(f"carried from {args.existing}: {sorted({st for _, st in carry} - set(results))}" if carry else "")
     for st, r in results.items():
-        print(f"  {st}: 2024 allocation {r['stats24']}; 2020 {r['stats20']}; 120th {r['stats120']}")
+        print(f"  {st}: 2024 allocation {r['stats24']}; 2020 {r['stats20']}; moved {r['statsMoved']}")
         for n in r["notes"]:
             print(f"     {n}")
     print("cross-checks:", json.dumps(xcheck, indent=1))
@@ -1255,15 +1377,18 @@ def main(argv: list[str] | None = None) -> int:
         print("NOT writing output — gates failed")
         return 1
     if args.states:
-        print("subset run: not writing", OUTPUT)
+        print("subset run: not writing", args.out)
         return 0
-    OUTPUT.write_text(json.dumps({
+    args.out.write_text(json.dumps({
         "_source": SOURCE,
         "_method": METHOD,
         "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
-        "_window": "2020+2024",
+        "_window": "+".join(WINDOW),
         "_as_of": dt.date.today().isoformat(),
         "_regenerate": REGENERATE,
+        # The block files read (URL, published): the data refresh rebuilds on a re-release.
+        "_inputs": {"bef": dict(sorted({**((json.loads(args.existing.read_text()).get("_inputs") or {}).get("bef") or {}
+                                             if carry else {}), **BEFS_READ}.items()))},
         "inputs": corrections["inputs"],
         # Each fix whole: a key whitelist here once dropped LaPorte's
         # official_url/official_totals and both precinct_regex fields.
@@ -1274,8 +1399,48 @@ def main(argv: list[str] | None = None) -> int:
         "unavailable": unavailable,
         "congresses": {str(c): {"districts": {k: round(v, 1) for k, v in sorted(t.items())}} for c, t in leans.items()},
     }, indent=1, sort_keys=False) + "\n")
-    print(f"wrote {OUTPUT}")
+    print(f"wrote {args.out}")
     return 0
+
+
+def carried(existing: dict, corrections: dict, cycles: dict, targets: list[int],
+            states: list[str]) -> dict[tuple[int, str], tuple[dict, dict]]:
+    """{(Congress, state): (its leans, its unavailable districts)} that an
+    existing file already holds on the same map, with the same window and
+    the same corrections for that state: the same inputs on the same lines
+    give the same figures, so they are carried rather than recomputed (a
+    redraw rebuilds only the states that redrew, and a source the other
+    states need that is down, as maine.gov was to every request on
+    2026-10-23, doesn't hold the redraw back)."""
+    if existing.get("_window") != "+".join(WINDOW):
+        return {}
+    tables = existing.get("congresses") or {}
+    off = existing.get("unavailable") or {}
+    fixes = {st: [f for f in corrections["fixes"] if f["state"] == st] for st in states}
+    kept = {st: [f for f in existing.get("corrections") or [] if f.get("state") == st] for st in states}
+    out = {}
+    for c in targets:
+        for st in states:
+            if fixes[st] != kept[st]:
+                continue
+            m = census_lines.state_maps(c, [st], cycles)[st]
+            for e in sorted(tables, key=int, reverse=True):
+                if census_lines.state_maps(int(e), [st], cycles)[st] != m:
+                    continue
+                vals = {k: v for k, v in (tables[e].get("districts") or {}).items() if k.split("-")[0] == st}
+                gone = {k: v for k, v in (off.get(e) or {}).items() if k.split("-")[0] == st}
+                if vals or gone:
+                    out[(c, st)] = (vals, gone)
+                    break
+    return out
+
+
+def drop_state_inputs(st: str, cache: Path) -> None:
+    """One state's P.L., VEST and MEDSL files are read once per build:
+    removed after, so a full build holds one state's at a time (about
+    1.5 GB in all otherwise)."""
+    for name in (f"{st.lower()}2020.pl.zip", f"{st.lower()}_2020.zip", f"{st.lower()}24.zip"):
+        (cache / name).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

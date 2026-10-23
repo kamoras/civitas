@@ -439,7 +439,10 @@ def test_an_installed_refit_that_moves_scoring_inputs_records_a_scoring_revision
     assert f"{base}.1" in alerts.send.call_args.args[0] and alerts.send.call_args.kwargs.get("condition") is None
 
 
-def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
+def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script(monkeypatch):
+    # The election the site is on reads the stored counts after election
+    # day; this test is about the commands, not the phase.
+    monkeypatch.setattr(dr, "_election", lambda: SimpleNamespace(cycle=2026, phase="campaign"))
     for spec in dr.DATA_FILES:
         assert (dr.BUNDLED / spec.name).exists(), spec.name
         if spec.command and spec.name not in ("poll_close_times.json", "election_calendar.json"):

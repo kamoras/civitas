@@ -48,55 +48,22 @@ import io
 import json
 import re
 import sys
-import urllib.request
 import zipfile
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app import census_lines  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
 
 BUNDLED = BACKEND / "app" / "data" / "redrawn_congressional_maps.json"
-RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
+RDO = census_lines.RDO
 STATES_URL = "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
-_LISTING_RE = re.compile(r'<a href="([^"?/][^"]*)">[^<]*</a></td><td align="right">(\d{4}-\d\d-\d\d \d\d:\d\d)')
 
-
-def seated_by(cycle: int) -> int:
-    """The Congress a November election seats (2026 -> 120th)."""
-    return (cycle - 1788) // 2 + 1
-
-
-def _get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return resp.read()
-
-
-def listing(url: str) -> dict[str, str]:
-    """{entry name: modified} of an Apache directory listing."""
-    return dict(_LISTING_RE.findall(_get(url).decode("utf-8", "replace")))
-
-
-def find_bef(congress: int) -> tuple[str, str] | None:
-    """(URL, modified) of the Census BEF zip for `congress`, or None."""
-    want = re.compile(rf"^{congress}-congressional-district-befs?/$")
-    years = [str(1789 + 2 * (congress - 1))] + sorted(
-        (y.rstrip("/") for y in listing(RDO + "/") if re.fullmatch(r"\d{4}/", y)), reverse=True)
-    for year in dict.fromkeys(years):
-        try:
-            entries = listing(f"{RDO}/{year}/")
-        except Exception:
-            continue
-        for sub in entries:
-            if not want.match(sub):
-                continue
-            files = listing(f"{RDO}/{year}/{sub}")
-            for name, modified in files.items():
-                if name.lower() == f"cd{congress}.zip":
-                    return f"{RDO}/{year}/{sub}{name}", modified
-    return None
+# Found by rule, one copy of each (app/census_lines.py).
+seated_by = census_lines.seated_by
+find_bef = census_lines.find_congress_bef
+_get = census_lines._get
 
 
 def _fetch(url: str, cache: Path) -> Path:
@@ -136,13 +103,7 @@ def state_digests(zip_path: Path) -> tuple[dict[str, int], dict[str, int], set[s
     return dict(digests), dict(counts), set(own), own
 
 
-def map_in(cycles: dict, cycle: int, state: str) -> str:
-    """As live_results.sync._map_in: the newest listed cycle at or before
-    `cycle` naming the state, else the CD119 lines every unlisted state is on."""
-    for year in sorted((int(y) for y in cycles), reverse=True):
-        if year <= cycle and state in cycles[str(year)]:
-            return cycles[str(year)][state].get("map", "CD119")
-    return "CD119"
+map_in = census_lines.map_in
 
 
 def derive(cycle: int, cycles: dict, fips: dict[str, str], cache: Path) -> tuple[dict | None, str]:

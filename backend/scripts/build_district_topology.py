@@ -9,27 +9,30 @@ districts inside one county. A map of the districts themselves is the
 only view that answers "which one is my neighborhood in" without asking.
 
 WHICH MAP. District lines change whenever a state redistricts, not once
-a decade: nine states redrew for the 2026 elections. The per-state choice
-lives in one place, app/data/redrawn_congressional_maps.json (read by
-build_county_district_crosswalk.py as `CYCLE_MAPS`),
-and this script follows it, so the map and the county list can never
-describe different districts. Rerun both scripts when a state's map
-changes.
+a decade: nine states redrew for the 2026 elections. `--congress N` draws
+N's lines (the Congress the coming election seats): each state on the map
+it votes on in that election (app/data/redrawn_congressional_maps.json,
+the copy in use, via app.census_lines), the same choice the county and
+place crosswalks make, so the map and the county list can never describe
+different districts. The data refresh's choice of N and of when to
+rebuild is the crosswalks' (app/data_refresh.py).
 
-SOURCES. Public domain, U.S. Census Bureau.
-  * States on their 119th Congress map: the cartographic boundary file
-    for the 119th Congress, 1:500,000 (cb_2024_us_cd119_500k). Cartographic
-    boundary files are clipped to the shoreline, which is what a reader
-    recognises; TIGER/Line extends districts over water.
-  * States voting on their 120th Congress map (CYCLE_MAPS): no cartographic
-    file exists yet, so each district is built from its blocks — the
-    Redistricting Data Office's CD120 block equivalency file joined to
-    TIGER/Line 2020 blocks (tl_2020_<FIPS>_tabblock20), dissolved by
-    district, then clipped to the state's cb_2024_us_state_500k outline so
-    the coast matches the cartographic style of every other state.
+SOURCES. Public domain, U.S. Census Bureau, found by rule (app.census_lines).
+  * States on a map with a cartographic boundary file (1:500,000, the
+    vintage of the map's election year: cb_2024_us_cd119_500k for the
+    119th Congress): that file. Cartographic boundary files are clipped to
+    the shoreline, which is what a reader recognises; TIGER/Line extends
+    districts over water.
+  * States on a map with none yet (the 120th's in 2026): each district is
+    built from its blocks — the Redistricting Data Office's block
+    equivalency file for that map joined to TIGER/Line's blocks of the
+    census the lines are drawn on (tl_2020_<FIPS>_tabblock20), dissolved by
+    district, then clipped to the state's 1:500,000 outline (the vintage
+    of the file the simplification is measured on) so the coast matches
+    the cartographic style of every other state.
 
-SIMPLIFICATION. The national 119th file is simplified to 3% of its
-vertices, as it always has been; mapshaper reports the distance threshold
+SIMPLIFICATION. The newest national cartographic file of a Congress up
+to N (the 119th's, for the 120th) is simplified to 3% of its vertices, as it always has been; mapshaper reports the distance threshold
 that works out to, and the block-built states are simplified with that
 same threshold (`interval=`) so every state is drawn at the same level of
 detail. A percentage would not transfer: dissolved blocks carry
@@ -49,14 +52,12 @@ Needs Node (for `npx mapshaper`) and network access; the block files are
 large (Texas alone is ~750MB), so pass --cache to keep them between runs.
 Run from the repo root:
 
-    python backend/scripts/build_district_topology.py [--cache DIR]
+    python backend/scripts/build_district_topology.py --congress N [--cache DIR] [--out DIR]
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import json
 import os
 import re
@@ -68,26 +69,15 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_county_district_crosswalk import (  # noqa: E402
-    CD120,
-    CD120_URL,
-    download,
-    map_for_state,
-)
+from build_county_district_crosswalk import download  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-CD119_CB_URL = (
-    "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_cd119_500k.zip"
-)
-CD119_CB_SHAPEFILE = "cb_2024_us_cd119_500k.shp"
-STATE_CB_URL = (
-    "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_state_500k.zip"
-)
-STATE_CB_SHAPEFILE = "cb_2024_us_state_500k.shp"
-BLOCKS_URL = "https://www2.census.gov/geo/tiger/TIGER2020/TABBLOCK20/tl_2020_{fips}_tabblock20.zip"
+sys.path.insert(0, str(REPO / "backend"))
+from app import census_lines  # noqa: E402
+
 OUT_DIR = REPO / "frontend" / "public" / "data" / "cd"
 STATE_CODES_TS = REPO / "frontend" / "src" / "lib" / "stateCodes.ts"
-CROSSWALK = REPO / "backend" / "app" / "data" / "county_district_crosswalk.json"
+CROSSWALK_NAME = "county_district_crosswalk.json"
 
 # Enough to keep every district recognisable at state-page size while
 # staying small; lower loses urban districts, higher only adds bytes.
@@ -108,9 +98,13 @@ def _fips_to_state() -> dict[str, str]:
     return dict(re.findall(r'"(\d{2})":\s*"([A-Z]{2})"', STATE_CODES_TS.read_text()))
 
 
-def _expected_districts() -> dict[str, set[int]]:
+def _expected_districts(congress: int) -> dict[str, set[int]]:
+    """The district numbers of the county crosswalk on `congress`'s lines
+    (the copy in use, carried by district_lines.table_for_lines)."""
+    from app.district_places import counties_on_lines_of
+
     expected: dict[str, set[int]] = {}
-    for key in json.loads(CROSSWALK.read_text())["districts"]:
+    for key in counties_on_lines_of(congress) or {}:
         state, district = key.split("-")
         expected.setdefault(state, set()).add(int(district))
     return expected
@@ -162,25 +156,30 @@ def _mapshaper(args: list[str]) -> str:
     return result.stdout + result.stderr
 
 
-def _build_cd119(cache: Path, work: Path) -> tuple[dict[str, Path], str]:
-    """Every state from the 119th Congress cartographic file, plus the
-    distance threshold its 3% simplification came to."""
-    zipfile.ZipFile(download(CD119_CB_URL, cache)).extractall(work)
-    split_dir = work / "split"
+def _build_cartographic(url: str, congress: int, keep: set[str], cache: Path, work: Path,
+                        interval: str | None = None) -> tuple[dict[str, Path], str]:
+    """The states in `keep` (FIPS) from a national cartographic file of
+    `congress`'s districts, simplified to SIMPLIFY of the whole file's
+    vertices (or at `interval`), and the distance threshold that came to."""
+    folder = work / f"cb{congress}"
+    zipfile.ZipFile(download(url, cache)).extractall(folder)
+    shp = next(folder.glob("*.shp"))
+    split_dir = folder / "split"
     split_dir.mkdir()
+    field = f"CD{congress}FP"
     out = _mapshaper(
         [
-            str(work / CD119_CB_SHAPEFILE),
+            str(shp),
             # 98 = non-voting delegates (DC and the territories), which
             # have no House race on a state ballot page.
             "-filter",
-            'CD119FP !== "98" && CD119FP !== "ZZ"',
+            f'{field} !== "98" && {field} !== "ZZ"',
             "-each",
-            "district = +CD119FP, st = STATEFP",
+            f"district = +{field}, st = STATEFP",
             "-filter-fields",
             "district,st",
             "-simplify",
-            SIMPLIFY,
+            *([SIMPLIFY] if interval is None else [f"interval={interval}"]),
             "keep-shapes",
             "stats",
             "-split",
@@ -191,43 +190,33 @@ def _build_cd119(cache: Path, work: Path) -> tuple[dict[str, Path], str]:
             *_TOPOJSON_OUT,
         ]
     )
-    return {p.stem: p for p in split_dir.glob("*.json")}, parse_threshold(out)
+    return {p.stem: p for p in split_dir.glob("*.json") if p.stem in keep}, parse_threshold(out)
 
 
-def _write_cd120_assignments(
-    cache: Path, work: Path, fips_list: set[str]
-) -> dict[str, Path]:
-    """Per-state GEOID,CDFP CSVs from NationalCD120.txt."""
-    paths = {fips: work / f"cd120_{fips}.csv" for fips in fips_list}
-    handles = {fips: open(path, "w", newline="") for fips, path in paths.items()}
-    try:
-        for fh in handles.values():
+def _write_assignments(bef: Path, work: Path, fips_list: set[str]) -> dict[str, Path]:
+    """Per-state GEOID,CDFP CSVs from a block equivalency file."""
+    paths = {}
+    for fips in fips_list:
+        paths[fips] = work / f"bef_{fips}.csv"
+        with open(paths[fips], "w", newline="") as fh:
             fh.write("GEOID,CDFP\n")
-        with (
-            zipfile.ZipFile(download(CD120_URL, cache)) as zf,
-            zf.open("NationalCD120.txt") as raw,
-        ):
-            for row in csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig")):
-                fh = handles.get(row["STATEFP"])
-                if fh:
-                    fh.write(f"{row['GEOID']},{row['CDFP']}\n")
-    finally:
-        for fh in handles.values():
-            fh.close()
+            for geoid, cd in census_lines.bef_rows(bef, fips, ""):
+                fh.write(f"{geoid},{cd}\n")
     return paths
 
 
 def _build_from_blocks(
-    fips: str, assignment_csv: Path, cache: Path, work: Path, interval: str
+    fips: str, assignment_csv: Path, cache: Path, work: Path, interval: str,
+    blocks_url: str, state_cb_url: str,
 ) -> Path:
     """One state's districts dissolved from its 2020 blocks, clipped to the
     cartographic shoreline and simplified to the national threshold."""
     outline = work / f"state_{fips}.shp"
     if not outline.exists():
-        zipfile.ZipFile(download(STATE_CB_URL, cache)).extractall(work)
+        zipfile.ZipFile(download(state_cb_url, cache)).extractall(work)
         _mapshaper(
             [
-                str(work / STATE_CB_SHAPEFILE),
+                str(work / state_cb_url.rsplit("/", 1)[1].replace(".zip", ".shp")),
                 "-filter",
                 f'STATEFP === "{fips}"',
                 "-o",
@@ -239,12 +228,12 @@ def _build_from_blocks(
     log = _mapshaper(
         [
             # mapshaper reads the shapefile straight out of the zip.
-            str(download(BLOCKS_URL.format(fips=fips), cache)),
+            str(download(blocks_url, cache)),
             "-join",
             str(assignment_csv),
             "keys=GEOID20,GEOID",
             "string-fields=GEOID,CDFP",
-            # Same exclusions as the 119th-Congress path: delegate seats
+            # Same exclusions as the cartographic path: delegate seats
             # and unassigned water are not House districts on a ballot.
             "-filter",
             'CDFP !== "98" && CDFP !== "ZZ"',
@@ -263,7 +252,7 @@ def _build_from_blocks(
         or joined.group(3) != joined.group(4)
     ):
         raise RuntimeError(
-            f"{fips}: blocks and CD120 rows do not match one-to-one:\n{log}"
+            f"{fips}: blocks and block-file rows do not match one-to-one:\n{log}"
         )
     # A separate pass on purpose: in memory the dissolved layer still
     # carries every block edge in its arc table, and simplifying against
@@ -296,30 +285,57 @@ def _build_from_blocks(
     return out_path
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Build per-state district TopoJSON")
-    ap.add_argument(
-        "--cache", type=Path, help="keep downloads here (default: a temp dir)"
-    )
-    args = ap.parse_args()
+    ap.add_argument("--congress", type=int, required=True, help="whose lines (the Congress the election seats)")
+    ap.add_argument("--cache", type=Path, help="keep downloads here (default: a temp dir)")
+    ap.add_argument("--out", type=Path, default=OUT_DIR)
+    args = ap.parse_args(argv)
 
     fips = _fips_to_state()
-    expected = _expected_districts()
-    redrawn = {f for f, st in fips.items() if map_for_state(st) == CD120}
+    expected = _expected_districts(args.congress)
+    cycles = census_lines.maps_cycles()
+    if not census_lines.listed(cycles, args.congress):
+        raise SystemExit(f"the election that seats the {args.congress}th Congress is not listed yet")
+    by_state = census_lines.state_maps(args.congress, fips.values(), cycles)
+    maps = {f: by_state[st] for f, st in fips.items()}
+    # The simplification is measured on the newest national cartographic
+    # file of a Congress up to N, and the block-built coasts are clipped to
+    # the state outline of the same vintage.
+    base = next(((c, u) for c in range(args.congress, 0, -1)
+                 if (u := census_lines.cartographic_cd_url(c))), None)
+    if base is None:
+        raise SystemExit("no cartographic boundary file of any Congress's districts")
+    vintage = base[1].split("/GENZ", 1)[1][:4]
+    state_cb_url = f"{census_lines.TIGER}/GENZ{vintage}/shp/cb_{vintage}_us_state_500k.zip"
 
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         cache = args.cache or work / "downloads"
         cache.mkdir(parents=True, exist_ok=True)
 
-        sources, interval = _build_cd119(cache, work)
-        print(f"119th Congress file simplified at {interval}")
-        csvs = _write_cd120_assignments(cache, work, redrawn)
-        for f in sorted(redrawn):
-            sources[f] = _build_from_blocks(f, csvs[f], cache, work, interval)
-            if not args.cache:
-                # ~1-2GB per big state; don't hold every one at once.
-                (cache / BLOCKS_URL.format(fips=f).rsplit("/", 1)[1]).unlink()
+        on = {m: {f for f, x in maps.items() if x == m} for m in set(maps.values())}
+        sources, interval = _build_cartographic(base[1], base[0], on.get(base[0], set()), cache, work)
+        print(f"{base[0]}th Congress file simplified at {interval}")
+        from_blocks = 0
+        for m, members in sorted(on.items()):
+            if m == base[0]:
+                continue
+            cart = census_lines.cartographic_cd_url(m)
+            if cart:
+                sources.update(_build_cartographic(cart, m, members, cache, work, interval)[0])
+                continue
+            found = census_lines.find_congress_bef(m)
+            if found is None:
+                raise SystemExit(f"no block equivalency file for the {m}th Congress")
+            csvs = _write_assignments(download(found[0], cache), work, members)
+            for f in sorted(members):
+                url = census_lines.blocks_url(m, f)
+                sources[f] = _build_from_blocks(f, csvs[f], cache, work, interval, url, state_cb_url)
+                from_blocks += 1
+                if not args.cache:
+                    # ~1-2GB per big state; don't hold every one at once.
+                    (cache / url.rsplit("/", 1)[1]).unlink()
 
         problems: list[str] = []
         written: dict[str, bytes] = {}
@@ -339,19 +355,19 @@ def main() -> int:
             print(f"  {p}")
         return 1
 
-    if OUT_DIR.exists():
-        shutil.rmtree(OUT_DIR)
-    OUT_DIR.mkdir(parents=True)
+    if args.out.exists():
+        shutil.rmtree(args.out)
+    args.out.mkdir(parents=True)
     for state, blob in written.items():
-        (OUT_DIR / f"{state}.json").write_bytes(blob)
+        (args.out / f"{state}.json").write_bytes(blob)
     total = sum(len(b) for b in written.values())
     districts = sum(
         len(json.loads(b)["objects"]["districts"]["geometries"])
         for b in written.values()
     )
     print(
-        f"wrote {len(written)} states ({len(redrawn)} from 120th Congress blocks), "
-        f"{districts} districts, {total // 1024}KB to {OUT_DIR}"
+        f"wrote {len(written)} states ({from_blocks} from blocks), "
+        f"{districts} districts, {total // 1024}KB to {args.out}"
     )
     return 0
 

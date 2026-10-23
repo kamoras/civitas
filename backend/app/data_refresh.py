@@ -58,12 +58,13 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
-from app import precision_rule, scoring_revisions, site_search
+from app import census_lines, precision_rule, scoring_revisions, site_search
 from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
 from app.contact import BOT_USER_AGENT
 from app.database import SessionLocal
+from app.district_lines import table_for_lines
 from app.election_calendar import last_certified_general
 from app.election_phase import active_election
 from app.error_utils import output_summary
@@ -81,6 +82,9 @@ BACKEND = pathlib.Path(__file__).resolve().parent.parent
 BUNDLED = BACKEND / "app" / "data"
 _STATE_TIER = "data-refresh"
 MAPS_FILE = "redrawn_congressional_maps.json"
+# The House's size, fixed by statute (2 U.S.C. 2a, the Permanent
+# Apportionment Act of 1929): every district table has this many seats.
+HOUSE_SEATS = 435
 
 _read_cache: dict[str, tuple[object, dict]] = {}
 
@@ -903,12 +907,279 @@ def _commemorative_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
-def _district_lean_stale(ctx: Context) -> str | None:
+def _district_lean_stale(ctx: Context) -> object:
+    """Whether the computed lean's next window can be read: monthly, the
+    inputs found by rule (the Voting and Election Science Team's precinct
+    results and shapes for the window's next earlier election on Harvard
+    Dataverse, "<year> Precinct-Level Election Results", and MEDSL's
+    returns for its next later one, "<year>-elections-official" on
+    GitHub). Said when both are published, not on a calendar date: until
+    then there is nothing a build could read (2026-10-22: VEST's newest is
+    2021, MEDSL's 2024). Every other table of the lean rebuilds itself
+    (app/census_lines.py); a new window is new inputs and their
+    corrections, so the alert states that they are out."""
     years = [int(y) for y in re.findall(r"\d{4}", str(ctx.doc.get("_window") or ""))]
-    if years and ctx.today >= date(max(years) + 4, 12, 15):
-        return (f"windowed to {ctx.doc['_window']}: the {max(years) + 4} presidential election's precinct returns "
-                f"should be published, and the computed lean (display only, beside Cook's) doesn't read them yet.")
-    return None
+    if not years:
+        return None
+    if ctx.tried_within(30):
+        return UNCHECKED
+    _record_try(ctx.name, "release check")
+    vest_year, medsl_year = min(years) + 4, max(years) + 4
+    headers = {"User-Agent": BOT_USER_AGENT}
+    try:
+        resp = httpx.get("https://dataverse.harvard.edu/api/search", params={
+            "q": f'"{vest_year} Precinct-Level Election Results"', "type": "dataset", "per_page": 20,
+        }, headers=headers, timeout=30)
+        resp.raise_for_status()
+        vest = [i for i in resp.json().get("data", {}).get("items", [])
+                if i.get("name") == f"{vest_year} Precinct-Level Election Results"]
+        repo = httpx.get(f"https://api.github.com/repos/MEDSL/{medsl_year}-elections-official",
+                         headers=headers, timeout=30)
+    except Exception:
+        logger.info("district lean release check: Dataverse or GitHub unreadable", exc_info=True)
+        return UNCHECKED
+    if not vest or repo.status_code != 200:
+        return None
+    return (f"windowed to {ctx.doc['_window']}, and the next window's inputs are published: VEST's "
+            f"{vest_year} precinct results ({vest[0].get('global_id')}) and MEDSL's {medsl_year} precinct returns "
+            f"(github.com/MEDSL/{medsl_year}-elections-official). The builder (scripts/build_district_lean.py) is "
+            f"written for the {min(years)}+{max(years)} inputs and their corrections, so the file stays on that "
+            f"window.")
+
+
+# District tables (AGENTS.md 3a, §8): built from the Census block
+# equivalency files for the lines of the Congresses the site needs, by
+# rule (app/census_lines.py). The sitting Congress and the one the coming
+# election seats, once that election's maps are listed: a table is needed
+# per map in use, and a state that kept its map is carried from an earlier
+# Congress's table (district_lines.table_for_lines). So a table is rebuilt
+# only when a needed Congress has a state no table on file covers (a
+# redraw, a new census), or a file it was built from was re-released.
+COUNTY_FILE, COUNTY_SITTING_FILE = "county_district_crosswalk.json", "county_district_crosswalk_sitting.json"
+PLACES_FILE = "congressional_district_places.json"
+STATE_LEG_FILE = "state_leg_district_crosswalk.json"
+
+
+def line_targets() -> tuple[int, int]:
+    """(sitting Congress, the Congress the coming election seats, or the
+    sitting one while that election's maps aren't listed)."""
+    sitting = settings.CURRENT_CONGRESS
+    election = census_lines.seated_by(_election().cycle)
+    if election < sitting or not census_lines.listed(census_lines.maps_cycles(), election):
+        election = sitting
+    return sitting, election
+
+
+def _uncovered(tables: dict[int, dict], targets) -> list[int]:
+    """The targets with a state that no table on file describes."""
+    states = {k.split("-")[0] for t in tables.values() for k in t}
+    return [c for c in sorted(set(targets))
+            if not states or {k.split("-")[0] for k in (table_for_lines(c, tables) or {})} != states]
+
+
+def _rereleased(docs: list[dict], ctx: Context) -> bool:
+    """Weekly: whether a BEF a file was built from has been re-released (the
+    120th's was on 2026-10-07, after the Court kept Missouri's 2022 map).
+    A listing that can't be read changes nothing."""
+    if ctx.tried_within(7):
+        return False
+    recorded = {int(m): tuple(v) for d in docs for m, v in ((d.get("_inputs") or {}).get("bef") or {}).items()}
+    try:
+        for m, (url, modified) in recorded.items():
+            found = census_lines.find_congress_bef(m)
+            if found is not None and modified and found != (url, modified):
+                return True
+    except Exception:
+        logger.info("district tables: the Census listing is unreadable", exc_info=True)
+    return False
+
+
+def _county_tables() -> dict[int, dict]:
+    out = {}
+    for name in (COUNTY_SITTING_FILE, COUNTY_FILE):
+        doc = read(name)
+        if str(doc.get("congress", "")).isdigit():
+            out[int(doc["congress"])] = doc.get("districts") or {}
+    return out
+
+
+def _county_command(ctx: Context) -> list[str]:
+    sitting, election = line_targets()
+    return [PY, _script("build_county_district_crosswalk.py"), "--cache", "{tmp}",
+            "--congress", str(sitting), "--out", "{out:%s}" % COUNTY_SITTING_FILE,
+            "--congress", str(election), "--out", "{out}"]
+
+
+def _county_due(ctx: Context) -> bool:
+    return bool(_uncovered(_county_tables(), line_targets())) or _rereleased(
+        [ctx.doc, read(COUNTY_SITTING_FILE)], ctx)
+
+
+def _seats_gate(table: dict, label: str) -> list[str]:
+    """Every House seat once: 435 districts ("ST-N", at large "ST-0")."""
+    seats = [k for k in table if re.fullmatch(r"[A-Z]{2}-\d+", k)]
+    return [] if len(seats) == len(table) == HOUSE_SEATS else [f"{label}: {len(table)} districts, not {HOUSE_SEATS}"]
+
+
+def _county_gate(new: dict, old: dict) -> list[str]:
+    return _seats_gate(new.get("districts") or {}, "the election's counties") + (
+        [] if new.get("congress") == line_targets()[1] else [f"built for the {new.get('congress')}th Congress"])
+
+
+def _places_command(ctx: Context) -> list[str]:
+    sitting, election = line_targets()
+    argv = [PY, _script("build_district_place_crosswalk.py"), "--out", "{out}", "--cache", "{tmp}"]
+    for c in dict.fromkeys((sitting, election)):
+        argv += ["--congress", str(c)]
+    return argv
+
+
+def _places_tables(doc: dict) -> dict[int, dict]:
+    return {int(c): t for c, t in (doc.get("congresses") or {}).items() if str(c).isdigit()}
+
+
+def _places_due(ctx: Context) -> bool:
+    return bool(_uncovered(_places_tables(ctx.doc), line_targets())) or _rereleased([ctx.doc], ctx) or (
+        _new_gazetteer(ctx))
+
+
+def _new_gazetteer(ctx: Context) -> bool:
+    """Monthly: a newer Census Gazetteer than the names on file (the names
+    of places incorporated or renamed since)."""
+    if ctx.tried_within(30):
+        return False
+    have = ((ctx.doc.get("_inputs") or {}).get("gazetteer") or {}).get("place")
+    try:
+        return bool(have) and census_lines.newest_gazetteer("place") != have
+    except Exception:
+        logger.info("district tables: the Gazetteer listing is unreadable", exc_info=True)
+        return False
+
+
+def _places_gate(new: dict, old: dict) -> list[str]:
+    tables = _places_tables(new)
+    failures = [f for c, t in tables.items() for f in _seats_gate(t, f"the {c}th Congress's places")]
+    if set(tables) != set(line_targets()):
+        failures.append(f"built for {sorted(tables)}, not {sorted(set(line_targets()))}")
+    # Names drift a little with a new Gazetteer; a place list that loses
+    # most of its names is a broken read, not a rename.
+    for c, t in tables.items():
+        before = (old.get("congresses") or {}).get(str(c)) or {}
+        kept = sum(len(set(t.get(k) or []) & set(v)) for k, v in before.items())
+        total = sum(len(v) for v in before.values())
+        if total and kept < 0.8 * total:
+            failures.append(f"the {c}th Congress's places keep {kept} of {total} names")
+    return failures
+
+
+def _state_leg_command(ctx: Context) -> list[str]:
+    states = sorted({k.split("-")[0] for k in (ctx.doc.get("districts") or {})})
+    return [PY, _script("fetch_state_leg_crosswalk.py"), *states, "--cycle", str(_election().cycle),
+            "--out", "{out}", "--cache", "{tmp}"]
+
+
+def _state_leg_due(ctx: Context) -> bool:
+    """Weekly: a newer state legislative BEF than the file's (the Census
+    Bureau publishes one per election, in its summer), or a re-release of
+    the one it was built from; monthly, a newer Gazetteer."""
+    if _new_gazetteer(ctx):
+        return True
+    if ctx.tried_within(7):
+        return False
+    have = (ctx.doc.get("_inputs") or {}).get("sldu")
+    try:
+        found = census_lines.find_sld_bef(_election().cycle, "sldu")
+    except Exception:
+        logger.info("state legislative crosswalk: the Census listing is unreadable", exc_info=True)
+        return False
+    return bool(have and found and list(found[:2]) != list(have))
+
+
+def _state_leg_gate(new: dict, old: dict) -> list[str]:
+    before = {k.split("-")[0] for k in old.get("districts") or {}}
+    after = {k.split("-")[0] for k in new.get("districts") or {}}
+    failures = [f"states missing: {sorted(before - after)}"] if before - after else []
+    return failures + _drift(new, old, "districts", keep=0.9)
+
+
+LEAN_FILE = "district_lean.json"
+
+
+def _lean_tables(doc: dict) -> dict[int, dict]:
+    return {int(c): (t or {}).get("districts") or {} for c, t in (doc.get("congresses") or {}).items()
+            if str(c).isdigit()}
+
+
+def _lean_command(ctx: Context) -> list[str]:
+    # Every Congress already on file keeps its table (a departed member's
+    # breakdown is recomputed on the lines they were elected on), and the
+    # Congresses the site needs now get one.
+    in_use = runtime_data_path(LEAN_FILE)
+    argv = [PY, _script("build_district_lean.py"), "--out", "{out}", "--cache", "{tmp}",
+            "--existing", in_use if os.path.exists(in_use) else str(BUNDLED / LEAN_FILE)]
+    for c in sorted(set(_lean_tables(ctx.doc)) | set(line_targets())):
+        argv += ["--congress", str(c)]
+    return argv
+
+
+def _lean_due(ctx: Context) -> bool:
+    return bool(_uncovered(_lean_tables(ctx.doc), line_targets())) or _rereleased([ctx.doc], ctx)
+
+
+def _lean_gate(new: dict, old: dict) -> list[str]:
+    """Every Congress kept and every seat once (less the districts recorded
+    unavailable), leans in range; and a table rebuilt on the same lines
+    moves almost nowhere (the same inputs give the same figures; a BEF
+    re-release moves only the districts it redrew)."""
+    tables, before = _lean_tables(new), _lean_tables(old)
+    failures = [f"the {c}th Congress's table is gone" for c in before if c not in tables]
+    for c, t in tables.items():
+        off = len(((new.get("unavailable") or {}).get(str(c))) or {})
+        if len(t) + off != HOUSE_SEATS:
+            failures.append(f"the {c}th Congress's table has {len(t)} districts and {off} unavailable")
+        if any(not isinstance(v, (int, float)) or abs(v) > 60 for v in t.values()):
+            failures.append(f"the {c}th Congress's table has a lean out of range")
+        same = before.get(c) or {}
+        moved = [k for k, v in same.items() if k in t and abs(t[k] - v) > 0.5]
+        if same and len(moved) > 0.05 * len(same):
+            failures.append(f"the {c}th Congress's table moved {len(moved)} of {len(same)} districts by over half a point")
+    return failures
+
+
+OVERLAP_FILE = "redistricting_overlap.json"
+
+
+def _overlap_cycle() -> int | None:
+    """The election the redistricting pages should describe: the one the
+    site is on, once its maps are listed and some state redrew for it
+    (an election with no redraw keeps the last one's file: its pages say
+    that redraw is past)."""
+    cycle = _election().cycle
+    cycles = census_lines.maps_cycles()
+    if str(cycle) not in cycles:
+        return None
+    moved = [st for st in {s for e in cycles.values() for s in e}
+             if census_lines.map_in(cycles, cycle, st) != census_lines.map_in(cycles, cycle - 2, st)]
+    return cycle if moved else None
+
+
+def _overlap_command(ctx: Context) -> list[str] | None:
+    cycle = _overlap_cycle()
+    return None if cycle is None else [PY, _script("build_redistricting_overlap.py"), "--cycle", str(cycle),
+                                       "--out", "{out}", "--cache", "{tmp}"]
+
+
+def _overlap_due(ctx: Context) -> bool:
+    cycle = _overlap_cycle()
+    return cycle is not None and (str(ctx.doc.get("cycle")) != str(cycle) or _rereleased([ctx.doc], ctx))
+
+
+def _overlap_gate(new: dict, old: dict) -> list[str]:
+    cells = new.get("states") or {}
+    failures = [f"{st}: no residents" for st, rows in cells.items() if not sum(r[2] for r in rows)]
+    if new.get("cycle") is None or not cells:
+        failures.append("no cycle or no states")
+    return failures
 
 
 # The EAC's Election Administration and Voting Survey: one release per
@@ -1351,6 +1622,15 @@ DATA_FILES: list[DataFile] = [
                                   "{in_use}", "--output", "{out}"],
              due=_every(30), gate=_commemorative_gate, accept=held_out_beats_in_use,
              scoring_inputs=lambda doc: doc.get("threshold"), heavy=True, timeout_s=3 * 3600),
-    DataFile("district_lean.json", stale=_district_lean_stale),
+    DataFile(LEAN_FILE, command=_lean_command, due=_lean_due, gate=_lean_gate, stale=_district_lean_stale,
+             heavy=True, timeout_s=10 * 3600),
+    DataFile(COUNTY_FILE, command=_county_command, due=_county_due, gate=_county_gate,
+             outputs=(COUNTY_SITTING_FILE,), heavy=True, timeout_s=1800),
+    DataFile(PLACES_FILE, command=_places_command, due=_places_due, gate=_places_gate, heavy=True,
+             timeout_s=6 * 3600),
+    DataFile(STATE_LEG_FILE, command=_state_leg_command, due=_state_leg_due, gate=_state_leg_gate, heavy=True,
+             timeout_s=6 * 3600),
+    DataFile(OVERLAP_FILE, command=_overlap_command, due=_overlap_due, gate=_overlap_gate, heavy=True,
+             timeout_s=3600),
     DataFile(MAPS_FILE, command=_maps_command, due=_maps_due, gate=_maps_gate, heavy=True, timeout_s=1800),
 ]

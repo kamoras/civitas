@@ -7,8 +7,9 @@ reading Cook's published values (district_pvi.json); this figure is for
 readers to compare against, with its method and its validation against
 Cook in the same file.
 
-The file is bundled and only changes with a release (nothing rewrites it at
-runtime), so it is read once per process.
+The data refresh rebuilds it when a Congress the site needs has a state no
+table covers (a redraw), so it is read through data_refresh.read: the copy
+in use, re-read when it changes.
 """
 
 import csv
@@ -19,6 +20,8 @@ import json
 import logging
 import pathlib
 
+from app import data_refresh
+from app.atomic_write import runtime_data_path
 from app.district_lines import table_for_lines
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
 
@@ -36,14 +39,11 @@ CSV_PATH = "/api/elections/district-lean.csv"
 CSV_COLUMNS = ("congress", "district", "state", "number", "computed_lean", "cook_pvi")
 
 
-@functools.cache
 def _file() -> dict:
-    try:
-        data = json.loads(PATH.read_text())
-    except (OSError, ValueError):
+    data = data_refresh.read(PATH.name)
+    if not data:
         logger.error("district_lean.json unreadable: the computed lean is left out everywhere")
-        return {}
-    return data if isinstance(data, dict) else {}
+    return data
 
 
 def computed_lean(congress: int | None) -> dict[str, float]:
@@ -96,14 +96,16 @@ def meta() -> dict | None:
     }
 
 
-@functools.cache
 def file_sha256() -> str | None:
-    """The data file's SHA-256: names the exact version a citation used
-    (the file only changes with a release, and its history is in git)."""
-    try:
-        return hashlib.sha256(PATH.read_bytes()).hexdigest()
-    except OSError:
-        return None
+    """The SHA-256 of the copy in use: names the exact version a citation
+    used (the bundled file's history is in git; a refreshed copy records
+    its own provenance in `_refreshed`)."""
+    for path in (pathlib.Path(runtime_data_path(PATH.name)), PATH):
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            continue
+    return None
 
 
 def _seat_order(key: str) -> tuple[str, int]:

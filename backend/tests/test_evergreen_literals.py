@@ -38,7 +38,7 @@ ALLOWED: dict[tuple[str, int], str] = {
     ("pipeline/fetch/district_pvi.py", 1789): "first Congress",
     ("services/_scorecard_common.py", 1789): "first Congress",
     ("time_utils.py", 1789): "first Congress",
-    ("district_lines.py", 1786): "the Nth Congress is elected in 1786 + 2N",
+    ("census_lines.py", 1786): "the Nth Congress is elected in 1786 + 2N",
     ("pipeline/fetch/presidential_elections.py", 1789): "pre-1824 election, historical table",
     ("pipeline/fetch/presidential_elections.py", 1792): "pre-1824 election, historical table",
     ("pipeline/fetch/presidential_elections.py", 1796): "pre-1824 election, historical table",

@@ -31,6 +31,7 @@ from app.models import (
     Candidate, ElectionResultEvent, LiveResultRead, Race, RaceResult, Representative, Senator,
 )
 from app.atomic_write import runtime_data_path
+from app.census_lines import map_in
 from app.config import settings
 from app.file_cache import new_reload_lock, read_json_preferring, reload_if_moved
 from app.pipeline.candidate_dedup import normalized_surname
@@ -135,14 +136,8 @@ def maps_pending() -> dict[str, str]:
     return dict((_redrawn_cache or {}).get("_pending") or {})
 
 
-def _map_in(cycles: dict, cycle: int, state: str) -> str:
-    """The map `state` votes on in `cycle`: the newest listed cycle at or
-    before it that names the state (a map stands until replaced), else the
-    CD119 lines every unlisted state is on."""
-    for year in sorted((int(y) for y in cycles), reverse=True):
-        if year <= cycle and state in cycles[str(year)]:
-            return cycles[str(year)][state].get("map", "CD119")
-    return "CD119"
+# The map `state` votes on in a cycle (one rule, app/census_lines.py).
+_map_in = map_in
 
 
 def redrawn_states(cycle: int) -> set[str]:

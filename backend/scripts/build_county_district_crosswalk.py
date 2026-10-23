@@ -1,61 +1,51 @@
-"""Build backend/app/data/county_district_crosswalk.json — which counties
-each U.S. House district covers, for the current election cycle's map.
+"""Build the county crosswalks: which counties each U.S. House district
+covers, on the lines of one Congress.
 
 Civitas never asks a visitor for their address (AGENTS.md §8), so a
 reader who doesn't know their district number finds it by the county
-they live in. This file is that lookup: "ST-N" -> the county names in the
+they live in. Each file is that lookup: "ST-N" -> the county names in the
 district, a " (part)" suffix on any county that district shares with
-another one. It is served by `app/api/elections.py:_district_counties`.
+another one. Served by `app/api/elections.py:_district_counties` and
+/politicians (app/district_places.counties_on_lines_of).
 
 SOURCE. U.S. Census Bureau Redistricting Data Office block equivalency
 files (BEFs): every 2020 Census block -> the congressional district it
-lies in. A block's GEOID embeds its state and county FIPS, so joining the
-BEF to the Bureau's county-name table gives the county list directly.
+lies in, one zip per Congress, found by rule (app.census_lines). A
+block's GEOID embeds its state and county FIPS, so joining the BEF to the
+Bureau's county-name table gives the county list directly. A state's own
+file in a zip (a plan filed after the national file was cut, as the
+119th's for Alabama, Georgia, Louisiana, New York and North Carolina)
+replaces its national rows.
 
-  * 119th Congress (`cd119.zip`): NationalCD119.txt plus corrected
-    per-state files for Alabama, Georgia, Louisiana, New York and North
-    Carolina, whose maps were redrawn after the national file was cut.
-    The corrected files replace the national file's rows for those states.
-  * 120th Congress (`cd120.zip`): NationalCD120.txt, which carries the
-    2025-26 mid-decade redistricting.
+WHICH LINES. `--congress N` builds N's lines: each state's from the BEF
+of the map it votes on in the election that seats N
+(redrawn_congressional_maps.json, the copy in use; a state never listed
+is on its 119th Congress map). Missouri's CD120 rows were its 2025 map
+until the 2026-10-07 re-release, and the 2026 entry keeps it on CD119
+either way: the listing decides, never the newest file.
 
-WHICH MAP. Districts are not fixed for a decade: nine states redrew for
-the 2026 elections. `CYCLE_MAPS` (read from
-app/data/redrawn_congressional_maps.json) names, per state, which BEF that
-state votes on this cycle and why. The 120th-Congress file is not simply "the
-2026 map" — Missouri's CD120 rows are its 2025 map, which the U.S.
-Supreme Court stayed on 2026-09-25, so Missouri votes on its 2022 (CD119)
-lines in 2026. That is an explicit entry below, not a silent fallback.
-
-Every state *not* listed must be identical block-for-block in both files;
-the script refuses to write if one isn't, so a state that redraws later
-cannot slip through on stale lines without someone deciding which map it
-uses. Rerun this (and build_district_topology.py, which reads the same
-choice) whenever a state's map changes.
+Checks (any failure prints why and writes nothing): N's election is
+listed (an unreviewed cycle gets no table, as district_lines carries
+none into it); where N's own BEF is published, a state on an earlier map
+whose blocks differ there must be listed for that election (a stay, as
+Missouri's), and a state listed as on N's map must differ from the map it
+replaced.
 
 "(part)". A county is tagged "(part)" when its 2020 Census blocks are
 assigned to more than one district of that state (any block, populated
-or not — the rule the bundled file has always used; regenerating the
-119th-Congress file with it reproduces the earlier file exactly).
-Delegate seats (district 98: DC and the territories) and unassigned
-water blocks ("ZZ") are left out.
+or not). Delegate seats (district 98: DC and the territories) and
+unassigned water blocks ("ZZ") are left out.
 
-TWO FILES, TWO QUESTIONS. The election file above answers "which
-district do I vote in this cycle". It does not answer "who represents me
-today": in a redrawn state the district of the same number is a different
-district from the one its sitting member won. `--sitting` writes the
-second file, county_district_crosswalk_sitting.json: every state on the
-119th Congress lines (the corrected CD119 file), the map the members now
-serving were elected on in 2024. /politicians reads it. Each file states
-the Congress whose lines it holds (`congress`); the API serves the one
-whose Congress is in office (settings.CURRENT_CONGRESS), so from Jan 3,
-2027 the election file (the 120th's lines) answers with no rebuild.
-Rebuild the sitting file when the election file moves to the next cycle.
+TWO FILES, TWO QUESTIONS. county_district_crosswalk.json holds the lines
+of the Congress the coming election seats ("which district do I vote
+in"); county_district_crosswalk_sitting.json the sitting Congress's ("who
+represents me today": in a redrawn state the district of the same number
+is a different district). Each states its `congress`; the reader picks by
+Congress and carries a table forward for the states whose map didn't
+change (district_lines.table_for_lines). app/data_refresh.py rebuilds
+both when a Congress the site needs has a state no table covers.
 
-Run from the repo root (network required, ~80MB of downloads):
-
-    python backend/scripts/build_county_district_crosswalk.py [--cache DIR]
-    python backend/scripts/build_county_district_crosswalk.py --sitting [--cache DIR]
+    python backend/scripts/build_county_district_crosswalk.py --congress N --out PATH [--cache DIR]
 """
 
 from __future__ import annotations
@@ -63,12 +53,10 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
-import io
 import json
 import sys
 import tempfile
 import urllib.request
-import zipfile
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -77,44 +65,11 @@ REPO = Path(__file__).resolve().parents[2]
 # Runs from the repo root on a bare python3: app.contact is standard library only.
 sys.path.insert(0, str(REPO / "backend"))
 from app.contact import BOT_USER_AGENT  # noqa: E402
-OUT_PATH = REPO / "backend" / "app" / "data" / "county_district_crosswalk.json"
-SITTING_OUT_PATH = REPO / "backend" / "app" / "data" / "county_district_crosswalk_sitting.json"
+from app import census_lines  # noqa: E402
 
-_RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
-CD119_URL = f"{_RDO}/2025/119-congressional-district-befs/cd119.zip"
-CD120_URL = f"{_RDO}/2027/120-congressional-district-befs/cd120.zip"
 COUNTY_NAMES_URL = (
     "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
 )
-
-# Names Civitas and its contact, as every fetch does (app/contact.py).
-USER_AGENT = BOT_USER_AGENT
-
-CD119 = "CD119"
-CD120 = "CD120"
-CYCLE = "2026"
-# The Congress whose members the 119th-Congress block file's lines elected.
-SITTING_CONGRESS = 119
-
-
-def congress_seated_by(cycle: str) -> int:
-    """The Congress a November election seats: the 1st was elected in
-    1788, one every two years since (2026 seats the 120th)."""
-    return (int(cycle) - 1788) // 2 + 1
-
-MAPS_PATH = REPO / "backend" / "app" / "data" / "redrawn_congressional_maps.json"
-
-
-def load_cycle_maps(cycle: str = CYCLE, path: Path = MAPS_PATH) -> dict[str, tuple[str, str]]:
-    """The map each listed state votes on in `cycle`, with the reason —
-    app/data/redrawn_congressional_maps.json, the one list the live-results
-    sync also reads. States absent there must be identical in CD119 and
-    CD120 (checked in `choose_assignment`)."""
-    entries = json.loads(path.read_text())["cycles"].get(cycle, {})
-    return {st: (e["map"], e["reason"]) for st, e in entries.items()}
-
-
-CYCLE_MAPS: dict[str, tuple[str, str]] = load_cycle_maps()
 
 # Congressional district codes that are not House seats on a state ballot.
 _NOT_A_SEAT = {"98", "ZZ"}
@@ -125,75 +80,32 @@ _NOT_A_SEAT = {"98", "ZZ"}
 # ---------------------------------------------------------------------------
 
 
-def map_for_state(
-    state: str, cycle_maps: Mapping[str, tuple[str, str]] = CYCLE_MAPS
-) -> str:
-    """The BEF a state's blocks come from this cycle (CD119 unless listed)."""
-    return cycle_maps[state][0] if state in cycle_maps else CD119
-
-
-def choose_assignment(
-    cd119: Mapping[str, str],
-    cd120: Iterable[tuple[str, str]],
-    fips_to_state: Mapping[str, str],
-    cycle_maps: Mapping[str, tuple[str, str]] = CYCLE_MAPS,
-) -> tuple[dict[str, str], list[str]]:
-    """Block GEOID -> CDFP for the cycle, plus a list of problems.
-
-    `cd119` is the corrected 119th-Congress assignment; `cd120` streams
-    (GEOID, CDFP) rows of the 120th. A state not in `cycle_maps` whose
-    blocks disagree between the two is a problem: someone has to decide
-    which map it votes on before this file can be written.
-    """
-    chosen = dict(cd119)
-    seen120: set[str] = set()
-    unlisted_diffs: dict[str, int] = defaultdict(int)
-    for geoid, cd in cd120:
-        state = fips_to_state.get(geoid[:2], geoid[:2])
-        seen120.add(geoid)
-        if map_for_state(state, cycle_maps) == CD120:
-            chosen[geoid] = cd
-        elif state not in cycle_maps and cd119.get(geoid) != cd:
-            unlisted_diffs[state] += 1
-    problems = [
-        f"{st}: {n} blocks differ between CD119 and CD120 but {st} has no CYCLE_MAPS entry"
-        for st, n in sorted(unlisted_diffs.items())
-    ]
-    # A CD120 state's blocks all come from CD120; one it lacks would keep
-    # a stale CD119 district.
-    stale = defaultdict(int)
-    for geoid in cd119:
-        state = fips_to_state.get(geoid[:2], geoid[:2])
-        if map_for_state(state, cycle_maps) == CD120 and geoid not in seen120:
-            stale[state] += 1
-    problems += [
-        f"{st}: {n} blocks missing from CD120" for st, n in sorted(stale.items())
-    ]
-    # An unlisted state's blocks must all be in CD120 too: one missing
-    # there says the two files disagree about that state, listed or not.
-    unlisted_missing = defaultdict(int)
-    for geoid in cd119:
-        state = fips_to_state.get(geoid[:2], geoid[:2])
-        if state not in cycle_maps and geoid not in seen120:
-            unlisted_missing[state] += 1
-    problems += [
-        f"{st}: {n} blocks in CD119 missing from CD120 but {st} has no CYCLE_MAPS entry"
-        for st, n in sorted(unlisted_missing.items())
-    ]
-    # A state listed as CD120 whose lines didn't change is a stale entry:
-    # it would tell the live-results sync its seats have no holder.
-    present: set[str] = set()
-    changed: set[str] = set()
-    for g, cd in chosen.items():
-        st = fips_to_state.get(g[:2], g[:2])
-        present.add(st)
-        if cd119.get(g) != cd:
-            changed.add(st)
-    listed_same = [
-        st for st, (bef, _) in cycle_maps.items() if bef == CD120 and st in present and st not in changed
-    ]
-    problems += [f"{st}: listed as CD120 but its lines are identical to CD119" for st in sorted(listed_same)]
-    return chosen, problems
+def check_maps(
+    congress: int,
+    maps: Mapping[str, int],
+    digests: Mapping[int, Mapping[str, tuple[int, int]]],
+    listed_now: Iterable[str],
+    previous: Mapping[str, int],
+) -> list[str]:
+    """Problems with building `congress`'s lines from `maps` (state -> the
+    Congress whose BEF it is on). `digests`: BEF Congress -> state ->
+    (digest, blocks) for every file read; `listed_now`: the states the maps
+    file names for the election that seats `congress`; `previous`: each
+    state's map in the election before."""
+    listed_now = set(listed_now)
+    anywhere = {st for d in digests.values() for st in d}  # not the territories
+    problems = [f"{st}: no blocks in the {m}th Congress's file" for st, m in sorted(maps.items())
+                if st in anywhere and st not in digests.get(m, {})]
+    own = digests.get(congress)
+    if own is not None:
+        for st, m in sorted(maps.items()):
+            if m != congress and st in own and own[st] != digests.get(m, {}).get(st) and st not in listed_now:
+                problems.append(f"{st}: its blocks differ between the {m}th and {congress}th Congress files "
+                                f"but the maps file doesn't list it for the election that seats the {congress}th")
+            if m == congress and st in listed_now and own.get(st) == digests.get(previous.get(st), {}).get(st):
+                problems.append(f"{st}: listed as on the {congress}th Congress's map but its lines are identical "
+                                f"to the {previous.get(st)}th's")
+    return problems
 
 
 def county_districts(assignment: Mapping[str, str]) -> dict[str, dict[str, set[str]]]:
@@ -225,35 +137,23 @@ def build_districts(
     return {k: sorted(v) for k, v in sorted(districts.items())}
 
 
-def source_note(
-    cycle_maps: Mapping[str, tuple[str, str]], built: dt.date, all_cd119: bool
-) -> str:
-    base = (
-        "U.S. Census Bureau Redistricting Data Office congressional district Block "
-        "Equivalency Files (2020 Census blocks -> district) joined to each block's own "
-        "county FIPS (embedded in its GEOID) and the Bureau's national_county2020.txt "
-        "county-name table. 119th Congress: NationalCD119.txt with Alabama/Georgia/"
-        "Louisiana/New York/North Carolina replaced by their post-redistricting corrected "
-        f"files ({CD119_URL}). 120th Congress: NationalCD120.txt ({CD120_URL}). "
-    )
-    if all_cd119:
-        plan = (
-            "Every state on its 119th Congress map: the lines the members now serving were "
-            "elected on in 2024 (who represents a county today, not the coming election). "
-        )
-    else:
-        lines = [
-            f"{st} {plan} ({reason})"
-            for st, (plan, reason) in sorted(cycle_maps.items())
-        ]
-        plan = (
-            f"Map per state for the {CYCLE} elections: " + "; ".join(lines) + ". "
-            "Every other state's 119th and 120th Congress files are identical. "
-        )
+def source_note(congress: int, maps: Mapping[str, int], urls: Mapping[int, str],
+                reasons: Mapping[str, str], built: dt.date) -> str:
+    counts: dict[int, int] = defaultdict(int)
+    for m in maps.values():
+        counts[m] += 1
+    files = "; ".join(f"{m}th Congress: {urls[m]}" for m in sorted(urls))
+    redrawn = "; ".join(f"{st} on the {m}th Congress's map ({reasons[st]})" for st, m in sorted(maps.items())
+                        if st in reasons)
     return (
-        base
-        + plan
-        + "A county tagged '(part)' has 2020 Census blocks in more than one district "
+        "U.S. Census Bureau Redistricting Data Office congressional district Block "
+        "Equivalency Files (2020 Census blocks -> district), each state's own corrected file "
+        "replacing its national rows, joined to each block's own county FIPS (embedded in its "
+        f"GEOID) and the Bureau's national_county2020.txt county-name table. Files: {files}. "
+        f"The lines of the {congress}th Congress (elected {census_lines.elected_in(congress)}): "
+        f"each state on the map it votes on in that election (redrawn_congressional_maps.json)"
+        + (f": {redrawn}" if redrawn else "") + "; every other state on its earlier map. "
+        "A county tagged '(part)' has 2020 Census blocks in more than one district "
         "within that state. Generated by backend/scripts/build_county_district_crosswalk.py "
         f"-- built {built.isoformat()}."
     )
@@ -268,40 +168,11 @@ def download(url: str, cache: Path) -> Path:
     dest = cache / url.rsplit("/", 1)[1]
     if not dest.exists():
         print(f"downloading {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
         with urllib.request.urlopen(req) as resp, open(dest, "wb") as fh:
             while chunk := resp.read(1 << 20):
                 fh.write(chunk)
     return dest
-
-
-def _bef_rows(zf: zipfile.ZipFile, name: str) -> Iterable[tuple[str, str]]:
-    with zf.open(name) as raw:
-        for row in csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig")):
-            yield row["GEOID"], row["CDFP"]
-
-
-def load_cd119(archive: Path) -> dict[str, str]:
-    """NationalCD119 with each corrected per-state file replacing that
-    state's national rows wholesale."""
-    with zipfile.ZipFile(archive) as zf:
-        corrected = sorted(n for n in zf.namelist() if n.endswith("_CD119.txt"))
-        replaced = {name[:2] for name in corrected}
-        assignment = {
-            geoid: cd
-            for geoid, cd in _bef_rows(zf, "NationalCD119.txt")
-            if geoid[:2] not in replaced
-        }
-        for name in corrected:
-            rows = dict(_bef_rows(zf, name))
-            assignment.update(rows)
-            print(f"  {name}: {len(rows)} blocks replace the national file's rows")
-    return assignment
-
-
-def cd120_rows(archive: Path) -> Iterable[tuple[str, str]]:
-    with zipfile.ZipFile(archive) as zf:
-        yield from _bef_rows(zf, "NationalCD120.txt")
 
 
 def load_county_names(path: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -317,54 +188,82 @@ def load_county_names(path: Path) -> tuple[dict[str, str], dict[str, str]]:
     return names, states
 
 
-def build(cache: Path, all_cd119: bool) -> tuple[dict, list[str], dict[str, str]]:
+def read_map(path: Path, fips_to_state: Mapping[str, str], mine: set[str],
+             by_county: dict[str, set[str]]) -> dict[str, tuple[int, int]]:
+    """Stream one BEF: each state's (digest, blocks), and the districts of
+    the counties in `mine` (the states on this map) added to `by_county`."""
+    sums: dict[str, int] = defaultdict(int)
+    counts: dict[str, int] = defaultdict(int)
+    for geoid, cd in census_lines.bef_all_rows(path):
+        st = fips_to_state.get(geoid[:2], geoid[:2])
+        sums[st] = (sums[st] + census_lines.block_digest(geoid, cd)) % (1 << 64)
+        counts[st] += 1
+        if st in mine and cd not in _NOT_A_SEAT:
+            by_county[geoid[:5]].add(cd)
+    return {st: (sums[st], counts[st]) for st in sums}
+
+
+def build(congress: int, cache: Path, cycles: dict | None = None) -> tuple[dict, list[str]]:
     names, fips_to_state = load_county_names(download(COUNTY_NAMES_URL, cache))
-    print("reading CD119")
-    cd119 = load_cd119(download(CD119_URL, cache))
-    cycle_maps = {} if all_cd119 else CYCLE_MAPS
-    if all_cd119:
-        assignment, problems = cd119, []
-    else:
-        print("reading CD120")
-        assignment, problems = choose_assignment(
-            cd119, cd120_rows(download(CD120_URL, cache)), fips_to_state, cycle_maps
-        )
-    districts = build_districts(county_districts(assignment), names, fips_to_state)
+    cycles = census_lines.maps_cycles() if cycles is None else cycles
+    if not census_lines.listed(cycles, congress):
+        return {}, [f"the election that seats the {congress}th Congress ({census_lines.elected_in(congress)}) "
+                    "is not in redrawn_congressional_maps.json yet"]
+    year = census_lines.elected_in(congress)
+    states = sorted(set(fips_to_state.values()))
+    maps = census_lines.state_maps(congress, states, cycles)
+    previous = census_lines.state_maps(congress - 1, states, cycles)
+    by_county: dict[str, set[str]] = defaultdict(set)
+    digests: dict[int, dict] = {}
+    urls: dict[int, str] = {}
+    inputs: dict[str, list[str]] = {}
+    for m in sorted(set(maps.values()) | set(previous.values()) | {congress}):
+        found = census_lines.find_congress_bef(m)
+        if found is None:
+            if m in maps.values():
+                return {}, [f"no Census block equivalency file for the {m}th Congress"]
+            continue
+        print(f"reading {found[0]}")
+        mine = {st for st, x in maps.items() if x == m}
+        digests[m] = read_map(download(found[0], cache), fips_to_state, mine, by_county if mine else {})
+        if mine:
+            urls[m] = found[0]
+            inputs[str(m)] = list(found)
+    entries = cycles.get(str(year), {})
+    problems = check_maps(congress, maps, digests, entries, previous)
+    reasons = {st: e["reason"] for st, e in entries.items() if maps.get(st) == congress}
     doc = {
-        "_source": source_note(cycle_maps, dt.date.today(), all_cd119),
-        # Whose lines these are; the API matches it to the Congress in office.
-        "congress": SITTING_CONGRESS if all_cd119 else congress_seated_by(CYCLE),
-        "districts": districts,
+        "_source": source_note(congress, maps, urls, reasons, dt.date.today()),
+        # Whose lines these are; the reader picks by Congress.
+        "congress": congress,
+        # The files read (URL, published): the data refresh rebuilds on a re-release.
+        "_inputs": {"bef": inputs},
+        "districts": build_districts(by_county, names, fips_to_state),
     }
-    return doc, problems, assignment
+    return doc, problems
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument(
-        "--cache", type=Path, help="keep downloads here (default: a temp dir)"
-    )
-    ap.add_argument("--out", type=Path)
-    ap.add_argument(
-        "--sitting",
-        action="store_true",
-        help="every state on its 119th Congress map: the lines sitting members were elected on",
-    )
-    args = ap.parse_args()
-    out = args.out or (SITTING_OUT_PATH if args.sitting else OUT_PATH)
-
+    ap.add_argument("--congress", type=int, action="append", required=True, help="whose lines (repeatable)")
+    ap.add_argument("--out", type=Path, action="append", required=True, help="one per --congress, in order")
+    ap.add_argument("--cache", type=Path, help="keep downloads here (default: a temp dir)")
+    args = ap.parse_args(argv)
+    if len(args.congress) != len(args.out):
+        ap.error("give one --out per --congress")
     with tempfile.TemporaryDirectory() as tmp:
         cache = args.cache or Path(tmp)
         cache.mkdir(parents=True, exist_ok=True)
-        doc, problems, _ = build(cache, args.sitting)
-
+        built = [build(c, cache) for c in args.congress]
+    problems = [p for _, ps in built for p in ps]
     if problems:
         print("REFUSING TO WRITE:")
         for p in problems:
             print(f"  {p}")
         return 1
-    out.write_text(json.dumps(doc, indent=2))
-    print(f"wrote {len(doc['districts'])} districts to {out}")
+    for (doc, _), out in zip(built, args.out):
+        out.write_text(json.dumps(doc, indent=2))
+        print(f"wrote {len(doc['districts'])} districts ({doc['congress']}th Congress) to {out}")
     return 0
 
 

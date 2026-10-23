@@ -16,32 +16,27 @@ Cook published for each. Nothing here says why a line was drawn.
 
 from __future__ import annotations
 
-import json
 import logging
-import pathlib
 from collections import Counter, defaultdict
 
-from app import district_lean
+from app import data_refresh, district_lean
 from app.live_results.sync import _maps
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
 from app.state_names import STATE_NAMES, by_state_name
 
 logger = logging.getLogger(__name__)
 
-_PATH = pathlib.Path(__file__).resolve().parent / "data" / "redistricting_overlap.json"
-_cache: dict | None = None
+OVERLAP_FILE = "redistricting_overlap.json"
 
 
 def overlap_file() -> dict:
-    """The bundled overlap file, or {} (never a guess) when unreadable."""
-    global _cache
-    if _cache is None:
-        try:
-            _cache = json.loads(_PATH.read_text())
-        except Exception:
-            logger.exception("redistricting_overlap.json unavailable")
-            _cache = {}
-    return _cache
+    """The overlap file in use (data_refresh.read: the refresh's copy for
+    the newest election with redrawn states, else the bundled one), or {}
+    (never a guess) when unreadable."""
+    doc = data_refresh.read(OVERLAP_FILE)
+    if not doc:
+        logger.error("redistricting_overlap.json unavailable")
+    return doc
 
 
 def redrawn_overlap_states() -> list[str]:
