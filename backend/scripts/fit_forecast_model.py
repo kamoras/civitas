@@ -57,10 +57,20 @@ the fit can't tell which (MEDSL files Georgia's 2008 runoff as its
 general). The cycles are every even year the training polls and MEDSL's
 results both reach.
 
+THE STATED PRIORS. app.forecast.model's N_REF, N_MIN, N_CAP, HOUSE_SHRINK
+and half-life grid are stated, not fitted. --fit-priors measures them on the
+Senate training polls (fit_priors) and fits both chambers with the result,
+recorded under each fit's `priors`. It is off by default and stays off while
+a map built on the stated values is live: data_refresh alerts
+(data-stale-forecast-model) once the election they were stated for is
+certified, and that is when to turn it on, review the refit, and make it the
+default.
+
 Run from the repo (network on the first run, cached):
 
     python3 backend/scripts/fit_forecast_model.py [--cache DIR] [--polls FILE]
         [--senate-training OUT --senate-model OUT --house-training OUT --house-model OUT]
+        [--fit-priors]
 """
 
 from __future__ import annotations
@@ -628,7 +638,7 @@ def clerk_house(lines: list[tuple[float, str, bool]], ranked_choice=frozenset())
 
 
 def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll_doc: dict,
-              training_out: Path, model_out: Path) -> None:
+              training_out: Path, model_out: Path, priors: dict | None = None) -> None:
     leans = json.loads(HOUSE_LEAN.read_text())
     years = sorted(int(y) for y in leans["leans"])
     workbooks = fec_house_workbooks(years, cache)
@@ -686,7 +696,7 @@ def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll
         "_excluded": left_out,
         "races": rows, "generic": dict(sorted(gen.items())),
     }, separators=(",", ":")) + "\n")
-    write_model(model_out, source, rows, gen, borrow=senate, poll_doc=poll_doc)
+    write_model(model_out, source, rows, gen, borrow=senate, poll_doc=poll_doc, priors=priors)
 
 
 def _lines(leans: dict, year: int) -> dict:
@@ -743,8 +753,78 @@ def _years(years: list[int]) -> str:
     return ", ".join(str(y) for y in years[:-1]) + f" and {years[-1]}" if len(years) > 1 else str(years[0])
 
 
+# fit_priors' search: the house-effect shrink in whole polls, and the sample
+# clip at quantiles of the training polls' stated sample sizes (0 and 1 are
+# no clip at that end).
+SHRINK_GRID = tuple(range(0, 41))
+SAMPLE_MIN_QUANTILES = (0.0, 0.01, 0.05, 0.10, 0.25)
+SAMPLE_CAP_QUANTILES = (0.75, 0.90, 0.95, 0.99, 1.0)
+# Coordinate rounds before fit_priors stops (each round re-fits the shrink
+# given the clip, then the clip given the shrink; it stops early at a fixed
+# point).
+PRIOR_ROUNDS = 4
+
+
+def _quantile(sorted_values: list[int], q: float) -> int:
+    return sorted_values[min(int(q * len(sorted_values)), len(sorted_values) - 1)]
+
+
+def fit_priors(rows: list[dict], generic: dict, horizons=model.HORIZONS) -> dict:
+    """app.forecast.model's stated priors, measured on training rows:
+
+    - sampleRef: the median stated sample size (the prior's own rule: a poll
+      stating none counts as a typical one).
+    - halfLifeGrid: every whole day up to twice the poll window, where the
+      stated grid had four doublings.
+    - sampleMin, sampleCap, houseShrink: the clip (at SAMPLE_*_QUANTILES of
+      the stated sizes) and shrink (SHRINK_GRID) that make the poll averages'
+      errors most likely, summed over the horizons: the likelihood model.fit
+      chooses its half-life by (model.poll_error_fit). Coordinate ascent from
+      the stated values.
+
+    Measured 2026-10-22 on the Senate training file (in-sample, as written):
+    sampleRef 732, sampleMin 600, sampleCap 5,466, houseShrink 0 (the grid's
+    edge), log-likelihood -3387.3 against the stated priors' -3404.9; but
+    left one cycle out the fitted priors did no better (80% coverage 0.787
+    -> 0.781, 0.794 -> 0.801, 0.814 -> 0.808 at 0, 7 and 14 days; Brier on
+    polled races 0.0407 -> 0.0410, 0.0482 -> 0.0503, 0.0676 -> 0.0718). So
+    the refit is adopted only on its held-out checks, never on the
+    in-sample likelihood alone.
+    """
+    races = [[model.Poll.from_row(r) for r in row["polls"]] for row in rows]
+    gen = [[model.Poll.from_row(r) for r in v] for v in generic.values()]
+    sizes = sorted(p.n for polls in races + gen for p in polls if p.n)
+    if not sizes:
+        raise SystemExit("no training poll states a sample size: the priors cannot be fitted")
+    window = model.poll_window(rows, generic)
+    priors = dict(model.STATED_PRIORS, sampleRef=_quantile(sizes, 0.5),
+                  halfLifeGrid=[float(d) for d in range(1, 2 * window + 1)])
+
+    def loglik(pr: dict) -> float:
+        effects = model.house_effects(races + gen, pr["houseShrink"])
+        return sum(model.poll_error_fit(races, rows, h, effects, window, pr)[3] for h in horizons)
+
+    clips = [(_quantile(sizes, lo), _quantile(sizes, hi)) for lo in SAMPLE_MIN_QUANTILES for hi in SAMPLE_CAP_QUANTILES]
+    best = loglik(priors)
+    for _ in range(PRIOR_ROUNDS):
+        before = dict(priors)
+        for k in SHRINK_GRID:
+            ll = loglik(dict(priors, houseShrink=k))
+            if ll > best:
+                best, priors = ll, dict(priors, houseShrink=k)
+        for lo, hi in clips:
+            ll = loglik(dict(priors, sampleMin=lo, sampleCap=hi))
+            if ll > best:
+                best, priors = ll, dict(priors, sampleMin=lo, sampleCap=hi)
+        if priors == before:
+            break
+    print(f"fitted priors: {json.dumps({k: v for k, v in priors.items() if k != 'halfLifeGrid'})}, "
+          f"log-likelihood {best:.2f} (stated: {loglik(model.STATED_PRIORS):.2f})")
+    return dict(priors, fitted=True, logLikelihood=round(best, 4))
+
+
 def write_model(path: Path, source: str, rows: list[dict], generic: dict, borrow: tuple | None = None,
-                poll_doc: dict | None = None) -> dict:
+                poll_doc: dict | None = None, priors: dict | None = None) -> dict:
     """Fit and evaluate one chamber. `borrow` is (rows, generic) of the
     chamber whose national coefficient this one takes (model.fit): the
     full fit's for the published parameters, for each held-out cycle a fit
@@ -764,18 +844,18 @@ def write_model(path: Path, source: str, rows: list[dict], generic: dict, borrow
         coef = coef_for = coef_before = None
         if borrow:
             b_rows, b_gen = borrow
-            coef = model.fit(b_rows, b_gen, h)["beta"][3]
+            coef = model.fit(b_rows, b_gen, h, priors=priors)["beta"][3]
 
             def coef_for(year, h=h):
                 return model.fit([r for r in b_rows if r["year"] != year],
-                                 {y: v for y, v in b_gen.items() if int(y) != year}, h)["beta"][3]
+                                 {y: v for y, v in b_gen.items() if int(y) != year}, h, priors=priors)["beta"][3]
 
             def coef_before(year, h=h):
                 return model.fit([r for r in b_rows if r["year"] < year],
-                                 {y: v for y, v in b_gen.items() if int(y) < year}, h)["beta"][3]
-        out["fits"][str(h)] = model.fit(rows, generic, h, coef)
-        ev = model.leave_one_cycle_out(rows, generic, h, coef_for)
-        ev["forward"] = model.forward(rows, generic, h, coef_before)
+                                 {y: v for y, v in b_gen.items() if int(y) < year}, h, priors=priors)["beta"][3]
+        out["fits"][str(h)] = model.fit(rows, generic, h, coef, priors)
+        ev = model.leave_one_cycle_out(rows, generic, h, coef_for, priors)
+        ev["forward"] = model.forward(rows, generic, h, coef_before, priors)
         out["evaluation"][str(h)] = ev
         keys = ("races", "polledRaces", "all", "polled", "coverage80", "coverage95", "meanAbsError")
         print(f"{path.name} horizon {h}: {json.dumps({k: ev[k] for k in keys})}")
@@ -843,7 +923,7 @@ def senate_rows(cache: Path, poll_doc: dict) -> tuple[list[dict], dict, dict, di
 
 
 def run(cache: Path, polls_path: Path | None = None, senate_training: Path = TRAINING, senate_model: Path = MODEL,
-        house_training: Path = HOUSE_TRAINING, house_model: Path = HOUSE_MODEL) -> None:
+        house_training: Path = HOUSE_TRAINING, house_model: Path = HOUSE_MODEL, priors: bool = False) -> None:
     poll_doc, read_from = polls_file(polls_path)
     print(f"training polls: {read_from}")
     rows, generic, extra, coverage = senate_rows(cache, poll_doc)
@@ -862,8 +942,9 @@ def run(cache: Path, polls_path: Path | None = None, senate_training: Path = TRA
         "races": rows, "generic": generic,
     }
     senate_training.write_text(json.dumps(training, separators=(",", ":")) + "\n")
-    write_model(senate_model, source, rows, generic, poll_doc=poll_doc)
-    fit_house(cache, extra["house"], extra["generic"], (rows, generic), poll_doc, house_training, house_model)
+    fitted = fit_priors(rows, generic) if priors else None
+    write_model(senate_model, source, rows, generic, poll_doc=poll_doc, priors=fitted)
+    fit_house(cache, extra["house"], extra["generic"], (rows, generic), poll_doc, house_training, house_model, fitted)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -874,9 +955,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--senate-model", type=Path, default=MODEL)
     ap.add_argument("--house-training", type=Path, default=HOUSE_TRAINING)
     ap.add_argument("--house-model", type=Path, default=HOUSE_MODEL)
+    ap.add_argument("--fit-priors", action="store_true",
+                    help="fit the model's stated priors too (fit_priors); off while a map built on them is live")
     args = ap.parse_args(argv)
     args.cache.mkdir(parents=True, exist_ok=True)
-    run(args.cache, args.polls, args.senate_training, args.senate_model, args.house_training, args.house_model)
+    run(args.cache, args.polls, args.senate_training, args.senate_model, args.house_training, args.house_model,
+        args.fit_priors)
     return 0
 
 

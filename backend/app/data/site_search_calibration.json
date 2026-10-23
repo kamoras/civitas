@@ -1,5 +1,5 @@
 {
-  "_source": "scripts/calibrate_site_search.py on the live index (2026-10-21): parameters fitted on half the entities' known-item probes, measured on the other half. pool and enough: the smallest on their grids that change no fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: known-item probes say whether an answer is listed, never whether the rest of a list is junk. Ranking parameters kept from the calibration in use (--candidates-only).",
+  "_source": "scripts/calibrate_site_search.py on the live index (2026-10-22): parameters fitted on half the entities' known-item probes, measured on the other half. pool and enough: the smallest on their grids that change no fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: known-item probes say whether an answer is listed, never whether the rest of a list is junk. Ranking parameters kept from the calibration in use (--candidates-only).",
   "params": {
     "prefix_credit": 0.7,
     "fuzzy_credit": 0.7,
@@ -27,13 +27,13 @@
       "wrong_direct_rate": 0.0
     },
     "document": {
-      "probes": 395,
-      "success_at_1": 0.957,
-      "direct_hit_rate": 0.935,
+      "probes": 397,
+      "success_at_1": 0.955,
+      "direct_hit_rate": 0.933,
       "wrong_direct_rate": 0.0
     },
     "identifier": {
-      "probes": 416,
+      "probes": 417,
       "success_at_1": 1.0,
       "direct_hit_rate": 1.0,
       "wrong_direct_rate": 0.0
@@ -41,18 +41,18 @@
     "name": {
       "probes": 403,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.967,
+      "direct_hit_rate": 0.957,
       "wrong_direct_rate": 0.0
     },
     "page": {
-      "probes": 91,
+      "probes": 96,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.898,
-      "wrong_direct_rate": 0.011
+      "direct_hit_rate": 0.892,
+      "wrong_direct_rate": 0.0104
     },
     "prefix": {
       "probes": 413,
-      "success_at_8": 1.0
+      "success_at_8": 0.998
     },
     "surname": {
       "probes": 309,
@@ -61,18 +61,18 @@
       "wrong_direct_rate": 0.0
     },
     "typo": {
-      "probes": 406,
+      "probes": 408,
       "success_at_1": 0.995,
-      "direct_hit_rate": 0.742,
-      "wrong_direct_rate": 0.0
+      "direct_hit_rate": 0.718,
+      "wrong_direct_rate": 0.0025
     },
     "all": {
-      "probes": 2644,
-      "direct_hit_rate": 0.933,
-      "wrong_direct_rate": 0.0004
+      "probes": 2654,
+      "direct_hit_rate": 0.927,
+      "wrong_direct_rate": 0.0008
     },
     "latency_ms": {
-      "p50": 8.0,
+      "p50": 8.1,
       "p95": 39.9
     }
   },
@@ -87,6 +87,7 @@
     "measure",
     "member",
     "monitor",
+    "nomination",
     "page",
     "president",
     "race",

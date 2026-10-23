@@ -407,7 +407,13 @@ The correct pattern, established by `_district_pvi()` /
    records the bundled copy's hash (`_refreshed.bundled`) and a file whose
    bundled copy has changed since is refreshed the next day
    (`bundled_moved`; 2026-10-19's House fit through 2024 otherwise waited a
-   week behind the 2026-10-18 refit). A script the job runs takes an output path and reads no `/data` copy of
+   week behind the 2026-10-18 refit; a refreshed copy with no record,
+   installed before it existed, counts as changed and is refreshed once).
+   A failed try is retried within a week whatever the cadence, and the
+   next day once what it runs has changed (`recipe`: the command line, the
+   backend files it names, the generator script included, and every `app`
+   or `scripts` module those import, transitively), since that change is
+   usually the fix. A script the job runs takes an output path and reads no `/data` copy of
    its own output. Files a script can't regenerate unattended — a new
    survey whose question ids change, a model-selection refit that is a
    method decision, a source behind research-only dependencies, a source
@@ -939,7 +945,11 @@ Corollaries that follow from the same rule, all enforced in code:
   plain 4xx that way), so nothing is crawled past it
   (`state_source_crawler.WALLED`). Walls already investigated go in
   `state_candidate_sources.json`'s `_robots_walls` with their evidence, so
-  the crawl's ops alert names only a new wall or an unreachable file.
+  the crawl's ops alert names only a new wall or an unreachable file. A
+  measure source walled the same way is written up as the state's `wall`
+  in `ballot_measure_pdf_sources.json` (host, date measured, evidence):
+  the state stays `ingest_failed` and its page says the read failed, but
+  the nightly ingest alert names only new problems (Ohio, 2026-10-21).
 - The source is the state's own document, but not always the state's own
   server. Where a state's whole site sits behind a bot wall (Georgia's
   Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
@@ -1850,8 +1860,7 @@ the seated Congress's lines (`district_lines.table_for_lines`, shared by the
 computed lean and the county and place crosswalks, carries the last table
 forward only for a state whose map didn't change, and only once the cycle
 is listed), the voter calendar (150 days out), the poll closing times
-(45 days) and towns' sample ballots (60 days; a town ballot from an earlier
-cycle is never served as this one's). Standing law is stored as law
+(45 days). Standing law is stored as law
 (`election_rules.json`'s `standing`, a runoff counted from the general;
 `office_terms.json`'s year rules; `state_ballot_scope.json`'s
 `statewide_executive`), so the next cycle computes its own.
@@ -2031,6 +2040,15 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   was measured and rejected (it moved every forward figure the wrong way). The poll window
   is the training polls' own reach (`model.poll_window`), never typed;
   beyond it every range is the structural line's, labelled fundamentals only.
+  Five poll-weighting numbers are still stated priors (`model.STATED_PRIORS`:
+  the sample-size clip and reference, the house-effect shrink, the half-life
+  grid), named with their reasons on the map's method section. Their fit
+  (`fit_forecast_model.py --fit-priors`) stays off while a map built on them
+  is live; from the January 3 after a general held since
+  `model.PRIORS_STATED_ON`, `data_refresh._forecast_priors_stale` alerts until
+  a fit records fitted ones. Adopt that refit on its held-out checks, not its
+  in-sample likelihood: measured 2026-10-22, it fit better in sample and no
+  better held out.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
   `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
