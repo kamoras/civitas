@@ -51,8 +51,9 @@ from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.pipeline.analyze.justice_loyalty import Estimate, measurable  # noqa: E402
 
 # The Supreme Court Database release read: its file name carries it, and
-# court_finding.json records it so the data refresh job can tell when a
-# newer one is out (app/data_refresh.py, _court_finding_stale).
+# court_finding.json records it. The data refresh recomputes the finding on
+# each new release with scripts/fetch_court_finding.py, a numpy port of
+# section 8's finding that finds the release by rule.
 SCDB_FILE = "SCDB_2026_01_justiceCentered_Citation.zip"
 SCDB_RELEASE = re.match(r"SCDB_(\d{4})_(\d{2})_", SCDB_FILE).group(1, 2)
 FINDING = pathlib.Path(__file__).resolve().parents[1] / "app/data/court_finding.json"
@@ -548,6 +549,30 @@ def _career_fit(P: pd.DataFrame, shape: str, flag: str = "in_office") -> tuple:
     return pooled, R
 
 
+def court_finding(P: pd.DataFrame) -> dict:
+    """The Court-level effect that survives the placebo: A's pooled effect
+    less its k=0 placebo, with a bootstrap over justices."""
+    D0 = next(D for _, D in _placebo_windows(P))
+
+    def net(p: pd.DataFrame, d0: pd.DataFrame) -> float:
+        return (smf.ols("y ~ in_office + pet + C(justiceName)", p).fit().params["in_office"]
+                - smf.ols("y ~ fake + pet + C(justiceName)", d0).fit().params["fake"])
+
+    # Justices in name order, as scripts/fetch_court_finding.py (the data
+    # refresh's numpy port of this section) draws them: the same draws.
+    rng, names, draws = np.random.default_rng(0), np.array(sorted(P.justiceName.unique())), []
+    by_p, by_d = dict(tuple(P.groupby("justiceName"))), dict(tuple(D0.groupby("justiceName")))
+    for _ in range(200):
+        pick = rng.choice(names, len(names))
+        p = pd.concat([by_p[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick)])
+        d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
+        draws.append(net(p, d0))
+    lo, hi = np.percentile(draws, [2.5, 97.5])
+    return {"estimate": round(float(net(P, D0)), 4), "low": round(float(lo), 4), "high": round(float(hi), 4),
+            "draws": len(draws), "firstTerm": int(P.term.min()), "lastTerm": int(P.term.max()),
+            "justices": int(P.justiceName.nunique())}
+
+
 def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> dict:
     """Candidate F: the appointer indicator with a pooled career-tenure
     curve. Identified because the appointer's window varies in length (and
@@ -615,26 +640,9 @@ def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.
     _per_justice_placebo("F", F, fakes)
     _per_justice_placebo("A", A, {k: _per_justice(D, "y ~ fake + pet", "fake", lambda g: g.fake == 1,
                                                   lambda g: g.fake == 0) for k, D in _placebo_windows(P)})
-    # the Court-level effect that survives the placebo: A's pooled effect
-    # less its k=0 placebo, with a bootstrap over justices
-    D0 = next(D for _, D in _placebo_windows(P))
-
-    def net(p: pd.DataFrame, d0: pd.DataFrame) -> float:
-        return (smf.ols("y ~ in_office + pet + C(justiceName)", p).fit().params["in_office"]
-                - smf.ols("y ~ fake + pet + C(justiceName)", d0).fit().params["fake"])
-
-    rng, names, draws = np.random.default_rng(0), P.justiceName.unique(), []
-    by_p, by_d = dict(tuple(P.groupby("justiceName"))), dict(tuple(D0.groupby("justiceName")))
-    for _ in range(200):
-        pick = rng.choice(names, len(names))
-        p = pd.concat([by_p[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick)])
-        d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
-        draws.append(net(p, d0))
-    lo, hi = np.percentile(draws, [2.5, 97.5])
-    finding = {"estimate": round(float(net(P, D0)), 4), "low": round(float(lo), 4), "high": round(float(hi), 4),
-               "draws": len(draws), "firstTerm": int(P.term.min()), "lastTerm": int(P.term.max()),
-               "justices": int(P.justiceName.nunique())}
-    print(f"  Court-level: A's pooled effect less its k=0 placebo {net(P, D0) * 100:+.1f} points, 95% bootstrap CI over "
+    finding = court_finding(P)
+    lo, hi = finding["low"], finding["high"]
+    print(f"  Court-level: A's pooled effect less its k=0 placebo {finding['estimate'] * 100:+.1f} points, 95% bootstrap CI over "
           f"justices [{lo * 100:+.1f}, {hi * 100:+.1f}] (200 draws); F's +{real * 100:.1f} against its placebo sd "
           f"{v.std(ddof=1) * 100:.1f}: [{(real - 1.96 * v.std(ddof=1)) * 100:+.1f}, {(real + 1.96 * v.std(ddof=1)) * 100:+.1f}]")
     # gate 2: an appointer's return years into his appointees' careers

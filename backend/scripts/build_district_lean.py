@@ -1044,14 +1044,19 @@ def two_party(v) -> float:
     return v[0] / (v[0] + v[1])
 
 
+# The two elections this build's precinct inputs are (VEST 2020, MEDSL
+# 2024), earlier then later, weighted as fetch_state_pvi weights its window.
+CYCLES = ("2020", "2024")
+
+
 def lean(d20, d24, n20: float, n24: float) -> float:
-    w = sp.CYCLE_WEIGHTS
-    return -100 * (w["2020"] * (two_party(d20) - n20) + w["2024"] * (two_party(d24) - n24))
+    earlier, later = sp.WEIGHTS
+    return -100 * (earlier * (two_party(d20) - n20) + later * (two_party(d24) - n24))
 
 
 def national_shares() -> tuple[dict, float, float]:
     inputs = json.loads(STATE_PVI.read_text())["inputs"]
-    nat = {y: [sum(v["D"] for v in inputs[y].values()), sum(v["R"] for v in inputs[y].values())] for y in sp.CYCLES}
+    nat = {y: [sum(v["D"] for v in inputs[y].values()), sum(v["R"] for v in inputs[y].values())] for y in CYCLES}
     return inputs, two_party(nat["2020"]), two_party(nat["2024"])
 
 

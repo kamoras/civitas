@@ -50,7 +50,7 @@ DIRECT = {
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pytest-xdist", "pyyaml", "requests", "scikit-learn", "scipy",
     "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette",
-    "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "xlrd",
+    "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "websockets", "xlrd",
 }
 # The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
 # by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py;
@@ -67,7 +67,6 @@ RESEARCH_DIRECT = {
     "rdata",
     "statsmodels",
     "time-machine",
-    "websockets",
 }
 
 

@@ -59,12 +59,16 @@ results both reach.
 
 THE STATED PRIORS. app.forecast.model's N_REF, N_MIN, N_CAP, HOUSE_SHRINK
 and half-life grid are stated, not fitted. --fit-priors measures them on the
-Senate training polls (fit_priors) and fits both chambers with the result,
-recorded under each fit's `priors`. It is off by default and stays off while
-a map built on the stated values is live: data_refresh alerts
-(data-stale-forecast-model) once the election they were stated for is
-certified, and that is when to turn it on, review the refit, and make it the
-default.
+Senate training polls (fit_priors) and keeps them only under the acceptance
+rule (app/acceptance.py): on the forward check (each chamber's newest cycle,
+predicted by fits on the cycles before it only), the races' log predictive
+density under the fitted priors must beat the stated priors' by more than
+one standard error of the paired difference, both chambers' races together,
+and neither chamber may lose more than one. Otherwise both chambers are
+fitted on the stated priors. Either way the comparison is written under
+each model file's `priorsComparison`. app/data_refresh.py passes the flag
+from the January 3 after the election the priors were stated for is
+certified (model.PRIORS_STATED_ON), never while a map built on them is live.
 
 Run from the repo (network on the first run, cached):
 
@@ -80,6 +84,7 @@ import asyncio
 import csv
 import io
 import json
+import math
 import re
 import sys
 import unicodedata
@@ -93,6 +98,7 @@ from pdfplumber.utils.text import chars_to_textmap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app.acceptance import held_out_beats_in_use  # noqa: E402
 from app.atomic_write import runtime_data_path  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
@@ -637,8 +643,9 @@ def clerk_house(lines: list[tuple[float, str, bool]], ranked_choice=frozenset())
     return out, set(blocks), left_out
 
 
-def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll_doc: dict,
-              training_out: Path, model_out: Path, priors: dict | None = None) -> None:
+def house_training(cache: Path, house_polls: dict, generic: dict, poll_doc: dict,
+                   training_out: Path) -> tuple[list[dict], dict, str]:
+    """Write the House training file: (rows, generic polls, source)."""
     leans = json.loads(HOUSE_LEAN.read_text())
     years = sorted(int(y) for y in leans["leans"])
     workbooks = fec_house_workbooks(years, cache)
@@ -696,7 +703,7 @@ def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll
         "_excluded": left_out,
         "races": rows, "generic": dict(sorted(gen.items())),
     }, separators=(",", ":")) + "\n")
-    write_model(model_out, source, rows, gen, borrow=senate, poll_doc=poll_doc, priors=priors)
+    return rows, gen, source
 
 
 def _lines(leans: dict, year: int) -> dict:
@@ -823,8 +830,45 @@ def fit_priors(rows: list[dict], generic: dict, horizons=model.HORIZONS) -> dict
     return dict(priors, fitted=True, logLikelihood=round(best, 4))
 
 
+def forward_scores(rows: list[dict], generic: dict, priors: dict | None, borrow: tuple | None = None) -> list[float]:
+    """Each race of the newest cycle (model.forward's split: fitted on the
+    cycles before it only): the log density of its result under the
+    predicted range, averaged over the horizons."""
+    year = max(r["year"] for r in rows)
+    train, test = [r for r in rows if r["year"] < year], [r for r in rows if r["year"] == year]
+    earlier = {y: v for y, v in generic.items() if int(y) <= year}
+    per_race: dict[int, list[float]] = defaultdict(list)
+    for h in model.HORIZONS:
+        coef = None
+        if borrow:
+            b_rows, b_gen = borrow
+            coef = model.fit([r for r in b_rows if r["year"] < year],
+                             {y: v for y, v in b_gen.items() if int(y) < year}, h, priors=priors)["beta"][3]
+        for i, p in enumerate(model.predict_cycle(train, test, earlier, year, h, coef, priors)):
+            sd = (p["high80"] - p["low80"]) / (2 * model.Z80)
+            per_race[i].append(-0.5 * ((p["margin"] - p["mean"]) / sd) ** 2 - math.log(sd * math.sqrt(2 * math.pi)))
+    return [sum(v) / len(v) for _, v in sorted(per_race.items())]
+
+
+def priors_comparison(chambers: dict[str, tuple[list[float], list[float]]]) -> dict:
+    """The fitted priors against the stated ones on the forward check:
+    {chamber: (stated scores, fitted scores)}, paired by race."""
+    def stats(diffs: list[float]) -> dict:
+        n = len(diffs)
+        mean = sum(diffs) / n if n else 0.0
+        sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / (n - 1)) if n > 1 else 0.0
+        return {"races": n, "delta": round(mean, 6), "se": round(sd / math.sqrt(n), 6) if n else 0.0}
+
+    diffs = {c: [f - s for s, f in zip(stated, fitted)] for c, (stated, fitted) in chambers.items()}
+    refused = [f"{c}: the two fits score {len(s)} and {len(f)} races" for c, (s, f) in chambers.items()
+               if len(s) != len(f)]
+    return {"metric": "forward-check log predictive density per race, fitted minus stated priors",
+            **stats([d for v in diffs.values() for d in v]), "subgroups": {c: stats(v) for c, v in diffs.items()},
+            **({"refused": refused} if refused else {})}
+
+
 def write_model(path: Path, source: str, rows: list[dict], generic: dict, borrow: tuple | None = None,
-                poll_doc: dict | None = None, priors: dict | None = None) -> dict:
+                poll_doc: dict | None = None, priors: dict | None = None, comparison: dict | None = None) -> dict:
     """Fit and evaluate one chamber. `borrow` is (rows, generic) of the
     chamber whose national coefficient this one takes (model.fit): the
     full fit's for the published parameters, for each held-out cycle a fit
@@ -837,6 +881,8 @@ def write_model(path: Path, source: str, rows: list[dict], generic: dict, borrow
         # when the copy in use differs.
         f = poll_doc.get("file") or {}
         out["_polls"] = {"sha256": f.get("sha256"), "label": f.get("label"), "retrieved": poll_doc.get("retrieved")}
+    if comparison is not None:
+        out["priorsComparison"] = comparison
     if borrow:
         out["_nationalCoefficient"] = ("the Senate fit's generic-ballot coefficient at the same horizon "
                                        "(model.fit, national_coef): a few House cycles cannot identify it")
@@ -923,7 +969,7 @@ def senate_rows(cache: Path, poll_doc: dict) -> tuple[list[dict], dict, dict, di
 
 
 def run(cache: Path, polls_path: Path | None = None, senate_training: Path = TRAINING, senate_model: Path = MODEL,
-        house_training: Path = HOUSE_TRAINING, house_model: Path = HOUSE_MODEL, priors: bool = False) -> None:
+        house_training_out: Path = HOUSE_TRAINING, house_model: Path = HOUSE_MODEL, priors: bool = False) -> None:
     poll_doc, read_from = polls_file(polls_path)
     print(f"training polls: {read_from}")
     rows, generic, extra, coverage = senate_rows(cache, poll_doc)
@@ -942,9 +988,22 @@ def run(cache: Path, polls_path: Path | None = None, senate_training: Path = TRA
         "races": rows, "generic": generic,
     }
     senate_training.write_text(json.dumps(training, separators=(",", ":")) + "\n")
-    fitted = fit_priors(rows, generic) if priors else None
-    write_model(senate_model, source, rows, generic, poll_doc=poll_doc, priors=fitted)
-    fit_house(cache, extra["house"], extra["generic"], (rows, generic), poll_doc, house_training, house_model, fitted)
+    h_rows, h_gen, h_source = house_training(cache, extra["house"], extra["generic"], poll_doc, house_training_out)
+    chosen = comparison = None
+    if priors:
+        fitted = fit_priors(rows, generic)
+        comparison = priors_comparison({
+            "senate": (forward_scores(rows, generic, None), forward_scores(rows, generic, fitted)),
+            "house": (forward_scores(h_rows, h_gen, None, (rows, generic)),
+                      forward_scores(h_rows, h_gen, fitted, (rows, generic))),
+        })
+        kept = held_out_beats_in_use({"_comparison": comparison}, {})
+        comparison["decision"] = f"stated priors kept: {kept}" if kept else "fitted priors adopted"
+        chosen = None if kept else fitted
+        print(f"priors: {comparison['decision']}")
+    write_model(senate_model, source, rows, generic, poll_doc=poll_doc, priors=chosen, comparison=comparison)
+    write_model(house_model, h_source, h_rows, h_gen, borrow=(rows, generic), poll_doc=poll_doc, priors=chosen,
+                comparison=comparison)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -956,7 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--house-training", type=Path, default=HOUSE_TRAINING)
     ap.add_argument("--house-model", type=Path, default=HOUSE_MODEL)
     ap.add_argument("--fit-priors", action="store_true",
-                    help="fit the model's stated priors too (fit_priors); off while a map built on them is live")
+                    help="fit the model's stated priors (fit_priors), kept only under the acceptance rule")
     args = ap.parse_args(argv)
     args.cache.mkdir(parents=True, exist_ok=True)
     run(args.cache, args.polls, args.senate_training, args.senate_model, args.house_training, args.house_model,
