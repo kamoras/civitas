@@ -38,7 +38,7 @@ import asyncio
 import logging
 import re
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 
 import httpx
 from lxml import html as lxml_html
@@ -207,12 +207,26 @@ ANNUAL_REPORT_TYPE = "Annual"
 SENATOR_FILER_TYPE = "Senator"
 
 
+class SearchUnavailable(Exception):
+    """The eFD search could not be read: the browser failed, the form
+    produced no response, or the response was not the search's JSON. Never
+    an empty result, which a caller would read as "nothing filed"."""
+
+
+# A failed search is tried once more in a fresh browser before it is
+# reported: one nightly search failed outright (2026-10-22, the annual
+# search, minutes after the PTR search succeeded in its own browser) and the
+# same search, rerun that evening, returned all 238 rows.
+_SEARCH_ATTEMPTS = 2
+
+
 async def search_filings(since_date: str, report_type: str, filer_type: str | None = None) -> list[dict]:
     """Search for filings of `report_type` (a checkbox label on the search
     form) submitted on or after since_date (YYYY-MM-DD).
 
     Returns one dict per filing: {last, first, office, filed_date,
-    report_url, is_paper}. Does not cache across runs (session-bound), unlike the
+    report_url, is_paper}, possibly none; raises SearchUnavailable when the
+    search could not be read. Does not cache across runs (session-bound), unlike the
     House index — a fresh search is cheap and the session itself expires.
 
     Drives a real headless Chromium tab through the actual search form
@@ -228,18 +242,66 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
     _scrape_via_page, split out so that logic is unit-testable against a
     mocked page without needing a real browser.
     """
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, channel=CHROMIUM_CHANNEL)
-            try:
-                page = await browser.new_page()
-                page.set_default_timeout(_ACTION_TIMEOUT_MS)
-                return await _scrape_via_page(page, since_date, report_type, filer_type)
-            finally:
-                await browser.close()
-    except Exception:
-        logger.exception("Senate eFD Playwright search failed")
-        return []
+    reason = ""
+    for attempt in range(1, _SEARCH_ATTEMPTS + 1):
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True, channel=CHROMIUM_CHANNEL)
+                try:
+                    page = await browser.new_page()
+                    page.set_default_timeout(_ACTION_TIMEOUT_MS)
+                    return await _scrape_via_page(page, since_date, report_type, filer_type)
+                finally:
+                    await browser.close()
+        except SearchUnavailable as e:
+            reason = str(e)
+        except Exception as e:
+            logger.exception("Senate eFD Playwright search failed")
+            reason = f"the browser search raised {type(e).__name__}: {e}"
+        logger.warning("Senate eFD %s search, attempt %d of %d: %s", report_type, attempt, _SEARCH_ATTEMPTS, reason)
+    raise SearchUnavailable(f"Senate eFD {report_type} search failed {_SEARCH_ATTEMPTS} times; last: {reason}")
+
+
+async def _submit_search(
+    page, since_date: str, report_type: str, filer_type: str | None, last_name: str = "",
+) -> list:
+    """Fill and submit the search form at its largest page size; returns
+    the list the search responses arrive in (the newest last)."""
+    await page.goto(SEARCH_URL, wait_until="domcontentloaded")
+    await _click(page.get_by_role("checkbox", name=report_type))
+    if filer_type:
+        # Exact: "Senator" is also a substring of "Former Senator".
+        await _click(page.get_by_role("checkbox", name=filer_type, exact=True))
+    if last_name:
+        await page.locator('input[name="last_name"]').fill(last_name)
+    us_date = _iso_to_us_date(since_date)
+    if us_date:
+        date_input = page.locator('input[name="submitted_start_date"]')
+        if await date_input.count() > 0:
+            await date_input.fill(us_date)
+
+    responses: list = []
+    page.on(
+        "response",
+        lambda r: responses.append(r) if SEARCH_DATA_URL in r.url else None,
+    )
+
+    await _click(page.get_by_role("button", name="Search Reports"))
+    if not await _wait_until(lambda: bool(responses)):
+        raise SearchUnavailable("the search form produced no response (the page may have changed)")
+
+    # Max page size, so a real backfill needs the fewest possible "Next"
+    # clicks (each one a real, slow-ish network round trip through
+    # Akamai's checks).
+    length_dropdown = page.get_by_role("combobox", name="Show entries")
+    if await length_dropdown.count() > 0:
+        before = len(responses)
+        try:
+            await length_dropdown.select_option(str(_PAGE_LEN), timeout=_ACTION_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            pass
+        await _wait_until(lambda: len(responses) > before)
+    return responses
 
 
 async def _scrape_via_page(
@@ -258,83 +320,82 @@ async def _scrape_via_page(
         await _click(page.locator("#agree_statement"))
         await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
 
-    await page.goto(SEARCH_URL, wait_until="domcontentloaded")
-    await _click(page.get_by_role("checkbox", name=report_type))
-    if filer_type:
-        # Exact: "Senator" is also a substring of "Former Senator".
-        await _click(page.get_by_role("checkbox", name=filer_type, exact=True))
-    us_date = _iso_to_us_date(since_date)
-    if us_date:
-        date_input = page.locator('input[name="submitted_start_date"]')
-        if await date_input.count() > 0:
-            await date_input.fill(us_date)
-
-    responses: list = []
-    page.on(
-        "response",
-        lambda r: responses.append(r) if SEARCH_DATA_URL in r.url else None,
-    )
-
-    await _click(page.get_by_role("button", name="Search Reports"))
-    if not await _wait_until(lambda: bool(responses)):
-        logger.error("Senate eFD search produced no response — page structure may have changed")
-        return []
-
-    # Max page size, so a real backfill needs the fewest possible "Next"
-    # clicks (each one a real, slow-ish network round trip through
-    # Akamai's checks).
-    length_dropdown = page.get_by_role("combobox", name="Show entries")
-    if await length_dropdown.count() > 0:
-        before = len(responses)
-        try:
-            await length_dropdown.select_option(str(_PAGE_LEN), timeout=_ACTION_TIMEOUT_MS)
-        except PlaywrightTimeoutError:
-            pass
-        await _wait_until(lambda: len(responses) > before)
-
-    filings, distinct, received, total = await _page_through(page, responses)
+    responses = await _submit_search(page, since_date, report_type, filer_type)
+    found = _Found()
+    await _page_through(page, responses, found)
+    if found.total and found.received >= found.total and found.distinct < found.total:
+        # Every row arrived, but some twice. The search orders by last
+        # name, then first, and nothing after: a filer's own reports are
+        # tied, and their order can change between page requests, so a
+        # filer whose reports straddle a page boundary can have one shown
+        # on both pages and another on neither (2026-10-22: one of 238
+        # annual reports). The missing one shares the repeated one's name,
+        # so that filer is searched again on their own, which fits one page.
+        for last in sorted({found.by_id[fid]["last"] for fid in found.repeated}):
+            await _page_through(page, await _submit_search(page, since_date, report_type, filer_type, last), found,
+                                count=False)
     # Reported, not retried in the same browser session: every caller
     # searches again on its next nightly run, and holdings never lets a
     # partial search replace a newer stored report (_is_older).
-    if total and received < total:
-        logger.warning("Senate eFD search returned %d of %d rows — a results page didn't load", received, total)
-    elif total and distinct < total:
-        # Every row arrived, but some twice. Either the same filing was
-        # listed twice or the ordering shifted between pages and a repeat
-        # took the place of a filing that was never shown; the search
-        # can't tell which.
+    if found.total and found.received < found.total:
+        logger.warning("Senate eFD search returned %d of %d rows — a results page didn't load",
+                       found.received, found.total)
+    elif found.total and found.distinct < found.total:
+        # The filer's own search didn't find it either: the same filing
+        # listed twice, which the search can't tell from one never shown.
         logger.warning(
             "Senate eFD search showed %d distinct rows of %d — a filing listed twice, "
-            "or one displaced by a shifting order", distinct, total,
+            "or one displaced by a shifting order", found.distinct, found.total,
         )
-    return filings
+    return list(found.by_id.values())
 
 
-async def _page_through(page, responses: list) -> tuple[list[dict], int, int, int]:
-    """Collect every results page from the latest response on. Returns the
-    parsed filings, how many distinct rows and how many rows in all the
-    pages held, and recordsTotal.
+@dataclass
+class _Found:
+    """What a search's pages held: the filings by id, rows that didn't
+    parse (by content), ids seen more than once, how many rows the main
+    search's pages held in all, and its recordsTotal."""
+
+    by_id: dict = field(default_factory=dict)
+    unparsed: set = field(default_factory=set)
+    repeated: set = field(default_factory=set)
+    received: int = 0
+    total: int = 0
+
+    @property
+    def distinct(self) -> int:
+        return len(self.by_id) + len(self.unparsed)
+
+
+async def _page_through(page, responses: list, found: _Found, count: bool = True) -> None:
+    """Collect every results page from the latest response on into
+    `found`. `count`: this is the main search, whose recordsTotal and row
+    count `found` reports (a follow-up search only adds filings).
 
     Paging stops early only once every row is accounted for by distinct
     content: a row can reappear on a later page when the ordering shifts,
     and counted twice it would stop paging before the page that holds the
     row it displaced. Distinct content can undercount (two identical rows),
     which only means paging on to the last page, where Next is disabled."""
-    by_id: dict[str, dict] = {}
-    unparsed: set[str] = set()
-    received = total = 0
+    received = pages = 0
     for _ in range(_MAX_PAGES):
         try:
             payload = await responses[-1].json()
-        except Exception:
+        except Exception as e:
+            if not pages:
+                raise SearchUnavailable(f"the search response was not JSON ({type(e).__name__})") from e
             logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
             break
-
+        pages += 1
         total = payload.get("recordsTotal", 0)
         rows = payload.get("data", [])
         received += len(rows)
-        _collect_rows(by_id, unparsed, rows)
-        if len(by_id) + len(unparsed) >= total:
+        _collect_rows(found, rows)
+        if count:
+            found.received, found.total = received, total
+        # The main search is done once its distinct rows reach its total; a
+        # follow-up once it has received its own total.
+        if (found.distinct if count else received) >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -344,19 +405,23 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int, in
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-    return list(by_id.values()), len(by_id) + len(unparsed), received, total
 
 
-def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:
-    """Add a results page's rows to `by_id`, keyed by filing, and the rows
-    that don't parse to `unparsed`, keyed by their content. The first
-    sighting of a filing is kept."""
+def _collect_rows(found: _Found, rows: list) -> None:
+    """Add a results page's rows to `found.by_id`, keyed by filing, and the
+    rows that don't parse to `found.unparsed`, keyed by their content. The
+    first sighting of a filing is kept; a filing seen again is noted in
+    `found.repeated`."""
     for row in rows:
         parsed = _parse_search_row(row)
         if parsed is None:
-            unparsed.add(repr(row))
+            found.unparsed.add(repr(row))
+            continue
+        fid = senate_filing_id(parsed["report_url"])
+        if fid in found.by_id:
+            found.repeated.add(fid)
         else:
-            by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
+            found.by_id[fid] = parsed
 
 
 _REPORT_VERSION_RE = re.compile(r"\bfor (\d{1,2}/\d{1,2}/\d{4})(?:\s*\(Amendment (\d+)\))?", re.IGNORECASE)

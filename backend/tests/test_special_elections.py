@@ -175,6 +175,19 @@ class TestTheSpecialsCount:
         live._alerts(row, "ok", read)
         assert row.votes_counted == 5 and "special-dropped-2027-03-02-TX-H-7-SG" in sent
 
+    def test_a_counted_contest_renamed_past_the_reader_is_placed_by_its_candidates(self, db_session):
+        tallies = json.dumps([{"name": "Bo Roe", "party": "R", "votes": 60}, {"name": "Ann Doe", "party": "D", "votes": 40}])
+        row = _special(db_session, votes_counted=100, tallies=tallies)
+        renamed = ContestCount(office="", district=None, candidates=[("Ann Doe", "D", 50), ("Bo Roe", "R", 70)])
+        other = ContestCount(office="", district=None, candidates=[("Ann Doe", "D", 1), ("Cy Poe", "R", 2)])
+        read = _read()
+        read.count.unplaced = [renamed, other]
+        assert live.apply_special(db_session, row, read) == "ok"
+        assert row.votes_counted == 120
+        # Two contests with the same candidates: neither is guessed.
+        read.count.unplaced = [renamed, renamed]
+        assert live.apply_special(db_session, row, read) == "not_listed"
+
     def test_window_and_types(self, db_session, monkeypatch):
         monkeypatch.setattr(live, "live_results_states", lambda: {"TX"})
         _special(db_session)

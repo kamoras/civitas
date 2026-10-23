@@ -202,20 +202,18 @@ describe("ElectionsPage", () => {
       "/elections/states/GA"
     );
     expect(within(picker).getByRole("link", { name: /^Georgia/ })).toHaveTextContent("R+3");
-    const map = await screen.findByTestId("race-map");
     const follows = (a: Node, b: Node) =>
       !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    // The map is the lean picture, under the tiles.
-    expect(follows(picker, map)).toBe(true);
+    // No map repeats the tiles: each tile carries its state's lean.
+    expect(screen.queryByTestId("race-map")).not.toBeInTheDocument();
     // Registration closing: one line to the calendar, not a row per state.
     const line = screen.getByRole("link", { name: /Registration closes in the next 10 days/ });
     expect(line).toHaveTextContent("in 2 states, soonest tomorrow");
     expect(line).toHaveAttribute("href", "/elections/calendar");
     expect(follows(picker, line)).toBe(true);
-    expect(follows(line, map)).toBe(true);
-    // The FEC's filing deadline is for candidates: after the map.
+    // The FEC's filing deadline is for candidates: after the directory.
     const fec = screen.getByRole("region", { name: /FEC|report/i });
-    expect(follows(map, fec)).toBe(true);
+    expect(follows(line, fec)).toBe(true);
   });
 
   it("makes the header's state the first tap", async () => {
@@ -457,22 +455,22 @@ describe("ElectionsPage", () => {
     render(<ElectionsPage />);
 
     expect(await screen.findByRole("link", { name: /^Georgia/ })).toBeInTheDocument();
-    expect(screen.getByTestId("race-map")).toBeInTheDocument();
+    expect(screen.queryByText(/lean Democratic/)).not.toBeInTheDocument();
   });
 
-  it("counts each lean direction for the map key", async () => {
+  it("counts each lean direction beside the directory's heading", async () => {
     fetchPviMap.mockResolvedValue({ states: { GA: 3, NY: -10 }, districts: {}, cycleYear: 2026 });
     render(<ElectionsPage />);
 
-    expect(await screen.findByText(/D-leaning/)).toBeInTheDocument();
-    expect(screen.getByText(/R-leaning/)).toBeInTheDocument();
+    expect(await screen.findByText(/lean Democratic/)).toBeInTheDocument();
+    expect(screen.getByText(/lean Republican/)).toBeInTheDocument();
   });
 
   it("keeps DC out of the directory — it has no federal race to link to", async () => {
     fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
     render(<ElectionsPage />);
 
-    await screen.findByTestId("race-map");
+    await screen.findByRole("link", { name: /^Georgia/ });
     expect(
       screen.queryByRole("link", { name: /^(DC|District of Columbia)/ })
     ).not.toBeInTheDocument();
@@ -485,7 +483,7 @@ describe("ElectionsPage", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
     render(<ElectionsPage />);
-    await screen.findByText(/D-leaning/);
+    await screen.findByText(/lean Democratic/);
     const settled = mapFill.renders;
     await act(async () => {
       vi.advanceTimersByTime(10_000);
@@ -511,7 +509,7 @@ describe("ElectionsPage", () => {
     expect(screen.getByText(/leads in a seat Democrats hold/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Senate" })).toHaveAttribute("aria-pressed", "true");
     // The lean key is gone: the map now shades by the count.
-    expect(screen.queryByText(/D-leaning/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/lean Democratic/)).not.toBeInTheDocument();
     expect(statusRegion()).toHaveTextContent(/^Live$/);
     expect(statusLine()).toHaveTextContent("Live · Last change Nov 3, 9:42 PM ET");
     // How often the count is really read, not "refreshed every minute".
@@ -548,15 +546,15 @@ describe("ElectionsPage", () => {
     expect(document.body).not.toHaveTextContent(/midterm/i);
   });
 
-  it("holds the lean map back until it knows whether results are on", async () => {
+  it("holds the leans back until it knows whether results are on", async () => {
     fetchPviMap.mockResolvedValue({ states: { GA: 3, NY: -10 }, districts: {}, cycleYear: 2026 });
     let answer: (v: unknown) => void = () => {};
     fetchLiveResults.mockReturnValue(new Promise((r) => (answer = r)));
     render(<ElectionsPage />);
     await screen.findByRole("heading", { level: 1 });
-    expect(screen.queryByText(/D-leaning/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/lean Democratic/)).not.toBeInTheDocument();
     answer(CAMPAIGN);
-    expect(await screen.findByText(/D-leaning/)).toBeInTheDocument();
+    expect(await screen.findByText(/lean Democratic/)).toBeInTheDocument();
   });
 
   it("says so when it couldn't check for results, and shows the ballot page", async () => {
@@ -737,7 +735,7 @@ describe("ElectionsPage", () => {
     fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
     fetchLiveResults.mockResolvedValueOnce(CAMPAIGN).mockResolvedValue(RESULTS);
     render(<ElectionsPage />);
-    expect(await screen.findByText(/R-leaning/)).toBeInTheDocument();
+    expect(await screen.findByText(/lean Republican/)).toBeInTheDocument();
     // Near election day the campaign page keeps asking; a tab shown again
     // asks at once rather than waiting out the ten minutes.
     await act(async () => {
@@ -756,7 +754,7 @@ describe("ElectionsPage", () => {
     fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
     fetchLiveResults.mockResolvedValueOnce(CAMPAIGN).mockResolvedValue(RESULTS);
     render(<ElectionsPage />);
-    await screen.findByText(/R-leaning/);
+    await screen.findByText(/lean Republican/);
     const status = document.querySelector("header [role=status]");
     expect(status).not.toBeNull();
     expect(status).toHaveTextContent("");

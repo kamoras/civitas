@@ -64,6 +64,7 @@ from app.pipeline.fetch.ballot_measures_tx import fetch_measures as tx_fetch_mea
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
 from app.pipeline.fetch.ballot_measures_ct import fetch_measures as ct_fetch_measures
 from app.pipeline.fetch.ballot_measures_me import fetch_measures as me_fetch_measures
+from app.pipeline.fetch.ballot_measures_me import self_check as me_self_check
 from app.pipeline.fetch.ballot_measures_nj import fetch_measures as nj_fetch_measures
 from app.pipeline.fetch.ballot_measures_vt import parse_document as parse_vt_document
 from app.pipeline.fetch.ballot_measures_wv import fetch_measures as wv_fetch_measures
@@ -243,6 +244,16 @@ STRATEGIES = {
 # strategy function does its own end-to-end fetching and hands back
 # (parsed, source_url) pairs directly. See each module's own docstring
 # for why that state specifically needs this and most states don't.
+# A reader's self-check, for a document that exists only in a year with a
+# measure: `async (client, year) -> str | None`, the reader run on an
+# earlier year's document from an official archive, None when it reads it
+# whole. While this year's document is not published, a passing self-check
+# means the reader works and "not published" is the state's answer
+# (election_pipeline._late_cycle_check).
+SELF_CHECKS = {
+    "me_citizens_guide": me_self_check,
+}
+
 MULTI_DOCUMENT_STRATEGIES = {
     "ca_voter_guide_html": ca_fetch_measures,
     "va_referenda": va_fetch_measures,

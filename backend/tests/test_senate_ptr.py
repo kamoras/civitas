@@ -12,6 +12,7 @@ launch itself is checked only for which browser it starts (full Chromium).
 """
 
 import json
+import pathlib
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +20,8 @@ import pytest
 from app.pipeline.fetch import senate_ptr
 from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.fetch.ptr_common import TradeRow
+
+FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "senate_efd"
 
 
 def _search_row(first, last, path="/search/view/ptr/abc123/", filed="7/1/2026", office="Senator"):
@@ -209,9 +212,10 @@ class TestScrapeViaPage:
         assert agree_clicks == [1]
 
     @pytest.mark.asyncio
-    async def test_no_search_response_returns_empty(self, monkeypatch):
+    async def test_no_search_response_is_an_outage_not_no_filings(self, monkeypatch):
         # "Search Reports" click never fires a response — page structure
-        # changed, or the gate blocked it. Must not hang or raise.
+        # changed, or the gate blocked it. Must not hang, and must not read
+        # as a search that found nothing.
         page = _FakePage({
             ("locator", "#agree_statement"): _FakeLocator(count=0),
         })
@@ -221,9 +225,25 @@ class TestScrapeViaPage:
 
         monkeypatch.setattr(senate_ptr, "_wait_until", _fast_wait)
 
-        filings = await senate_ptr._scrape_via_page(page, "")
+        with pytest.raises(senate_ptr.SearchUnavailable, match="no response"):
+            await senate_ptr._scrape_via_page(page, "")
 
-        assert filings == []
+    @pytest.mark.asyncio
+    async def test_a_response_that_is_not_json_is_an_outage(self):
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+
+        class _NotJson(_FakeSearchResponse):
+            async def json(self):
+                raise ValueError("an HTML challenge page")
+
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(_NotJson(None)))
+
+        with pytest.raises(senate_ptr.SearchUnavailable, match="not JSON"):
+            await senate_ptr._scrape_via_page(page, "")
 
     @pytest.mark.asyncio
     async def test_pagination_stops_when_next_disabled(self):
@@ -390,7 +410,9 @@ class TestRepeatedRowsAcrossPages:
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
         ]
-        page, fire = _search_page(pages)
+        # The filer's own search, run because A came twice, finds A only.
+        filer_search = {"recordsTotal": 1, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]}
+        page, fire = _search_page([*pages, filer_search])
         next_button = _FakeLocator(attr="paginate_button next")
 
         def last_page():
@@ -406,6 +428,40 @@ class TestRepeatedRowsAcrossPages:
         assert [f["first"] for f in filings] == ["A"]
         assert "didn't load" not in caplog.text
         assert "showed 1 distinct rows of 2" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_a_report_displaced_across_pages_is_found_by_its_filers_own_search(self, caplog):
+        """The recorded 2026-10-22 annual search: ordered by last then first
+        name only, one filer's reports straddled a page boundary, one came
+        on two pages and another on none (237 distinct of 238). The filer's
+        own search returns both, and every filing is read."""
+        recorded = json.loads((FIXTURES / "annual_search_2026-10-22.json").read_text())
+        pages = recorded["search"]
+        page, fire = _search_page([*pages, recorded["filer_search"]])
+        next_button = _FakeLocator(attr="paginate_button next")
+        clicks = []
+
+        def next_page():
+            clicks.append(1)
+            fire()
+            if len(clicks) == len(pages) - 1:
+                next_button._attr += " disabled"
+
+        next_button._on_click = next_page
+        page._locators[("text", "Next")] = next_button
+        last_name = _FakeLocator()
+        page._locators[("locator", 'input[name="last_name"]')] = last_name
+
+        with caplog.at_level("WARNING", logger=senate_ptr.logger.name):
+            filings = await senate_ptr._scrape_via_page(
+                page, "2025-01-01", senate_ptr.ANNUAL_REPORT_TYPE, senate_ptr.SENATOR_FILER_TYPE)
+
+        main_ids = {senate_ptr._parse_search_row(r)["report_url"] for p in pages for r in p["data"]}
+        assert len(main_ids) == 237 and pages[0]["recordsTotal"] == 238
+        assert len({f["report_url"] for f in filings}) == len(filings) == 238
+        repeated = [senate_ptr._parse_search_row(r) for r in recorded["filer_search"]["data"]]
+        assert last_name.filled == repeated[0]["last"]
+        assert "distinct rows" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -442,3 +498,54 @@ async def test_search_launches_full_chromium_not_the_headless_shell(monkeypatch)
     assert await senate_ptr.search_ptr_filings("2026-10-01") == [{"report_url": "x"}]
     assert launches == [{"headless": True, "channel": "chromium"}]
     assert closed == [True]
+
+def _launcher(monkeypatch, scrape):
+    """search_filings against a fake browser whose scrape is `scrape`."""
+
+    class _Browser:
+        async def new_page(self):
+            return SimpleNamespace(set_default_timeout=lambda ms: None)
+
+        async def close(self):
+            pass
+
+    class _Playwright:
+        async def __aenter__(self):
+            async def launch(**kwargs):
+                return _Browser()
+            return SimpleNamespace(chromium=SimpleNamespace(launch=launch))
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(senate_ptr, "async_playwright", _Playwright)
+    monkeypatch.setattr(senate_ptr, "_scrape_via_page", scrape)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_search_is_tried_again_in_a_fresh_browser(monkeypatch):
+    attempts = []
+
+    async def scrape(page, since_date, report_type, filer_type):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise senate_ptr.SearchUnavailable("the search form produced no response")
+        return [{"report_url": "x"}]
+
+    _launcher(monkeypatch, scrape)
+
+    assert await senate_ptr.search_filings("2025-01-01", senate_ptr.ANNUAL_REPORT_TYPE) == [{"report_url": "x"}]
+    assert len(attempts) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_search_that_keeps_failing_raises_with_its_cause(monkeypatch):
+    """Never an empty list: holdings would read it as a site that changed,
+    and the PTR ingest as a night with no new trades."""
+    async def scrape(page, since_date, report_type, filer_type):
+        raise RuntimeError("Target page, context or browser has been closed")
+
+    _launcher(monkeypatch, scrape)
+
+    with pytest.raises(senate_ptr.SearchUnavailable, match="failed 2 times.*RuntimeError: Target page"):
+        await senate_ptr.search_filings("2025-01-01", senate_ptr.ANNUAL_REPORT_TYPE)

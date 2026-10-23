@@ -884,9 +884,10 @@ async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str
     # report until their first annual one.
     filings = await search_annual_filings(f"{min(_report_years())}-01-01")
     if not any(is_senator_filing(f) and is_annual_title(f.get("title") or "") for f in filings):
-        # Every senator files one every year; none across two years means
-        # the search broke (search_filings returns [] on any failure).
-        raise RuntimeError("Senate eFD annual-report search returned no senators' reports")
+        # Every senator files one every year; none across two years, from a
+        # search that answered (a failed one raises SearchUnavailable), means
+        # the form or its results changed under the reader.
+        raise RuntimeError("Senate eFD annual-report search answered with no senators' reports")
     per_senator: dict[str, list[dict]] = {}
     match = FilerMatcher(current_senators(db), match_senator)
     for filing in filings:

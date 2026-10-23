@@ -29,9 +29,17 @@ Playwright network trace of the new page. It's unauthenticated JSON, filtered
 server-side by a `name` column search, so the response for one president is a
 few dozen rows rather than the full multi-thousand-row index, and returns
 that president's 278-T filings with direct `$FILE/....pdf` links.
+
+In 2026-10 OGE moved that endpoint from v2 to v3 (v2 answers an HTML
+session page): when OGE_API_URL can't be read or lists nothing, the
+endpoint OGE's own search page declares (`apiUrl`) is read instead. A
+zero is told from a broken reader by the reader's self-check, the same
+request and parser for the most recent former president, so a new
+president who hasn't filed yet is not alerted.
 """
 
 import hashlib
+import html
 import logging
 import re
 from dataclasses import asdict
@@ -42,6 +50,7 @@ from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.fetch.ptr_common import TradeRow, parse_pdf_bytes
@@ -55,7 +64,15 @@ logger = logging.getLogger(__name__)
 # page's own filing table calls client-side. The White House also posts the
 # same PDFs under its own /wp-content/uploads/ paths, which is why both
 # hosts are allowed for the per-filing download below.
-OGE_API_URL = "https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v2/rest"
+OGE_API_URL = "https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v3/rest"
+# The search page itself, which declares the endpoint its table reads
+# (`apiUrl`). OGE moved it from v2 to v3 in 2026-10 (v2 now answers an HTML
+# session page, never JSON: the last index read here was 2026-10-01); when
+# OGE_API_URL stops answering, the endpoint is read from this page instead.
+OGE_SEARCH_PAGE = (
+    "https://www.oge.gov/web/oge.nsf/Officials%20Individual%20Disclosures%20Search%20Collection?OpenForm"
+)
+_API_URL_RE = re.compile(r"https://extapps2\.oge\.gov/[^\"'\s<>&]+/rest")
 
 # The columns this DataTables endpoint expects to be told about, in order.
 # Documented data-format convention (the API's own contract), not a
@@ -304,57 +321,102 @@ async def fetch_ptr_filing_index(db: Session, president_name: str) -> list[dict]
     if cached is not None:
         return cached
 
-    surname_tokens = _significant_name_tokens(president_name)
-    surname = surname_tokens[-1] if surname_tokens else president_name
-
-    resp = await fetch_with_retry_requests(
-        _rate_limiter, "GET", OGE_API_URL, log_label="OGE presidential disclosure index",
-        params=_oge_api_params(surname),
-    )
-    if resp is None or resp.status_code != 200:
-        logger.warning("Failed to fetch OGE presidential disclosure index (%s)", OGE_API_URL)
-        return []
-
-    try:
-        filings = _parse_index(resp.json().get("data") or [], president_name)
-    except Exception:
-        logger.exception("Failed to parse OGE presidential disclosure index")
+    slug = president_name.lower().replace(" ", "-")
+    condition = f"president-ptr-empty-index-{slug}"
+    filings = await _filings_for(president_name)
+    if filings is None:
+        logger.warning("OGE presidential disclosure index could not be read (%s, or the search page's endpoint)",
+                       OGE_API_URL)
         return []
 
     if not filings:
-        # Never cached as a real result: a zero here is far more likely to be
-        # a changed API contract than a president who has filed nothing, and
-        # caching it would hide the breakage for a day at a time. See this
-        # module's docstring on why that failure mode is the one to guard
-        # against.
-        #
-        # Alerted, not just logged: nothing downstream can tell "the API
-        # contract moved" from "no filings exist" — both render as a card
-        # with no disclosure section — so a human has to look. Deduped per
-        # president so a genuinely-empty result (a just-inaugurated
-        # president who hasn't filed yet) costs one alert, not one per
-        # nightly run.
-        logger.warning(
-            "OGE disclosure API returned 0 periodic transaction reports for %s — "
-            "the response contract may have changed (see president_ptr.py module docstring)",
-            president_name,
-        )
+        # Never cached: a zero can be a changed API contract as well as a
+        # president who has filed nothing yet (a new term). The reader's
+        # self-check tells them apart: the same request and parser for the
+        # most recent former president, who has filed. A pass means the
+        # zero is the index's own answer; nothing is alerted.
+        former = _former_president(db, president_name)
+        checked = await _filings_for(former) if former else None
+        if checked:
+            logger.info("OGE index lists no filing for %s yet; the reader read %d for %s (self-check passed)",
+                        president_name, len(checked), former)
+            from app.ops_alerts import resolve_ops_alert
+
+            resolve_ops_alert(condition)
+            return []
         _alert(
             "Presidential 278-T index parsed to zero filings",
-            f"{OGE_API_URL} fetched successfully but yielded no periodic transaction "
-            f"reports for {president_name}. Either the API contract changed (see "
-            f"president_ptr.py's LIVE-VERIFIED note) or this president has genuinely "
-            f"filed none yet — the parser cannot tell these apart. Check the live page.",
-            dedupe_key=f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}",
-            condition=f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}",
+            f"The OGE disclosure index (the search page's declared endpoint and {OGE_API_URL}) answered but "
+            f"yielded no filing for {president_name}, and the reader's self-check on "
+            f"{former or 'a former president'} yielded none either. The president's stored trades and "
+            "holdings stay as last read; the stock-trades run reads the index again tomorrow, the endpoint "
+            "re-read from OGE's search page.",
+            dedupe_key=f"president-ptr-empty-index-{slug}",
+            condition=condition,
         )
         return []
 
     api_cache_set(db, _CACHE_TIER, cache_key, filings, normal_ttl_hours=_INDEX_MAX_AGE_HOURS)
     from app.ops_alerts import resolve_ops_alert
 
-    resolve_ops_alert(f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}")
+    resolve_ops_alert(condition)
     return filings
+
+
+def _former_president(db: Session, president_name: str) -> str | None:
+    """The most recent former president on the roster (the self-check's
+    filer): someone who has filed with OGE, read from stored data."""
+    row = (
+        db.query(President.name)
+        .filter(President.is_current.is_(False), President.term_end.isnot(None), President.name != president_name)
+        .order_by(President.term_end.desc())
+        .first()
+    )
+    return row[0] if row else None
+
+
+async def _index_rows(url: str, surname: str) -> list[dict] | None:
+    """The index's rows for `surname` from endpoint `url`; None when it
+    can't be read or answers anything but its JSON."""
+    resp = await fetch_with_retry_requests(
+        _rate_limiter, "GET", url, log_label="OGE presidential disclosure index", params=_oge_api_params(surname),
+    )
+    if resp is None or resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    rows = data.get("data") if isinstance(data, dict) else None
+    return rows if isinstance(rows, list) else None
+
+
+async def _declared_api_url() -> str | None:
+    """The endpoint OGE's own search page says its table reads."""
+    resp = await fetch_with_retry_requests(_rate_limiter, "GET", OGE_SEARCH_PAGE, log_label="OGE disclosure search page")
+    if resp is None or resp.status_code != 200:
+        return None
+    found = _API_URL_RE.findall(html.unescape(str(resp.text)))
+    return found[0] if found else None
+
+
+async def _filings_for(name: str) -> list[dict] | None:
+    """`name`'s filings from the index: OGE_API_URL first, then, if it
+    can't be read or lists none, the endpoint OGE's search page declares
+    (the route around a moved API). None when neither can be read."""
+    tokens = _significant_name_tokens(name)
+    surname = tokens[-1] if tokens else name
+    rows = await _index_rows(OGE_API_URL, surname)
+    filings = _parse_index(rows, name) if rows is not None else []
+    if filings:
+        return filings
+    declared = await _declared_api_url()
+    if declared and declared != OGE_API_URL:
+        logger.warning("OGE's search page declares %s, not %s: reading it", declared, OGE_API_URL)
+        moved = await _index_rows(declared, surname)
+        if moved is not None:
+            return _parse_index(moved, name)
+    return None if rows is None else filings
 
 
 async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow] | None:
