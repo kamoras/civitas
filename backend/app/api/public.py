@@ -26,7 +26,8 @@ import re
 import typing
 from datetime import date, datetime, timezone
 from email.utils import format_datetime
-from typing import Literal
+from types import UnionType
+from typing import Literal, Union, get_args, get_origin
 from urllib.parse import parse_qsl, urlencode
 
 from collections.abc import Awaitable, Callable
@@ -37,6 +38,7 @@ from fastapi.responses import Response
 
 from app.api.response_helpers import JSONResponse
 from fastapi.routing import APIRoute
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -73,6 +75,8 @@ from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
     API_V1_SUNSET,
+    is_deprecated,
+    v1_deprecated_served,
     PublicAgencyDetailSchema,
     PublicAgencyListSchema,
     PublicApiIndexSchema,
@@ -199,6 +203,7 @@ class _CountedRoute(APIRoute):
         if not self.include_in_schema:
             return handler
         endpoint = self.name
+        model = self.response_model
         params = {f.alias: f for f in _query_fields(self.dependant)}
         choices = {name: _literal_values(f.field_info.annotation) for name, f in params.items()}
 
@@ -234,6 +239,11 @@ class _CountedRoute(APIRoute):
                 record_api_request(endpoint, channel, 500)
                 raise
             record_api_request(endpoint, channel, response.status_code)
+            if model is not None and isinstance(response, JSONResponse) and not v1_deprecated_served():
+                # Past the sunset: the deprecated fields stop being served.
+                headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+                return JSONResponse(content=strip_deprecated(json.loads(response.body), model),
+                                    status_code=response.status_code, headers=headers)
             return response
 
         return counted
@@ -282,6 +292,31 @@ _DEPRECATION_HEADERS = {
 }
 
 
+def strip_deprecated(data, annotation):
+    """`data` (a response body) without the fields `annotation`'s models
+    mark deprecated, at any depth: what a v1 response is after the sunset."""
+    origin = get_origin(annotation)
+    if origin in (Union, UnionType):
+        for arg in get_args(annotation):
+            if (isinstance(data, dict) and (_is_model(arg) or get_origin(arg) is dict)) or \
+                    (isinstance(data, list) and get_origin(arg) is list):
+                return strip_deprecated(data, arg)
+        return data
+    if origin is list and isinstance(data, list):
+        return [strip_deprecated(v, get_args(annotation)[0]) for v in data]
+    if origin is dict and isinstance(data, dict):
+        return {k: strip_deprecated(v, get_args(annotation)[1]) for k, v in data.items()}
+    if _is_model(annotation) and isinstance(data, dict):
+        fields = {(f.alias or name): f for name, f in annotation.model_fields.items()}
+        return {k: strip_deprecated(v, fields[k].annotation) if k in fields else v
+                for k, v in data.items() if not (k in fields and is_deprecated(fields[k]))}
+    return data
+
+
+def _is_model(annotation) -> bool:
+    return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
 def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S, deprecated: bool = False) -> JSONResponse:
     # private: the caller's browser may reuse it, a shared cache (nginx, a
     # CDN) may not — the X-RateLimit headers are this caller's own counts,
@@ -292,7 +327,7 @@ def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S, deprecate
             "Cache-Control": f"private, max-age={max_age}",
             **_CORS_HEADERS,
             **_rl_headers(request),
-            **(_DEPRECATION_HEADERS if deprecated else {}),
+            **(_DEPRECATION_HEADERS if deprecated and v1_deprecated_served() else {}),
         },
     )
 
@@ -319,6 +354,17 @@ _CSV_RESPONSES = {200: {"description": "CSV with one header row; columns as desc
 Columns = list[tuple[str, str]]
 
 
+# A column served only while v1's deprecated fields are (schemas.API_V1_SUNSET):
+# its description starts with this, and _csv drops it from the day after.
+_DEPRECATED_COLUMN = f"deprecated, served through {API_V1_SUNSET}, not after: "
+
+
+def _served(columns: Columns) -> Columns:
+    """The columns a CSV writes today: the deprecated ones only through
+    the sunset."""
+    return columns if v1_deprecated_served() else [c for c in columns if not c[1].startswith(_DEPRECATED_COLUMN)]
+
+
 def _csv_doc(intro: str, columns: Columns) -> str:
     """A CSV route's description: what it is, its license, then every column
     from the same list the file is written from, so the two can't drift."""
@@ -332,6 +378,7 @@ def _csv(rows: list[dict], columns: Columns, filename: str, request: Request,
     """rows as CSV, one column per `columns` entry, read from the row's key
     of the same name. A None is an empty cell; a bool is true or false; a
     list is joined with semicolons."""
+    columns = _served(columns)
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow([name for name, _ in columns])
@@ -834,14 +881,15 @@ _DIMENSIONS = (("fundingIndependence", "funding_independence"), ("constituentAli
 
 def _score_columns(house: bool) -> Columns:
     return [
-        ("rank", "place in the whole chamber by overall score, as the site shows it (equal displayed scores "
-                 "share a rank)"),
+        ("rank", _DEPRECATED_COLUMN + "place in the whole chamber by overall score, as the site showed it "
+                 "(equal displayed scores share a rank)"),
         ("id", "the member's Civitas id"), ("name", "the member's name"), ("party", "D, R or I"),
         ("state", "two-letter state code"),
         *([("district", "congressional district; 0 for an at-large seat")] if house else []),
-        ("overall", "the representation score, 0-100 (the weighted sum of the three weighted parts)"),
-        *[(col, f"the {col.replace('_', ' ')} score, 0-100 (deprecated: removed in v2; member pages no "
-                f"longer show it)") for _, col in _DIMENSIONS],
+        ("overall", _DEPRECATED_COLUMN + "the representation score, 0-100 (the weighted sum of the three "
+                    "weighted parts)"),
+        *[(col, _DEPRECATED_COLUMN + f"the {col.replace('_', ' ')} score, 0-100 (member pages no longer show it)")
+          for _, col in _DIMENSIONS],
         *[(f"{col}_data", f"how much data backs {col.replace('_', ' ')}: high, medium or low")
           for _, col in _DIMENSIONS],
         ("thin_data", "weighted parts with low data, semicolon-separated"),
@@ -1341,23 +1389,23 @@ def _presidents(db: Session) -> list[dict]:
 def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     """Every president's record: approval, the economy, executive orders and
     the C-SPAN historians' points. The 0-100 score and rank are deprecated
-    (the site stopped showing them) and are removed in API v2. A sitting
+    (the site stopped showing them), served through the v1 sunset and not after. A sitting
     president is listed last, unranked: the term isn't complete."""
     rows = _presidents(db)
     return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S, deprecated=True)
 
 
 _PRESIDENT_COLUMNS: Columns = [
-    ("rank", "deprecated, removed in API v2: place among former presidents by Presidential Score; empty for a "
+    ("rank", _DEPRECATED_COLUMN + "place among former presidents by Presidential Score; empty for a "
              "sitting president"),
     ("id", "the president's Civitas id"), ("name", "the president's name"), ("party", "the party"),
     ("number", "which president (1 for the first)"), ("term_start", "YYYY-MM-DD"),
     ("term_end", "YYYY-MM-DD; empty while serving"), ("is_current", "true for a sitting president"),
-    ("overall", "deprecated, removed in API v2: the Presidential Score, 0-100"),
-    ("public_mandate", "deprecated, removed in API v2: Public Mandate, 0-100; empty where it doesn't apply"),
-    ("effectiveness", "deprecated, removed in API v2: Effectiveness, 0-100; empty where it doesn't apply"),
-    ("historical_legacy", "deprecated, removed in API v2: Historical Legacy, 0-100; empty where it doesn't apply"),
-    ("dimensions_available", "deprecated, removed in API v2: how many of the three parts are scored"),
+    ("overall", _DEPRECATED_COLUMN + "the Presidential Score, 0-100"),
+    ("public_mandate", _DEPRECATED_COLUMN + "Public Mandate, 0-100; empty where it doesn't apply"),
+    ("effectiveness", _DEPRECATED_COLUMN + "Effectiveness, 0-100; empty where it doesn't apply"),
+    ("historical_legacy", _DEPRECATED_COLUMN + "Historical Legacy, 0-100; empty where it doesn't apply"),
+    ("dimensions_available", _DEPRECATED_COLUMN + "how many of the three parts are scored"),
     ("avg_approval", "average approval over the term, percent; empty before polling"),
     ("election_margin", "average margin of victory in the president's own election wins, points; set "
                         "only before polling"),

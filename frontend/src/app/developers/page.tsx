@@ -366,8 +366,8 @@ export default async function DevelopersPage() {
             <Section id="deprecations" title="Deprecations">
               <Boxes>
                 <Box
-                  title="What goes in version 2"
-                  dek="The composite score, ranks and 0 to 100 scores stay in version 1 and are removed in version 2, after January 4, 2027."
+                  title="What stops being served"
+                  dek="The composite score, ranks and 0 to 100 scores are served through January 4, 2027, and not after."
                   more="why, and every field"
                 >
                   <p>
@@ -375,9 +375,10 @@ export default async function DevelopersPage() {
                     October 2026, and then presidents&apos; 0 to 100 scores: a weighted average of
                     unlike measures carries a judgment its weights decide, and a rank turns a
                     measurement into a verdict. Member pages then stopped showing the 0 to 100 part
-                    scores too, in favour of the figures behind them. These fields stay in version 1
-                    for one deprecation cycle and are removed in version 2, after{" "}
-                    <strong className="font-semibold">January 4, 2027</strong>:
+                    scores too, in favour of the figures behind them. These fields are served for
+                    one deprecation cycle, through{" "}
+                    <strong className="font-semibold">January 4, 2027</strong>; from the next day
+                    responses leave them out, and still match the schema below:
                   </p>
                   <ul className="list-disc pl-6">
                     <li>

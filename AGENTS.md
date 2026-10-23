@@ -301,7 +301,8 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 **No composite is displayed** (2026-10). The weighted Representation Score
 and its rank are not shown on any page; each is still computed for public
-API v1's deprecated `overall` and `rank` (removed in v2). What the site
+API v1's deprecated `overall` and `rank` (served through `schemas.API_V1_SUNSET`, then left out of
+responses by themselves, `public.strip_deprecated`). What the site
 shows is each measure against peers (`app/peer_comparison.py`): the member's
 figure, the seat-adjusted expected figure, the peers' distribution, and an
 evaluative word per measure ("well above / above / near / below / well below
@@ -2653,7 +2654,11 @@ the pending list).
   FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
   `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
   documented from one column list (`_csv`, `_csv_doc`): the contract test
-  checks its header against that list, and it is not an MCP tool.
+  checks its header against that list, and it is not an MCP tool. A field or column
+  being retired is marked deprecated (`json_schema_extra={"deprecated": True}`
+  with `default=None`; a column's description starting with
+  `_DEPRECATED_COLUMN`) and stops being served the day after
+  `schemas.API_V1_SUNSET` by itself, never by a person removing it on the day.
 - **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
   `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
   roll call names "H.R. 997"), so the API's `JSONResponse`

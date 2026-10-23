@@ -330,7 +330,6 @@ def _nightly_pipeline() -> None:
     uvicorn loop stays responsive during long-running pipeline phases.
     """
     from app.ops_alerts import (
-        check_api_v1_sunset,
         check_election_readiness,
         check_feedback_token_expiration,
         check_sitting_president,
@@ -362,9 +361,6 @@ def _nightly_pipeline() -> None:
             # (they refit by themselves, data_refresh; this says which
             # input a refit still waits on).
             check_election_map_training_staleness,
-            # Public API v1's deprecated fields past their dated sunset,
-            # and the unmeasured 0-100 transforms kept only to feed them.
-            check_api_v1_sunset,
         )
         for check in pre_checks:
             try:

@@ -8,8 +8,6 @@ current congress only. See AGENTS.md "current term" and fetch/congress.py.
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-import pytest
-
 from app.pipeline.fetch.congress import (
     _recent_congresses_only,
     congress_first_year,
