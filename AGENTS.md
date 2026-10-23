@@ -452,9 +452,32 @@ The correct pattern, established by `_district_pvi()` /
    until 2026-09, and when nine states redrew for 2026 editors swapped in
    new-map values district by district, leaving member scoring on a
    silent mix of two maps (TN-9 read R+9 for a member elected in a D+23
-   seat). The Supplementary run compares the live article with the newest
-   pin and raises an ops alert on a difference (once per distinct
-   difference); it never ingests it.
+   seat). New pins are adopted by rule, never typed
+   (`district_pvi.adopt_new_pins`, in the weekly Supplementary refresh):
+   a revision whose district table has stood 14 days unchanged in every
+   revision of the article, cites a Cook release in its district section
+   (the citation's title becomes the label, the section's two linked
+   presidential elections the window), passes every gate above against
+   the states `redrawn_congressional_maps.json` says redrew (a revision of
+   a pinned Congress's own table never takes on states that redraw for a
+   later election), and sits within the measured tolerance of Civitas's
+   computed lean on the same lines (the largest gap between any pinned
+   table and it, 1.7 points on the 120th's lines in 2026-10, plus one
+   point), and with which the whole set of pins still builds, is pinned
+   for the Congress it describes: the newest pinned one (a correction or
+   a court order), a newer one the coming election seats (new maps), or
+   for a new Cook window the sitting one. A median moved only by states
+   sent back to their old lines is explained from an earlier revision of
+   the same release, never assumed (`_explained_median_shift`). Adopted
+   pins and every refusal are recorded on the data volume
+   (`/data/district_pvi_sources.json`, merged over the bundled file; the
+   entry pinning the later revision wins), and an article that has
+   differed from the newest pin for 28 days without a revision meeting the
+   rule raises one factual ops alert saying why. Replayed over the
+   article's real history from the 119th pin alone, the rule adopted the
+   same revision as the hand-chosen 120th pin (2026-09-30, a day after it
+   was chosen), with the same redrawn states and the median tolerance
+   derived.
 
    "Sitting" is `settings.CURRENT_CONGRESS` — the same value the scored
    windows read (roll-call sessions, bills, Voteview ideal points), so a
@@ -534,9 +557,11 @@ The correct pattern, established by `_district_pvi()` /
    entry for it, and a pin advanced or a Congress added in the sources
    file (a correction, a court ruling) is fetched by the next House run,
    since the check compares each table's pinned `revid` with the file.
-   Without an entry for the sitting Congress, scoring stays on the newest
-   pinned lines, nothing is fetched for it, and one ops alert per
-   Congress asks for the entry. `scripts/fetch_district_pvi.py --congress N`
+   Without a pin for the sitting Congress, scoring stays on the newest
+   pinned lines until one is adopted; those are its lines when
+   `redrawn_congressional_maps.json` confirms no state redrew (no alert),
+   and a factual ops alert says which seats are read on earlier districts
+   otherwise. `scripts/fetch_district_pvi.py --congress N`
    regenerates the bundled pre-first-ingest fallback through the same
    code.
 

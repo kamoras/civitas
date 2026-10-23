@@ -50,16 +50,26 @@ tables already on disk (no restart, no fetch) once that Congress has an
 entry in the sources file, and a pin advanced or a Congress added there is
 fetched by the next House run rather than the next weekly refresh. If the
 sitting Congress has no entry, member scoring stays on the newest pinned
-lines before it, nothing is fetched for it, and one ops alert per Congress
-asks for the entry. No writer of the file (a refresh, another House
+lines before it and nothing is fetched for it until the weekly adoption
+check pins one (adopt_new_pins); an ops alert says so unless
+redrawn_congressional_maps.json confirms no state redrew, when those lines
+are the sitting Congress's. No writer of the file (a refresh, another House
 run's check) can change the lines while a House run is scoring.
 
 Supplementary re-runs the fetch weekly (idempotent — the pins don't move)
-and compares the article's CURRENT revision with the newest pinned table;
-a difference raises an ops alert asking someone to review and, if it is a
-correction or a court-ordered map change, advance the pin. It is never
-ingested on its own. Any fetch or gate failure keeps the previous file
-(never punitive), same contract as every other ingest in this package.
+and checks whether a newer revision of the article meets the adoption rule
+(adopt_new_pins, beside its section below): a table that has stood
+STAND_DAYS unchanged, cites a Cook release, passes every gate above against
+the states redrawn_congressional_maps.json says redrew, and agrees with
+Civitas's own computed lean within the measured tolerance is pinned for the
+Congress it describes — a correction, a court-ordered map, a new map for
+the coming election or a new release — with no edit here, and recorded on
+the data volume with its evidence (adopted_path). Replayed over the
+article's history from the 119th pin alone, the rule adopted the same
+revision as the hand-chosen 120th pin, on 2026-09-30, with the same
+redrawn states and the median tolerance derived. Any fetch or gate failure
+keeps the previous file (never punitive), same contract as every other
+ingest in this package.
 """
 
 import json
@@ -72,12 +82,13 @@ import urllib.parse
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import date
+from datetime import date, timedelta
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import runtime_data_path, write_text_atomic
 from app.contact import BOT_USER_AGENT
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
+from app.pipeline.fetch.congress import congress_first_year
 from app.pipeline.fetch.house_clerk import fetch_house_apportionment
 from app.pipeline.lease import STALE_S as LEASE_STALE_S
 from app.http_client import make_async_client
@@ -99,6 +110,9 @@ HEADERS = {"User-Agent": BOT_USER_AGENT}
 _PVI_PATH = "/data/district_pvi.json"
 SOURCES_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "district_pvi_sources.json"
 BUNDLED_PATH = SOURCES_PATH.parent / "district_pvi.json"
+# The pins adopt_new_pins adopted, on the data volume (adopted_path), merged
+# over the bundled ones by load_sources.
+ADOPTED_NAME = "district_pvi_sources.json"
 
 # A weekly handful of requests to a large public site needs no aggressive
 # pacing; Wikimedia does answer bursts with 429, which the retry backs off
@@ -465,14 +479,50 @@ _sources_lock = new_reload_lock()
 
 
 def load_sources(path: pathlib.Path | None = None) -> dict:
-    """The parsed sources file. Shared: callers read it, never change it.
-    Raises when it can't be read or parsed (not cached)."""
-    path = path or SOURCES_PATH
+    """The parsed sources: `path` alone when given, otherwise the bundled
+    file with the pins adopted at runtime merged over it (merge_adopted).
+    Shared: callers read it, never change it. Raises when the bundled file
+    can't be read or parsed (not cached); an unreadable adopted file is
+    left out, which serves the bundled pins."""
+    paths = [path] if path is not None else [SOURCES_PATH, adopted_path()]
+    key = tuple(paths)
     with _sources_lock:
-        cached, stamp = _sources_cache.get(path, (None, None))
-        cached, stamp = reload_if_moved([path], cached, stamp, lambda: json.loads(path.read_text()))
-        _sources_cache[path] = (cached, stamp)
+        cached, stamp = _sources_cache.get(key, (None, None))
+        cached, stamp = reload_if_moved(paths, cached, stamp, lambda: _read_sources(paths))
+        _sources_cache[key] = (cached, stamp)
         return cached
+
+
+def _read_sources(paths: list[pathlib.Path]) -> dict:
+    sources = json.loads(paths[0].read_text())
+    if len(paths) > 1:
+        try:
+            adopted = json.loads(paths[1].read_text())
+        except FileNotFoundError:
+            adopted = {}
+        except (OSError, ValueError):
+            logger.warning("district-pvi: adopted pins unreadable — serving the bundled pins", exc_info=True)
+            adopted = {}
+        sources = merge_adopted(sources, adopted if isinstance(adopted, dict) else {})
+    return sources
+
+
+def merge_adopted(bundled: dict, adopted: dict) -> dict:
+    """The bundled pins with the adopted ones over them: per Congress, the
+    entry pinning the later revision wins, so an adoption replaces the
+    bundled pin it was measured against and a later bundled pin (shipped
+    in a release) replaces an older adoption."""
+    congresses = dict(bundled.get("congresses") or {})
+    for c, entry in (adopted.get("congresses") or {}).items():
+        have = congresses.get(c)
+        if have is None or str(entry.get("revision_timestamp") or "") > str(have.get("revision_timestamp") or ""):
+            congresses[c] = entry
+    return {**bundled, "congresses": congresses}
+
+
+def adopted_path() -> pathlib.Path:
+    """Where the pins adopted by rule live (the data volume): see adopt_new_pins."""
+    return pathlib.Path(runtime_data_path(ADOPTED_NAME))
 
 
 def congress_for_election(year: int) -> int:
@@ -550,7 +600,7 @@ async def build_payload(
 
     A sitting Congress with no entry in the sources file is NOT a failure
     here: the configured tables are still written (so the weekly refresh
-    and the live-drift check keep working), with the newest table at or
+    and the adoption check keep working), with the newest table at or
     below the sitting Congress as the top-level one — the latest lines
     known. _ensure_sitting_lines raises the ops alert for the missing
     entry, once per Congress."""
@@ -901,43 +951,498 @@ def _diff_digest(changed: list[str], pinned: dict[str, int], live: dict[str, int
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
-async def _check_live_drift(sources: dict, payload: dict) -> list[str]:
-    """Compare the article's current table with the newest pinned one.
-    Informational only — a difference is reported for someone to review
-    (a correction, or a court-ordered map change, means advancing the pin);
-    nothing from the live revision is ever written."""
-    page = sources["page"]
-    newest = max(sources["congresses"], key=int)
-    pinned_revid = sources["congresses"][newest]["revid"]
-    live = await _fetch_revision(page=page)
-    if live is None or live.get("revid") == pinned_revid:
-        return []
-    table, problems = parse_district_table(live.get("content") or "")
-    if problems:
-        logger.info("district-pvi: live revision %s did not parse cleanly (%s)", live.get("revid"), problems[0])
-        return []
-    pinned = payload["congresses"][newest]["districts"]
-    changed = sorted(k for k in set(table) | set(pinned) if table.get(k) != pinned.get(k))
-    if changed:
-        from app.ops_alerts import send_ops_alert
-        sample = ", ".join(f"{k} {pinned.get(k)}->{table.get(k)}" for k in changed[:12])
-        logger.warning(
-            "district-pvi: live article revision %s differs from the pinned %s-Congress table in %d districts (%s)",
-            live.get("revid"), ordinal(int(newest)), len(changed), sample,
+# ── Adopting a revision by rule ────────────────────────────────────────
+#
+# Wikipedia's article moves on: a new Cook release, a state's new map, a
+# court sending a state back to its old one, a correction. A revision of it
+# is adopted as a Congress's pin, with no edit to the sources file, when:
+#
+# - its district table has stood STAND_DAYS unchanged in every revision of
+#   the article (so an edit war, a vandal's change, or an editor part-way
+#   through a release has been reverted or finished), and the revision is
+#   one of those;
+# - it cites a Cook release (the district section's own reference, on
+#   cookpolitical.com: its title becomes the pin's label) and names the two
+#   presidential elections it averages (its window);
+# - it passes every gate a hand-chosen pin passes (check_table: every seat
+#   once, its prose counts and median describe its table, and against the
+#   Congress it was redrawn from, exactly the states
+#   redrawn_congressional_maps.json says redrew changed, each keeping its
+#   mean lean); a median moved only by states held on their old lines is
+#   explained from the release's own earlier table, never assumed
+#   (_explained_median_shift);
+# - every district is within the measured tolerance of Civitas's own
+#   computed lean on the same lines, where district_lean.json has them
+#   (lean_disagreements);
+# - and the whole set of pins, with it, still builds (build_payload).
+#
+# Which Congress it pins: the newest pinned Congress (a correction or a
+# court order on its lines), a newer Congress the coming election seats
+# (new maps, once redrawn_congressional_maps.json lists that election), or,
+# for a release on a new window (Cook's post-election release), the sitting
+# Congress. The adoption, its evidence and every refusal are recorded on
+# the data volume (adopted_path), which load_sources merges over the
+# bundled pins.
+
+# The owner's rule (2026-10): two weeks unchanged.
+STAND_DAYS = 14
+_STAND = timedelta(days=STAND_DAYS)
+# Distinct revisions read per check: every one inside the standing time
+# (more than this in two weeks is an article in flux), and up to this many
+# before it. The article sees a few edits a month (12 distinct contents
+# between the 119th and 120th pins, six months apart).
+_MAX_REVISIONS = 50
+# History pages of 500 revisions read before giving up.
+_HISTORY_PAGES = 10
+_LOG_KEEP = 100
+UNADOPTED_CONDITION = "district-pvi-unadopted"
+NO_SOURCE_CONDITION = "district-pvi-no-source"
+
+_REF_RE = re.compile(
+    r'<ref\s+name\s*=\s*"?([^">/]+?)"?\s*/>|<ref(?:\s+name\s*=\s*"?([^">/]+?)"?)?\s*>(.*?)</ref>', re.S,
+)
+_ELECTION_YEAR_RE = re.compile(r"\[\[(\d{4}) United States presidential election")
+
+
+def _cite_field(body: str, name: str) -> str | None:
+    m = re.search(r"\|\s*%s\s*=\s*([^|}]*)" % name, body)
+    return m.group(1).strip() if m and m.group(1).strip() else None
+
+
+def parse_release(wikitext: str) -> dict | None:
+    """The Cook release the district section cites: {"title", "date",
+    "url", "year"} of the first reference in its prose (before the table)
+    that points at cookpolitical.com, resolving a named reference to its
+    definition anywhere in the article; None when it cites none."""
+    prose = (_district_section(wikitext) or "").split("{|")[0]
+    for m in _REF_RE.finditer(prose):
+        body = m.group(3)
+        if body is None:
+            d = re.search(r'<ref\s+name\s*=\s*"?%s"?\s*>(.*?)</ref>' % re.escape(m.group(1)), wikitext, re.S)
+            body = d.group(1) if d else ""
+        if "cookpolitical.com" not in body:
+            continue
+        title, when = _cite_field(body, "title"), _cite_field(body, "date")
+        year = re.search(r"\d{4}", when or "")
+        if title and year:
+            return {"title": title, "date": when, "url": _cite_field(body, "url"), "year": int(year[0])}
+    return None
+
+
+def parse_window(wikitext: str) -> str | None:
+    """The presidential elections the district table averages, as the
+    section's first sentence links them ("2020+2024"); None unless it names
+    exactly two, four years apart."""
+    prose = (_district_section(wikitext) or "").strip().split("\n")[0]
+    years = sorted({int(y) for y in _ELECTION_YEAR_RE.findall(prose)})
+    if len(years) != 2 or years[1] - years[0] != 4:
+        return None
+    return f"{years[0]}+{years[1]}"
+
+
+def elected_in(congress: int) -> int:
+    """The November election that seats `congress` (inverse of congress_for_election)."""
+    return congress_first_year(congress) - 1
+
+
+def redrawn_between(congress: int, base: int) -> set[str] | None:
+    """States whose map differs between the elections that seat `congress`
+    and `base`, per redrawn_congressional_maps.json; None while that file
+    lists no entry for `congress`'s election (nothing confirmed yet)."""
+    from app.live_results.sync import _map_in, _maps
+
+    cycles = _maps()
+    target, earlier = elected_in(congress), elected_in(base)
+    if str(target) not in cycles:
+        return None
+    states = {st for entries in cycles.values() for st in entries}
+    return {st for st in states if _map_in(cycles, target, st) != _map_in(cycles, earlier, st)}
+
+
+def _lean_tables(window: str | None = None) -> dict[int, dict[str, float]]:
+    """The computed lean's tables by Congress — none when `window` is given
+    and the lean averages other elections (a new Cook window is compared
+    only with a lean on the same one)."""
+    from app.district_lean import _file
+
+    doc = _file()
+    if window is not None and doc.get("_window") != window:
+        return {}
+    return {int(c): (t or {}).get("districts") or {} for c, t in (doc.get("congresses") or {}).items()}
+
+
+def lean_tolerance(pinned: dict[int, dict[str, int]]) -> float | None:
+    """How far a Cook table may sit from Civitas's computed lean on the same
+    lines: the largest gap between any pinned table and it (measured
+    2026-10: 1.3 points on the 119th's lines, 1.7 on the 120th's, every
+    district), plus one whole point, Cook's rounding step. None when no
+    pinned Congress has a computed lean to measure against."""
+    from app.district_lines import table_for_lines
+
+    tables = _lean_tables()
+    gaps = [
+        abs(float(lean[k]) - v)
+        for c, cook in pinned.items()
+        for lean in [table_for_lines(c, tables) or {}]
+        for k, v in cook.items() if lean.get(k) is not None
+    ]
+    return max(gaps) + 1.0 if gaps else None
+
+
+def lean_disagreements(table: dict[str, int], congress: int, tolerance: float | None,
+                       window: str | None = None) -> tuple[list[str], int]:
+    """(districts further than `tolerance` from the computed lean on
+    `congress`'s lines, how many districts were compared). Nothing is
+    compared where the file has no table for those lines (a redrawn state
+    before its own is built)."""
+    from app.district_lines import table_for_lines
+
+    if tolerance is None:
+        return [], 0
+    lean = table_for_lines(congress, _lean_tables(window)) or {}
+    compared = [k for k in table if lean.get(k) is not None]
+    far = sorted(f"{k} {table[k]:+d} vs {float(lean[k]):+.1f}" for k in compared
+                 if abs(float(lean[k]) - table[k]) > tolerance)
+    return far, len(compared)
+
+
+def _explained_median_shift(table: dict[str, int], reference: dict[str, int], base: dict[str, int] | None,
+                            redrawn: set[str], stated: int) -> list[str] | None:
+    """The states that explain a table median off the revision's stated
+    one, or None when they don't: `reference` is an earlier revision of the
+    same release whose median was exactly as stated. The table may differ
+    from it only in states that did not redraw and now hold exactly the
+    base Congress's values (sent back to their earlier lines, as Missouri
+    was in 2026-09), and with those districts at the reference's values the
+    median must be exactly the stated one."""
+    states = {k.split("-")[0] for k in set(table) | set(reference) if table.get(k) != reference.get(k)}
+    if not states or base is None or states & redrawn:
+        return None
+    for st in states:
+        if any(table[k] != base.get(k) for k in table if k.split("-")[0] == st):
+            return None
+    restored = {k: (reference[k] if k.split("-")[0] in states else v) for k, v in table.items()}
+    vals = sorted(restored.values())
+    return sorted(states) if vals and vals[len(vals) // 2] == stated else None
+
+
+async def _fetch_history(page: str, since: str) -> list[dict] | None:
+    """The article's revisions from `since` (inclusive) to now, oldest
+    first, as {"revid", "timestamp", "sha1"}; None when the history can't
+    be read or runs past _HISTORY_PAGES pages."""
+    out: list[dict] = []
+    cont: dict = {}
+    for _ in range(_HISTORY_PAGES):
+        params = {
+            "action": "query", "prop": "revisions", "titles": page, "rvprop": "ids|timestamp|sha1",
+            "rvlimit": "500", "rvdir": "newer", "rvstart": since, "format": "json", "formatversion": "2", **cont,
+        }
+        resp = await fetch_with_retry_requests(
+            _rate_limiter, "GET", API + "?" + urllib.parse.urlencode(params), retries=_RETRIES,
+            backoff_s=_BACKOFF_S, log_label="district-pvi wikipedia history", headers=HEADERS,
         )
-        send_ops_alert(
-            "District PVI source changed since its pin",
-            f"Wikipedia's \"{page}\" table (revision {live.get('revid')}) differs from the "
-            f"pinned {ordinal(int(newest))}-Congress table (revision {pinned_revid}) in {len(changed)} "
-            f"districts: {sample}. Nothing was ingested. If this is a correction or a map "
-            f"change for that Congress, review the diff and advance its revid in "
-            f"app/data/district_pvi_sources.json.",
-            # Keyed on the difference itself, not the live revid: every
-            # unrelated edit to the article (prose, references, another
-            # section) makes a new revid with the same table difference.
-            dedupe_key=f"district-pvi-live-drift-{pinned_revid}-{_diff_digest(changed, pinned, table)}",
+        if resp is None:
+            return None
+        data = resp.json()
+        pages = data.get("query", {}).get("pages", [])
+        if not pages:
+            return None
+        out += [{"revid": r.get("revid"), "timestamp": r.get("timestamp"), "sha1": r.get("sha1")}
+                for r in pages[0].get("revisions", [])]
+        cont = data.get("continue") or {}
+        if not cont:
+            return out
+    return None
+
+
+async def _fetch_revisions(page: str, revids: list[int]) -> dict[int, dict] | None:
+    """{revid: revision} as _fetch_revision gives one, 50 to a request;
+    None when any request fails. A revision whose text is hidden comes back
+    without content."""
+    out: dict[int, dict] = {}
+    for i in range(0, len(revids), 50):
+        params = {
+            "action": "query", "prop": "revisions", "revids": "|".join(str(r) for r in revids[i:i + 50]),
+            "rvprop": "ids|timestamp|content", "rvslots": "main", "format": "json", "formatversion": "2",
+        }
+        resp = await fetch_with_retry_requests(
+            _rate_limiter, "GET", API + "?" + urllib.parse.urlencode(params), retries=_RETRIES,
+            backoff_s=_BACKOFF_S, log_label="district-pvi wikipedia revisions", headers=HEADERS,
         )
-    return changed
+        if resp is None:
+            return None
+        for pg in resp.json().get("query", {}).get("pages", []):
+            for rev in pg.get("revisions", []):
+                out[rev.get("revid")] = {
+                    "title": pg.get("title"), "revid": rev.get("revid"), "timestamp": rev.get("timestamp"),
+                    "content": rev.get("slots", {}).get("main", {}).get("content"),
+                }
+    return out
+
+
+def _lines_text(congress: int) -> str:
+    return (f"District lines the {ordinal(congress)} Congress's House is elected on "
+            f"(the November {elected_in(congress)} election)")
+
+
+def _targets(pins: dict, sitting: int, election_congress: int | None) -> list[int]:
+    newest = max(int(c) for c in pins)
+    return sorted({c for c in (newest, sitting, election_congress) if c is not None and c >= newest}, reverse=True)
+
+
+def candidate_entry(revision: dict, target: int, pins: dict, tables: dict[str, dict[str, int]],
+                    references: list[tuple[dict, dict[str, int]]], seats: dict[str, int], page: str, *,
+                    sitting: int, election_congress: int | None = None) -> tuple[dict | None, list[str]]:
+    """The pin `revision` would be for Congress `target`, or None with why
+    not. `pins`: the sources' congresses; `tables`: their gated tables;
+    `references`: (revision, table) of earlier revisions read, for
+    explaining a moved median."""
+    content = revision.get("content") or ""
+    release, window = parse_release(content), parse_window(content)
+    if release is None:
+        return None, ["cites no Cook release in its district section"]
+    if window is None:
+        return None, ["names no two-election window in its district section"]
+    newest = str(max(int(c) for c in pins))
+    base_key = pins[newest].get("redrawn_from") if str(target) == newest else newest
+    base_src = pins.get(base_key) if base_key else None
+    entry = {
+        "lines": _lines_text(target),
+        "cook_release": f"{release['title']}, Cook Political Report, {release['date']}",
+        "window": window,
+        "revid": revision["revid"],
+        "revision_timestamp": revision["timestamp"],
+        "label": release["title"],
+    }
+    redrawn: set[str] = set()
+    if base_src is not None and window == base_src.get("window"):
+        states = redrawn_between(target, int(base_key))
+        if states is None:
+            return None, [f"redrawn_congressional_maps.json lists no {elected_in(target)} election yet"]
+        redrawn = states
+        entry["redrawn_from"] = base_key
+        entry["redrawn_states"] = sorted(states)
+    elif target != sitting and not (str(target) == newest and base_key is None):
+        return None, [f"a release on a new window ({window}) describes the sitting Congress's lines, "
+                      f"not the {ordinal(target)}'s"]
+    held = pins.get(str(target))
+    if held is not None and window == held.get("window") and str(target) in tables:
+        # A new revision of a pinned Congress's own table on the same
+        # window is a correction or a court order on ITS lines — never the
+        # next election's new map, which the article takes on in place.
+        changed = {k.split("-")[0] for k, _ in parse_district_table(content)[0].items() ^ tables[str(target)].items()}
+        if election_congress is None:
+            return None, ["the coming election could not be resolved, so a change can't be told from its new maps"]
+        if election_congress > target:
+            later = redrawn_between(election_congress, target)
+            if later is None:
+                return None, [f"redrawn_congressional_maps.json lists no {elected_in(election_congress)} election "
+                              f"yet, so a change can't be told from that election's new maps"]
+            if changed & later:
+                return None, [f"changes {', '.join(sorted(changed & later))}, which redraw for the "
+                              f"{elected_in(election_congress)} election: new lines, not the "
+                              f"{ordinal(target)} Congress's"]
+    base = tables.get(base_key) if entry.get("redrawn_from") else None
+    table, failures = check_table(entry, revision, page, base, base_src, seats=seats)
+    if failures and all(f.startswith("table median") for f in failures):
+        stated = parse_stated_summary(content).get("median_pvi")
+        for ref_rev, ref_table in references:
+            if (parse_release(ref_rev.get("content") or "") or {}).get("title") != release["title"]:
+                continue
+            states = _explained_median_shift(table, ref_table, base, redrawn, stated)
+            if states:
+                vals = sorted(table.values())
+                entry["median_tolerance"] = abs(vals[len(vals) // 2] - stated)
+                entry["_why_median_tolerance"] = (
+                    f"Derived by rule: the table differs from revision {ref_rev['revid']} of the same release "
+                    f"(median exactly {stated:+d}) only in {', '.join(states)}, which now hold the "
+                    f"{ordinal(int(base_key))} Congress's values (held on their earlier lines); with those "
+                    f"districts at that revision's values the median is exactly the stated {stated:+d}."
+                )
+                table, failures = check_table(entry, revision, page, base, base_src, seats=seats)
+                break
+    if failures:
+        return None, failures
+    return entry, []
+
+
+async def adopt_new_pins(sources: dict, payload: dict, seats: dict[str, int], *, sitting: int,
+                         election_congress: int | None, now=None) -> dict | None:
+    """Adopt a newer revision of the article as a pin by the rule above.
+    Returns the payload built with it, or None when nothing was adopted
+    (every outcome is logged, and recorded in the adopted file's log)."""
+    from app.time_utils import utcnow
+
+    now = now or utcnow()
+    page, pins = sources["page"], sources["congresses"]
+    newest = max(pins, key=int)
+    pin = pins[newest]
+    tables = {c: b["districts"] for c, b in (payload.get("congresses") or {}).items()}
+    history = await _fetch_history(page, pin["revision_timestamp"])
+    if history is None:
+        logger.warning("district-pvi: article history unreadable or too long — nothing adopted")
+        return None
+    if not history or history[-1]["revid"] == pin["revid"]:
+        _resolve_unadopted()
+        return None
+    cutoff = (now - _STAND).strftime("%Y-%m-%dT%H:%M:%SZ")
+    at_cutoff = max((i for i, r in enumerate(history) if r["timestamp"] <= cutoff), default=None)
+    # Every distinct revision since the cutoff (the standing check needs
+    # them all), the pin's own, and the newest _MAX_REVISIONS before the
+    # cutoff (earlier revisions of a release, for _explained_median_shift).
+    key = lambda r: r.get("sha1") or f"hidden-{r['revid']}"  # noqa: E731
+    recent = {key(r): r["revid"] for r in history[at_cutoff or 0:]}
+    if len(recent) > _MAX_REVISIONS:
+        return _refused(None, newest, [f"{len(recent)} distinct revisions in {STAND_DAYS} days: the article is "
+                                       f"in flux"], history, tables, now)
+    distinct = dict(recent)
+    distinct.setdefault(key(history[0]), history[0]["revid"])
+    for r in reversed(history[:at_cutoff or 0]):
+        if len(distinct) >= len(recent) + _MAX_REVISIONS:
+            break
+        distinct.setdefault(key(r), r["revid"])
+    revisions = await _fetch_revisions(page, sorted(set(distinct.values())))
+    if revisions is None:
+        logger.warning("district-pvi: article revisions unreadable — nothing adopted")
+        return None
+    by_sha = {sha: revisions.get(revid) for sha, revid in distinct.items()}
+
+    def parsed(r: dict) -> tuple[dict | None, dict[str, int] | None]:
+        rev = by_sha.get(key(r))
+        if rev is None or not rev.get("content"):
+            return rev, None
+        table, problems = parse_district_table(rev["content"])
+        return rev, (None if problems else table)
+
+    live_rev, live_table = parsed(history[-1])
+    if live_table is not None and live_table == tables.get(newest):
+        _resolve_unadopted()
+        return None  # prose or references only
+    if at_cutoff is None:
+        return _refused(live_rev, newest, [f"the table has not stood {STAND_DAYS} days"], history, tables, now, by_sha)
+    stretch = history[at_cutoff:]
+    stretch_tables = [parsed(r)[1] for r in stretch]
+    if any(t is None for t in stretch_tables) or any(t != stretch_tables[-1] for t in stretch_tables):
+        changed = next((r for r, t in zip(stretch, stretch_tables) if t != stretch_tables[-1]), stretch[-1])
+        return _refused(live_rev, newest, [f"the table has not stood {STAND_DAYS} days unchanged "
+                                           f"(revision {changed['revid']} of {changed['timestamp']} differs or "
+                                           f"does not parse)"], history, tables, now, by_sha)
+    references = [(rev, t) for r in history if key(r) in by_sha for rev, t in [parsed(r)] if t is not None]
+    candidates = [by_sha[k] for k in dict.fromkeys(r.get("sha1") for r in reversed(stretch)) if by_sha.get(k)]
+    tolerance = lean_tolerance({int(c): t for c, t in tables.items()})
+    reasons: list[str] = []
+    for target in _targets(pins, sitting, election_congress):
+        for rev in candidates:
+            entry, fails = candidate_entry(rev, target, pins, tables, references, seats, page, sitting=sitting,
+                                           election_congress=election_congress)
+            if entry is None:
+                reasons += [f"{ordinal(target)} Congress, revision {rev['revid']}: {f}" for f in fails[:3]]
+                continue
+            table = parse_district_table(rev["content"])[0]
+            far, compared = lean_disagreements(table, target, tolerance, entry["window"])
+            if far:
+                reasons.append(f"{ordinal(target)} Congress, revision {rev['revid']}: {len(far)} districts further "
+                               f"than {tolerance:.1f} from the computed lean ({', '.join(far[:6])})")
+                continue
+            merged = {**sources, "congresses": {**pins, str(target): entry}}
+            payload_new, build_failures = await build_payload(merged, sitting, seats)
+            if build_failures:
+                reasons += [f"{ordinal(target)} Congress, revision {rev['revid']}: {f}" for f in build_failures[:3]]
+                continue
+            entry["adopted"] = {
+                "on": now.strftime("%Y-%m-%d"),
+                "rule": (f"table unchanged in every revision since {stretch[0]['timestamp']} "
+                         f"({STAND_DAYS} days or more); every check_table gate passed; redrawn states from "
+                         f"redrawn_congressional_maps.json"),
+                "replaces": (pins.get(str(target)) or {}).get("revid"),
+                "leanCheck": ({"tolerance": round(tolerance, 2), "districtsCompared": compared}
+                              if tolerance is not None else "no computed lean on file to compare"),
+            }
+            entry["_why_this_revision"] = (
+                f"Adopted by rule on {entry['adopted']['on']}: the newest revision whose district table had stood "
+                f"{STAND_DAYS} days unchanged and passed every gate"
+                + (f", {compared} districts within {tolerance:.1f} points of Civitas's computed lean" if compared
+                   else "") + "."
+            )
+            _write_adopted(str(target), entry, _log_entry(now, target, rev["revid"], "adopted", []))
+            _resolve_unadopted()
+            logger.warning("district-pvi: adopted revision %s as the %s Congress's pin", rev["revid"],
+                           ordinal(target))
+            return payload_new
+    return _refused(live_rev, newest, reasons or ["no Congress to pin it for"], history, tables, now, by_sha)
+
+
+def _log_entry(now, congress, revid, decision: str, reasons: list[str]) -> dict:
+    return {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "congress": congress, "revid": revid,
+            "decision": decision, "reasons": reasons[:12]}
+
+
+def _read_adopted() -> dict:
+    try:
+        doc = json.loads(adopted_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _write_adopted(congress: str | None, entry: dict | None, log: dict) -> None:
+    doc = _read_adopted()
+    doc["_contract"] = (
+        "Pins adopted by rule (app/pipeline/fetch/district_pvi.py, adopt_new_pins), merged over the bundled "
+        "app/data/district_pvi_sources.json by load_sources: per Congress, the entry pinning the later revision "
+        "wins. Each entry's `adopted` and `_why_this_revision` say when and why; `log` keeps every adoption "
+        "and refusal (newest last)."
+    )
+    doc.setdefault("congresses", {})
+    if congress is not None:
+        doc["congresses"][congress] = entry
+    entries = doc.setdefault("log", [])
+    last = entries[-1] if entries else {}
+    if {k: v for k, v in last.items() if k != "at"} != {k: v for k, v in log.items() if k != "at"}:
+        entries.append(log)
+    doc["log"] = entries[-_LOG_KEEP:]
+    write_text_atomic(adopted_path(), json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False) + "\n")
+
+
+def _refused(live_rev: dict | None, newest: str, reasons: list[str], history: list[dict],
+             tables: dict, now, revisions_seen: dict | None = None) -> None:
+    """Record why nothing was adopted; once the article has differed from
+    the newest pin for twice the standing time, say so in an ops alert
+    (what differs and why it wasn't adopted; nothing for anyone to do)."""
+    revid = (live_rev or {}).get("revid") or history[-1]["revid"]
+    logger.info("district-pvi: revision %s not adopted: %s", revid, "; ".join(reasons[:3]))
+    _write_adopted(None, None, _log_entry(now, None, revid, "not adopted", reasons))
+    pinned = tables.get(newest) or {}
+    live, _ = parse_district_table((live_rev or {}).get("content") or "")
+    changed = sorted(k for k in set(live) | set(pinned) if live.get(k) != pinned.get(k)) if live else []
+    first_change = None
+    for r in history[1:]:
+        rev = (revisions_seen or {}).get(r.get("sha1") or f"hidden-{r['revid']}")
+        table = parse_district_table((rev or {}).get("content") or "")[0] if rev else None
+        if table and table != pinned:
+            first_change = r["timestamp"]
+            break
+    if not changed or first_change is None or first_change > (now - 2 * _STAND).strftime("%Y-%m-%dT%H:%M:%SZ"):
+        return None
+    from app.ops_alerts import send_ops_alert
+
+    sample = ", ".join(f"{k} {pinned.get(k)}->{live.get(k)}" for k in changed[:12])
+    send_ops_alert(
+        "District PVI: the article's table is not adopted",
+        f"Wikipedia's \"Cook Partisan Voting Index\" table (revision {revid}) has differed from the "
+        f"{ordinal(int(newest))} Congress's pin since {first_change[:10]} in {len(changed)} districts ({sample}), "
+        f"and no revision meets the adoption rule: {'; '.join(reasons[:4])}. Member scoring and the elections "
+        f"pages stay on the pinned table; the rule is checked again each week.",
+        dedupe_key=f"district-pvi-unadopted-{newest}-{_diff_digest(changed, pinned, live)}",
+        condition=UNADOPTED_CONDITION,
+    )
+    return None
+
+
+def _resolve_unadopted() -> None:
+    from app.ops_alerts import resolve_ops_alert
+
+    resolve_ops_alert(UNADOPTED_CONDITION)
 
 
 # What each DISTRICT_LINES holder calls itself on the lease row
@@ -1260,6 +1765,22 @@ async def refresh_district_pvi() -> bool:
         return False
 
 
+# The last refresh's gate failures, for the alert that says it failed.
+_last_failures: list[str] = []
+
+
+def _election_congress() -> int | None:
+    """The Congress the site's election seats (new maps are pinned for it
+    before it sits), or None when the election can't be resolved."""
+    try:
+        from app.election_phase import active_election
+
+        return congress_for_election(active_election().cycle)
+    except Exception:
+        logger.warning("district-pvi: active election unresolved", exc_info=True)
+        return None
+
+
 async def _refresh() -> bool:
     """refresh_district_pvi's work, for a caller already holding the
     DISTRICT_LINES lease."""
@@ -1276,11 +1797,21 @@ async def _refresh() -> bool:
         configured = sorted(int(c) for c in sources["congresses"])
         if configured and sitting < configured[0]:
             return await _check_without_writing(sources, sitting, configured[0])
-        payload, failures = await build_payload(sources, sitting)
+        seats = await house_seats()
+        payload, failures = await build_payload(sources, sitting, seats)
+        _last_failures[:] = failures
         if failures:
             for f in failures:
                 logger.warning("district-pvi ingestion gate failed: %s", f)
             return False
+        try:
+            adopted = await adopt_new_pins(
+                sources, payload, seats, sitting=sitting, election_congress=_election_congress(),
+            )
+        except Exception:
+            logger.warning("district-pvi adoption check failed — the pins stand", exc_info=True)
+            adopted = None
+        payload = adopted or payload
         _write(pathlib.Path(_PVI_PATH), payload)
         logger.info(
             "district-pvi refreshed: %d Congresses, sitting %s, member lines the %s's (%d districts)",
@@ -1292,10 +1823,6 @@ async def _refresh() -> bool:
                 "district-pvi: no source pinned for the sitting %s Congress — member scoring is on "
                 "the %s Congress's lines, the latest pinned", ordinal(sitting), ordinal(payload["congress"]),
             )
-        try:
-            await _check_live_drift(sources, payload)
-        except Exception:
-            logger.warning("district-pvi live drift check failed", exc_info=True)
         return True
     except Exception:
         logger.warning(
@@ -1308,10 +1835,10 @@ async def _refresh() -> bool:
 async def _check_without_writing(sources: dict, sitting: int, earliest: int) -> bool:
     """A refresh while the sitting Congress is older than every configured
     one (only an environment pin puts it there): no table describes its
-    lines, so nothing is written — but the pinned tables are still fetched
-    and gated, and the live-drift check still runs on them, so a pin that
-    needs advancing isn't hidden for as long as the pin stands. Returns
-    False (nothing written); _ensure_sitting_lines's alert says why."""
+    lines, so nothing is written and nothing is adopted (an archived
+    database's re-run never moves production's pins) — but the pinned
+    tables are still fetched and gated. Returns False (nothing written);
+    _ensure_sitting_lines's alert says why."""
     payload, failures = await build_payload(sources, earliest)
     for f in failures:
         logger.warning("district-pvi ingestion gate failed: %s", f)
@@ -1319,11 +1846,6 @@ async def _check_without_writing(sources: dict, sitting: int, earliest: int) -> 
         "district-pvi: the sitting %s Congress is older than every pinned table — refresh wrote "
         "nothing (the tables %s)", ordinal(sitting), "failed their gates" if failures else "passed their gates",
     )
-    if payload is not None:
-        try:
-            await _check_live_drift(sources, payload)
-        except Exception:
-            logger.warning("district-pvi live drift check failed", exc_info=True)
     return False
 
 
@@ -1369,12 +1891,13 @@ def _ensure_sitting_lines() -> str:
     - "refresh failed": neither worked; an ops alert says so (once a day).
     - "superseded": this job holds an older Congress than the process or
       the file has moved to (_superseded) — nothing is written.
-    - "no source configured": app/data/district_pvi_sources.json has no
-      entry for the sitting Congress. Nothing can be fetched for it until
-      someone adds one, so nothing is fetched for it (the configured
-      tables are, when the file is missing, pre-pinning or not at the
-      current pins); member scoring stays on the newest pinned lines
-      before it, and one ops alert per Congress says so.
+    - "no source configured": no pin (bundled or adopted) for the sitting
+      Congress. Nothing is fetched for it until the weekly adoption check
+      pins one (the configured tables are, when the file is missing,
+      pre-pinning or not at the current pins); member scoring stays on the
+      newest pinned lines before it, which are its lines when
+      redrawn_congressional_maps.json confirms no state redrew (no alert),
+      and an ops alert says what is read otherwise.
     """
     import asyncio
 
@@ -1423,14 +1946,14 @@ def _ensure_sitting_lines() -> str:
         )
         return "restored from bundle"
     from app.ops_alerts import send_ops_alert
+    why = "; ".join(_last_failures[:4]) or "the fetch or the sources file could not be read"
     send_ops_alert(
         "District PVI has no table for the sitting Congress",
         f"/data/district_pvi.json has no table at the current pins for the {ordinal(sitting)} "
-        f"Congress, the refresh failed, and the bundled copy has none either. Member scoring is "
+        f"Congress, the refresh failed ({why}), and the bundled copy has none either. Member scoring is "
         f"reading whatever table the file holds (format: "
-        f"{'pinned' if data.get('congresses') else 'missing or pre-pinning'}). The sources "
-        f"file names this Congress (or could not be read), so this is a fetch, gate or "
-        f"sources-file failure — see the district-pvi warnings in the log.",
+        f"{'pinned' if data.get('congresses') else 'missing or pre-pinning'}); the next House run tries "
+        f"the refresh again.",
         dedupe_key=f"district-pvi-no-sitting-{sitting}-{date.today():%Y-%m-%d}",
     )
     return "refresh failed"
@@ -1623,7 +2146,7 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
     import asyncio
 
     from app.config import settings
-    from app.ops_alerts import send_ops_alert
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
 
     if data.get("congresses") and _pins_current(data, sources):
         reselected = _reselect(data, sitting, exact=False)
@@ -1662,26 +2185,37 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
             f"is the {ordinal(configured[0])}), so no pinned table describes its district lines. "
             f"Member scoring is on {on}. Until this is fixed, every weekly District PVI refresh "
             f"fetches and checks the pinned tables but writes none of them (none describes the "
-            f"{ordinal(sitting)}'s lines); its live-drift check still runs. For an archived-DB "
+            f"{ordinal(sitting)}'s lines) and adopts nothing. For an archived-DB "
             f"re-run of the {ordinal(sitting)} Congress, add an entry for it (see the file's "
             f"_contract); otherwise remove or correct the CURRENT_CONGRESS pin."
         )
     else:
+        redrawn = redrawn_between(sitting, lines) if lines is not None else None
+        if redrawn == set() and _scoring_lines().congress == lines:
+            # The maps confirm no state redrew between the two elections:
+            # the newest pinned lines ARE the sitting Congress's lines.
+            logger.info("district-pvi: the %s Congress sits on the %s's lines (no state redrew) — served",
+                        ordinal(sitting), ordinal(lines))
+            resolve_ops_alert(NO_SOURCE_CONDITION)
+            return "no source configured"
         on = (
             f"{served}, the latest pinned" if lines is not None and _scoring_lines().congress == lines
             else served
         )
+        if redrawn is None:
+            state = (f"redrawn_congressional_maps.json lists no {elected_in(sitting)} election, so which "
+                     f"states redrew is not known yet")
+        else:
+            state = (f"{', '.join(sorted(redrawn))} redrew for the {elected_in(sitting)} election, so those "
+                     f"states' seats are read on their earlier districts")
         text = (
-            f"The {ordinal(sitting)} Congress is in office, and app/data/district_pvi_sources.json "
-            f"has no entry for it. Member scoring is on {on}. That is right only if no state "
-            f"redrew its districts for the election that seated this Congress; add an entry "
-            f"(see the file's _contract) either way, listing any redrawn states. Nothing is "
-            f"fetched for it until then."
+            f"The {ordinal(sitting)} Congress is in office and no Cook table for its lines has met the adoption "
+            f"rule yet (adopt_new_pins). Member scoring is on {on}; {state}. The rule is checked each week."
         )
     logger.warning("district-pvi: no source for the sitting %s Congress — member scoring on %s", ordinal(sitting), on)
     send_ops_alert(
         "District PVI has no source for the sitting Congress", text,
-        dedupe_key=f"district-pvi-no-source-{sitting}",
+        dedupe_key=f"district-pvi-no-source-{sitting}", condition=NO_SOURCE_CONDITION,
     )
     return "no source configured"
 
