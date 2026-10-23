@@ -580,7 +580,8 @@ def check_party_balance(db: Session) -> None:
             "Trend posts: party share diverges from the eligible pool",
             f"Posted Democratic share {audit['postedDemocraticShare']:.2f} of {sum(audit['posted'][k] for k in 'DR')} "
             f"leaning posts vs the pool's {audit['poolDemocraticShare']:.2f} (binomial p={audit['pValue']:.4f}). "
-            "Selection is party-blind; check what the gates are letting through (admin, Trends tab).",
+            "Selection is party-blind, so the gap is in what the gates let through; each trend's audit "
+            "row is on the admin Trends tab.",
             condition=PARTY_ALERT_CONDITION,
         )
     else:

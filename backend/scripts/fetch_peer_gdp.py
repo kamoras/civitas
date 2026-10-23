@@ -1,8 +1,14 @@
 """Regenerate app/data/peer_gdp_per_capita.json: real GDP per person for the
-US and its peer economies, 1946 to the release's last year, from the Maddison Project
-Database 2023 (Bolt & van Zanden 2024, "Maddison style estimates of the
-evolution of the world economy: A new 2023 update", Journal of Economic
-Surveys; dataverse.nl doi:10.34894/INZBF2, file mpd2023_web.xlsx).
+US and its peer economies, 1946 to the release's last year, from the newest
+Maddison Project Database release.
+
+THE RELEASE, by rule: DataverseNL's search for datasets named "Maddison
+Project Database <year>", the newest year; its latest published version's
+spreadsheet; within it, the sheet whose header row names countrycode, year
+and gdppc, read by those headers. The citation is the dataset's own
+(its publication citation, DOI, file and version), so a new release needs
+no edit here. The 2023 release (Bolt & van Zanden 2024, doi:10.34894/INZBF2,
+mpd2023_web.xlsx) was the first read this way.
 
 app/pipeline/fetch/peer_gdp.py takes growth and every year's income gap with
 the US from it through its last year, and the World Bank's live series only
@@ -22,20 +28,20 @@ list is written into the data file with the rule, and
 app/pipeline/fetch/peer_gdp.py reads it from there. Until 2026-10 the peers
 were thirteen countries a research note had picked.
 
-Run from the repo (network required; openpyxl from
-scripts/requirements-research.txt):
-    cd backend && PYTHONPATH=. python3 scripts/fetch_peer_gdp.py
+Run by app/data_refresh.py monthly (network required):
+    cd backend && PYTHONPATH=. python3 scripts/fetch_peer_gdp.py [OUT]
 """
 
 import datetime
-import io
 import json
 import pathlib
+import re
+import sys
+import urllib.parse
 import urllib.request
 
-import openpyxl
-
 from app.contact import CONTACT_COMMENT
+from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_files, xlsx_sheet_rows
 US = "USA"  # app.pipeline.fetch.peer_gdp.US; not imported, since that module reads the file this writes
 
 # Each OECD member's date of becoming a member (its deposit of the
@@ -63,7 +69,8 @@ def peer_countries() -> tuple[str, ...]:
     """The peers by PEER_RULE, in ISO 3166 alpha-3 order."""
     return tuple(sorted(c for c, joined in OECD_MEMBERSHIP.items() if joined < PEER_RULE_BEFORE and c != US))
 
-MADDISON_FILE_URL = "https://dataverse.nl/api/access/datafile/421302"  # mpd2023_web.xlsx, version 1.0
+DATAVERSE = "https://dataverse.nl"
+RELEASE_NAME = re.compile(r"^Maddison Project Database (\d{4})$")
 # dataverse.nl challenges browser-style User-Agents (an Anubis proof-of-work
 # page, served with a 200); a client that names itself without "Mozilla" is
 # let through, so this one does (BOT_USER_AGENT starts "Mozilla/5.0").
@@ -72,19 +79,69 @@ FIRST_YEAR = 1946  # a base for 1947, where Effectiveness's postwar comparison b
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "peer_gdp_per_capita.json"
 
 
-def main() -> None:
-    req = urllib.request.Request(MADDISON_FILE_URL, headers={"User-Agent": USER_AGENT})
+def _get(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=120) as resp:
-        body = resp.read()
+        return resp.read()
+
+
+def _api(path: str, **params) -> dict:
+    return json.loads(_get(f"{DATAVERSE}/api/{path}?{urllib.parse.urlencode(params)}"))["data"]
+
+
+def newest_release(items: list[dict]) -> tuple[int, str]:
+    """(year, DOI) of the newest dataset named "Maddison Project Database <year>"."""
+    releases = [(int(m[1]), i["global_id"]) for i in items if (m := RELEASE_NAME.match(i.get("name", "").strip()))]
+    if not releases:
+        raise SystemExit("DataverseNL's search lists no Maddison Project Database release")
+    return max(releases)
+
+
+def release_file(version: dict) -> tuple[int, str, str, str]:
+    """(file id, file name, version, citation) of a dataset version's spreadsheet."""
+    sheets = [f["dataFile"] for f in version.get("files", [])
+              if f["dataFile"].get("filename", "").lower().endswith(".xlsx")]
+    if len(sheets) != 1:
+        raise SystemExit(f"expected one spreadsheet in the release, found {[s.get('filename') for s in sheets]}")
+    citation = ""
+    for field in version.get("metadataBlocks", {}).get("citation", {}).get("fields", []):
+        if field.get("typeName") == "publication":
+            citation = next((p.get("publicationCitation", {}).get("value", "") for p in field["value"]), "")
+    return (sheets[0]["id"], sheets[0]["filename"], f"{version['versionNumber']}.{version['versionMinorNumber']}",
+            citation)
+
+
+def per_capita_rows(body: bytes, wanted: set[str]):
+    """(country, year, GDP per person) from the sheet whose first row names
+    countrycode, year and gdppc, read by those headers (standard library)."""
+    for sheet in (xlsx_sheet_files(body) or {}).values():
+        rows = xlsx_sheet_rows(body, sheet) or []
+        names = [c.strip().lower() for c in rows[0]] if rows else []
+        if not {"countrycode", "year", "gdppc"} <= set(names):
+            continue
+        code, year, gdppc = (names.index(n) for n in ("countrycode", "year", "gdppc"))
+        for row in rows[1:]:
+            cells = row + [""] * (len(names) - len(row))
+            if cells[code] in wanted and cells[year] and cells[gdppc]:
+                yield cells[code], int(float(cells[year])), float(cells[gdppc])
+        return
+    raise SystemExit("no sheet names countrycode, year and gdppc")
+
+
+def main() -> None:
+    out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
+    year, doi = newest_release(_api("search", q='"Maddison Project Database"', type="dataset", per_page=50)["items"])
+    file_id, filename, version, citation = release_file(
+        _api("datasets/:persistentId/versions/:latest-published", persistentId=doi))
+    body = _get(f"{DATAVERSE}/api/access/datafile/{file_id}")
     if not body.startswith(b"PK"):
-        raise SystemExit(f"{MADDISON_FILE_URL} did not return the spreadsheet: {body[:120]!r}")
-    book = openpyxl.load_workbook(io.BytesIO(body), read_only=True)
+        raise SystemExit(f"datafile {file_id} did not return the spreadsheet: {body[:120]!r}")
     peers = peer_countries()
     wanted = {US, *peers}
     countries: dict[str, dict[str, float]] = {}
-    for code, _name, _region, year, gdppc, _pop in book["Full data"].iter_rows(min_row=2, values_only=True):
-        if code in wanted and year is not None and int(year) >= FIRST_YEAR and gdppc:
-            countries.setdefault(code, {})[str(int(year))] = float(gdppc)
+    for code, y, gdppc in per_capita_rows(body, wanted):
+        if y >= FIRST_YEAR:
+            countries.setdefault(code, {})[str(y)] = gdppc
     # The release's last year is the last one every economy has.
     last_year = min(max(int(y) for y in years) for years in countries.values()) if countries else 0
     countries = {c: {y: v for y, v in years.items() if int(y) <= last_year} for c, years in countries.items()}
@@ -97,21 +154,21 @@ def main() -> None:
     if missing or first.get(US) != FIRST_YEAR:
         raise SystemExit(f"incomplete Maddison coverage for {missing or [US]}")
     late = {c: y for c, y in sorted(first.items()) if y > FIRST_YEAR}
-    OUT.write_text(json.dumps({
+    out.write_text(json.dumps({
         "_as_of": datetime.date.today().isoformat(),
         "_source": (
-            "Maddison Project Database 2023 (Bolt & van Zanden 2024), GDP per capita in 2011 "
-            "international dollars, dataverse.nl doi:10.34894/INZBF2 file mpd2023_web.xlsx, years "
-            f"{FIRST_YEAR}-{last_year}. Written by backend/scripts/fetch_peer_gdp.py; "
-            "app/pipeline/fetch/peer_gdp.py takes growth and the income gap with the US from it "
-            "through its last year, and the World Bank's live series after."
+            f"Maddison Project Database {year}" + (f" ({citation})" if citation else "") + ", GDP per capita, "
+            f"dataverse.nl {doi} file {filename} version {version}, years {FIRST_YEAR}-{last_year}. Written by "
+            "backend/scripts/fetch_peer_gdp.py; app/pipeline/fetch/peer_gdp.py takes growth and the income gap "
+            "with the US from it through its last year, and the World Bank's live series after."
         ),
+        "release": year,
         "peers": list(peers),
         "_peer_rule": PEER_RULE,
         "_first_year": late,
         "countries": {c: countries[c] for c in sorted(countries)},
     }, indent=1, sort_keys=True) + "\n")
-    print(f"wrote {OUT} ({len(countries)} economies)")
+    print(f"wrote {out} ({len(countries)} economies, Maddison {year})")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ the file behind the module's back, as the other process would."""
 
 import json
 import os
+import pathlib
 
 import pytest
 
@@ -235,21 +236,26 @@ def test_committee_data_unreadable_for_a_moment_is_not_kept(tmp_path, monkeypatc
     committee_data.clear_committee_data_cache()
 
 
-def test_state_pvi_unreadable_for_a_moment_is_not_kept(tmp_path, monkeypatch):
+def test_state_pvi_unreadable_for_a_moment_is_not_kept(monkeypatch):
+    from app.atomic_write import runtime_data_path
     from app.pipeline.analyze import score_calculator
 
-    (tmp_path / "state_pvi.json").write_text(json.dumps({"states": {"ZZ": 7}}))
-    monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
+    path = pathlib.Path(runtime_data_path("state_pvi.json"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"states": {"ZZ": 7}}))
     monkeypatch.setattr(score_calculator, "_state_pvi_cache", None)
     real_open = open
     failing = [True]
 
-    def flaky_open(path, *a, **k):
-        if str(path) == str(tmp_path / "state_pvi.json") and failing[0]:
+    def flaky_open(file, *a, **k):
+        if str(file) == str(path) and failing[0]:
             raise PermissionError("busy")
-        return real_open(path, *a, **k)
+        return real_open(file, *a, **k)
 
     monkeypatch.setattr("builtins.open", flaky_open)
     assert "ZZ" not in score_calculator._state_pvi()
     failing[0] = False
     assert score_calculator._state_pvi()["ZZ"] == 7
+    # A refreshed copy (data_refresh) is read without a restart.
+    path.write_text(json.dumps({"states": {"ZZ": 9}, "_window": "later"}))
+    assert score_calculator._state_pvi()["ZZ"] == 9

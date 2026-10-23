@@ -445,11 +445,46 @@ class TestNearIdenticalCut:
         assert ac.near_identical_cut() == bundled["values"]["near_identical"]
         assert bundled["near_identical"]["labels_sha256"] and "calibrate_near_identical.py" in bundled["_source"]
 
+    def test_feed_articles_dated_days_apart_are_different_stories(self, monkeypatch):
+        """Two articles about one actor whose own text dates them days apart
+        are two occasions (the clustering fit's label), counted with the
+        issues' own different-story pairs."""
+        t = datetime(2028, 3, 3, 12)
+        articles = [(f"Senator Quillfeather speaks on Monday {i}", "", t) for i in range(6)] + \
+                   [(f"Senator Quillfeather speaks on Thursday {i}", "", t) for i in range(6)] + \
+                   [(f"Unrelated filler headline {i}", "", t) for i in range(40)]
+        pairs = ac.stated_day_negatives(articles)
+        assert len(pairs) == 36 and all(i < 6 <= j < 12 for i, j in pairs)
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: np.eye(len(texts)))
+        fitted = ac.fit_near_identical_cut([], articles)
+        assert fitted["negatives"] == fitted["article_negatives"] == 36
+
+    def test_a_refit_not_adopted_leaves_the_cut_in_use_and_says_why(self, db_session, freeze_utcnow, monkeypatch):
+        from app.pipeline.cache import api_cache_get
+
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        seen = {}
+
+        def fit(rows, articles=(), in_use=None):
+            seen["in_use"] = in_use
+            return {"threshold": 0.5, "kept": "held-out precision's lower bound would fall"}
+
+        monkeypatch.setattr(ac, "fit_near_identical_cut", fit)
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        before = ac.near_identical_cut()
+        ac._cuts_cache.pop("refit_on", None)
+        ac.refit_cuts(db_session)
+        assert seen["in_use"] == before and ac.near_identical_cut() == before
+        record = api_cache_get(db_session, "action-cuts", "near_identical-refit", max_age_hours=24)
+        assert record["kept"].startswith("held-out precision")
+
     def test_a_refit_is_used_at_once(self, db_session, freeze_utcnow, monkeypatch):
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
         monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
-        monkeypatch.setattr(ac, "fit_near_identical_cut", lambda rows: {"threshold": 0.83})
+        monkeypatch.setattr(ac, "fit_near_identical_cut", lambda rows, articles=(), in_use=None: {"threshold": 0.83})
         freeze_utcnow(datetime(2028, 3, 1, 9))
         ac.refit_cuts(db_session)
         assert ac.near_identical_cut() == 0.83

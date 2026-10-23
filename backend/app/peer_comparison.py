@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.measures import BY_KEY, MEASURES, Measure, alignment_facts, bill_facts, past_committee
 from app.models import Representative, ScoreSnapshot, Senator
 from app.ordinals import rank_shown
-from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
+from app.pipeline.analyze.score_calculator import _seat_pvi, scoring_version
 from app.readout import mark
 from app.score_keeping import load_breakdown
 from app.score_display import shown_share, thin_dimensions
@@ -89,7 +89,7 @@ def chamber_rows(db: Session, chamber: str) -> list[dict]:
     model = _model(chamber)
     count, newest = db.query(func.count(model.id), func.max(model.updated_at)).filter(
         model.is_current.is_(True)).one()
-    key = (count, str(newest), ALGORITHM_VERSION)
+    key = (count, str(newest), scoring_version())
     hit = _cache.get(chamber)
     if hit and hit[0] == key and time.monotonic() - hit[1] < _CACHE_TTL_S:
         return hit[2]

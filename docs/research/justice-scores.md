@@ -581,7 +581,10 @@ shifts.
 
 **The Court-level effect that survives the placebo.** Take A's pooled effect
 less its own k = 0 placebo, with a bootstrap over justices (200 draws): **+2.5
-points, 95% interval −0.7 to +5.6**. F's +2.7 against its placebo sd of 3.4
+points, 95% interval −0.4 to +5.7** (−0.7 to +5.6 before 2026-10-23, when the
+draws came to take the justices in name order, as the data refresh's numpy
+port, scripts/fetch_court_finding.py, does: the same bootstrap, other draws).
+F's +2.7 against its placebo sd of 3.4
 gives a wider −4.0 to +9.5. Either way, it is not distinguishable from no
 effect.
 

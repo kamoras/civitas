@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+from app import precision_rule
+
 from app.precision_rule import (
     BEST_BOUND,
     LOWEST_PASSING,
@@ -110,3 +112,34 @@ def test_held_out_uses_the_variant():
 def test_an_unknown_variant_is_refused():
     with pytest.raises(ValueError):
         choose(_SCORES, _CORRECT, _GRID, "loosest")
+
+
+class TestRefitAcceptance:
+    """A data-labelled refit replaces the fit in use only when its held-out
+    precision's lower bound doesn't fall and its recall drops by no more
+    than one standard error of the paired difference."""
+
+    def test_more_passes_at_the_same_precision_are_adopted(self):
+        correct = np.array([True] * 40 + [False] * 10)
+        in_use = np.array([True] * 20 + [False] * 30)
+        candidate = np.array([True] * 30 + [False] * 20)
+        comparison = precision_rule.compare(correct, candidate, in_use)
+        assert comparison["candidate"]["recall"] == 0.75 and comparison["in_use"]["recall"] == 0.5
+        assert precision_rule.accept(comparison) is None
+
+    def test_a_falling_lower_bound_keeps_the_fit_in_use(self):
+        correct = np.array([True] * 40 + [False] * 10)
+        in_use = np.array([True] * 20 + [False] * 30)
+        candidate = np.array([True] * 40 + [True] * 10)
+        assert "lower bound would fall" in precision_rule.accept(precision_rule.compare(correct, candidate, in_use))
+
+    def test_lost_recall_keeps_the_fit_in_use(self):
+        correct = np.array([True] * 40 + [False] * 10)
+        in_use = np.array([True] * 30 + [False] * 10 + [True] * 5 + [False] * 5)
+        candidate = np.array([True] * 18 + [False] * 32)
+        assert "recall would drop" in precision_rule.accept(precision_rule.compare(correct, candidate, in_use))
+
+    def test_no_evidence_either_way_keeps_the_fit_in_use(self):
+        correct = np.array([True, False])
+        none = np.array([False, False])
+        assert "nothing to compare" in precision_rule.accept(precision_rule.compare(correct, none, none))

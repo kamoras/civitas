@@ -301,7 +301,8 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 **No composite is displayed** (2026-10). The weighted Representation Score
 and its rank are not shown on any page; each is still computed for public
-API v1's deprecated `overall` and `rank` (removed in v2). What the site
+API v1's deprecated `overall` and `rank` (served through `schemas.API_V1_SUNSET`, then left out of
+responses by themselves, `public.strip_deprecated`). What the site
 shows is each measure against peers (`app/peer_comparison.py`): the member's
 figure, the seat-adjusted expected figure, the peers' distribution, and an
 evaluative word per measure ("well above / above / near / below / well below
@@ -436,8 +437,22 @@ The correct pattern, established by `_district_pvi()` /
    Δ=…, SE=…"): a measurement, never an alert. Such a refit also runs the
    day after the code it fits changes (its `recipe`), and a fit shipped in
    a commit supersedes a refit installed before it and is what the next
-   refit is measured against. The search calibrations are the first
-   (§3b).
+   refit is measured against. A refit whose parameters equal the copy in
+   use reports `{"unchanged": true}` and installs its new measurements.
+   The search calibrations (§3b), the election map's priors, the
+   position-confidence structure and commemorative detection refit this
+   way. An installed refit that changes what member scoring reads
+   (`DataFile.scoring_inputs`) moves the scoring version by itself:
+   `app/scoring_revisions.py` records it, every snapshot after it carries
+   `scoring_version()` ("v6.38.1": `ALGORITHM_VERSION`, now in
+   `pipeline/analyze/score_version.py`, plus the refits installed under
+   it), the trend charts mark it from the snapshots, /changelog lists it
+   (`GET /api/score-revisions`) and an ops notice says so. Bumping
+   `ALGORITHM_VERSION` for a code change works as before and restarts the
+   count. Every source is found by rule; the one file left on a `stale`
+   check is the computed district lean (its next window needs the next
+   presidential election's precinct returns), and its alert states a
+   fact, not a task.
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):
@@ -487,12 +502,12 @@ The correct pattern, established by `_district_pvi()` /
    process-wide value — hand such work over with `asyncio.to_thread`) — so a process
    running across Jan 3 moves at its next job with no restart, and a job
    running across noon stays on one Congress. The read-only API process
-   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
-   freezes the district lines as well as the windows, and
-   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
-   database; **the production `.env` must not set `CURRENT_CONGRESS`**
-   (`.env.example` leaves it commented out, and a test keeps it that
-   way). Every House run — the nightly
+   runs no jobs; it advances the value on its liveness loop. A pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and it exists only for re-running an archived
+   database, so it takes two settings, `ARCHIVE_MODE=true` and `CURRENT_CONGRESS`. Without
+   `ARCHIVE_MODE`, a `CURRENT_CONGRESS` in the environment is ignored (logged at start) and the
+   value follows the clock, so a line left in a production `.env` can never go stale
+   (`.env.example` leaves both commented out, and a test keeps it that way). Every House run — the nightly
    chain's and each triggered one (`/api/admin/pipeline/trigger`,
    `/trigger-house`, the token trigger) — goes through
    `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
@@ -616,7 +631,9 @@ fact with a clear citable source that doesn't drift from run to run
 (e.g. a physical/legal constant like an FEC contribution limit). The
 state PVIs were once the example here, hand-typed from Cook; they are
 now computed (`scripts/fetch_state_pvi.py` → `app/data/state_pvi.json`,
-from the FEC's certified 2020 state totals and MEDSL's 2024 state file, with the per-state
+from the two newest presidential elections an official compilation covers, each read
+from the FEC's certified compilation where published and else MEDSL's newest Dataverse
+file, found by rule and refreshed monthly by `data_refresh`, with the per-state
 counts stored beside the figures so a test recomputes every one). The
 bar is specifically about **calculated** values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a
@@ -635,7 +652,16 @@ first four weeks under the calibration in use, alerting
 outside sampling noise. The alert states the measured shift and asks
 nothing of anyone: hand labels can't be drawn by rule, which is why a gate
 takes a data-supplied label wherever one exists (the relevance gate's
-publisher labels) and records each one that turns up for its next refit. A
+publisher labels) and records each one that turns up for its next refit. A gate with a data-supplied label refits itself from it, and a refit
+replaces the fit in use only under `precision_rule.accept`: on the same
+held-out labelled items (blocks of consecutive days), its precision's exact
+lower bound no lower and its recall no more than one standard error of the
+paired difference lower; otherwise the fit in use stays and the refit is
+recorded with why (`precision_rule.compare`). Today that is the
+near-identical cut (issue pairs plus feed articles the text dates days
+apart, `action_center.fit_near_identical_cut`), the related-vote threshold
+(`roll_call_links.refit`, on `RollCallLinkLabel`) and the outlet reposts
+(`bluesky_engagement`, on `OutletPostLink`). A
 new calibrated gate is added to `calibration_drift.GATES` and observes its
 decisions.
 
@@ -906,8 +932,9 @@ answers these before it merges:
   title, a results URL, an FEC cycle) are built from the cycle by rule.
 - **Who holds office?** Read from the official source every run: members
   from Congress.gov's current roster (`member_lifecycle` for departures),
-  the president from the roster with the Federal Register cross-check
-  (`check_sitting_president`), justices from Oyez's sitting list
+  the president from the roster, completed from the Federal Register's
+  signer and Wikidata's record of the office when it lags an inauguration
+  (`presidential_roster.reconcile_with_register`), justices from Oyez's sitting list
   (`retire_departed_justices`, `court_roster_changed`), leadership and
   committees from congress-legislators. Never a typed name, majority party
   or count ("the nine justices").
@@ -1662,8 +1689,10 @@ linked without one: its title names only the sponsor. Its labels are by hand
 articles named a bill a candidate vote was on, and 2 issues had a vote
 record as their primary source; the committee-routing precedent). Every
 structural link found from now on is kept as a data-supplied label
-(`RollCallLinkLabel`, `record_structural_labels`); recalibrate from those
-once there are enough. Person names are `[name]` in the examples and in live
+(`RollCallLinkLabel`, `record_structural_labels`), and the threshold
+refits itself from them once a day (`roll_call_links.refit`), adopted only
+under `precision_rule.accept` (production held none on 2026-10-23, so the
+hand-labelled threshold stands until they do). Person names are `[name]` in the examples and in live
 text (`NameMask`), and the mask is left out of what is compared. The gate is
 registered with the calibration-drift check (`roll_call_links` in
 `calibration_drift.GATES`).
@@ -2089,12 +2118,16 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   Five poll-weighting numbers are still stated priors (`model.STATED_PRIORS`:
   the sample-size clip and reference, the house-effect shrink, the half-life
   grid), named with their reasons on the map's method section. Their fit
-  (`fit_forecast_model.py --fit-priors`) stays off while a map built on them
+  (`fit_forecast_model.py --fit-priors`) is off while a map built on them
   is live; from the January 3 after a general held since
-  `model.PRIORS_STATED_ON`, `data_refresh._forecast_priors_stale` alerts until
-  a fit records fitted ones. Adopt that refit on its held-out checks, not its
-  in-sample likelihood: measured 2026-10-22, it fit better in sample and no
-  better held out.
+  `model.PRIORS_STATED_ON` every refit runs it, and keeps it only under §3a's
+  acceptance rule on the forward check (each race's log predictive density,
+  fitted against stated priors, both chambers together, neither losing more
+  than a standard error), never on its in-sample likelihood; the comparison
+  is written as `priorsComparison` and the method section follows whichever
+  priors the fit used. Measured 2026-10-23 on the training files in use: the
+  fitted priors fit better in sample but lose on the forward check (Δ −0.005
+  per race, SE 0.004; Senate −0.030, SE 0.014), so the stated ones would stay.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
   `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
@@ -2421,7 +2454,8 @@ See `.env.example` for all options. Key variables:
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
 | `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
-| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
+| `CURRENT_CONGRESS` | No | Computed from the clock. Ignored unless `ARCHIVE_MODE=true`, which pins the scored windows *and* House members' district lines to it: only for re-running an archived database |
+| `ARCHIVE_MODE` | No | `true` only to re-run an archived database: makes `CURRENT_CONGRESS` a pin |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -2429,11 +2463,10 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
-an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
-before 2026-09) pins the scored windows and the district lines on the
-119th Congress for good — check for the line and delete it
-(`check_current_congress_staleness` alerts once it has gone stale).
+always has. `ARCHIVE_MODE` is for an archived re-run only: an `.env`
+copied from a template that once set `CURRENT_CONGRESS=119` (before
+2026-09) does nothing without it, since outside archive mode the setting
+follows the clock.
 
 ### Database
 
@@ -2489,7 +2522,7 @@ the pending list).
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
-| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding` (`GET /api/court/finding`) |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding`, recomputed monthly on the Database's newest release by its numpy port `scripts/fetch_court_finding.py` (`GET /api/court/finding`) |
 | A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` (every appointment since 1789: `JusticeAppointment`, stored from the FJC directory by `justice_pipeline.store_court_seats`) |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
@@ -2554,7 +2587,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID refreshed monthly by `data_refresh`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
@@ -2626,7 +2659,11 @@ the pending list).
   FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
   `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
   documented from one column list (`_csv`, `_csv_doc`): the contract test
-  checks its header against that list, and it is not an MCP tool.
+  checks its header against that list, and it is not an MCP tool. A field or column
+  being retired is marked deprecated (`json_schema_extra={"deprecated": True}`
+  with `default=None`; a column's description starting with
+  `_DEPRECATED_COLUMN`) and stops being served the day after
+  `schemas.API_V1_SUNSET` by itself, never by a person removing it on the day.
 - **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
   `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
   roll call names "H.R. 997"), so the API's `JSONResponse`
@@ -3098,8 +3135,8 @@ box with the backend's `commentWindow` as its countdown) and
 read from the llama.cpp server and the embedding models' files by
 `app/environmental_sampler.py`, the pipelines' hours from their run
 records; only what the site can't read sits in `app/data/environmental.json`,
-each figure with its source and date, and `data_refresh` alerts on a newer
-eGRID edition. The Pi's power can't be sampled: no container can reach
+each figure with its source and date; its grid factor is reread monthly
+from the EPA's newest eGRID summary tables by `data_refresh`. The Pi's power can't be sampled: no container can reach
 `/dev/vcio`, so it stays a dated reading and the whole-machine figure a
 labelled assumption) follow; a new record page, or a rebuilt one,
 should use the pair rather than a new card. What the pair already takes, so

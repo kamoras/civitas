@@ -1276,7 +1276,7 @@ def thin_offset(data: list[tuple]) -> dict:
             if len(baseline) > 1 else None}
 
 
-def calibrate(cache: pathlib.Path | None = None) -> dict:
+def calibrate(cache: pathlib.Path | None = None, in_use: str | None = None) -> dict:
     span = congresses()
     data, shares = pairs(cache, span)
     d = drifts(data)
@@ -1296,6 +1296,17 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
                                              heldout_errors(data, base, only=STRUCTURES["era"]))
     forward = forward_test(data)
     structure = forward["chosen"]
+    if in_use and in_use != structure and in_use in FORWARD_CANDIDATES:
+        # The acceptance rule (app/acceptance.py) on the structure: the rule's
+        # new choice replaces the structure in use only when its forward
+        # errors beat the one in use's by more than the paired standard
+        # error; otherwise the structure in use is refitted on the new data.
+        errors, _ = forward_errors(data, names=FORWARD_CANDIDATES, window=FORWARD_WINDOW)
+        change = _paired(errors[structure], errors[in_use])
+        adopted = change is not None and change["above"] < -change["standard_error"]
+        forward["structure_change"] = {"from": in_use, "to": structure, **(change or {}), "adopted": adopted}
+        if not adopted:
+            structure = in_use
     # The leave-one-member-out reports need a grouping of every pair; the
     # window has none (its edge moves with the data), so they take the
     # one-standard-error rule's choice, as era_split_test does.
@@ -1505,8 +1516,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", type=pathlib.Path)
     ap.add_argument("--out", type=pathlib.Path, default=OUT)
+    ap.add_argument("--in-use", type=pathlib.Path, help="the calibration in use: its structure changes only "
+                                                        "under the acceptance rule")
     args = ap.parse_args()
-    calibrated = calibrate(args.cache)
+    current = json.loads(args.in_use.read_text()) if args.in_use else {}
+    calibrated = calibrate(args.cache, current.get("structure"))
+    if current:
+        was = {c: (current.get("chambers") or {}).get(c, {}).get("n0") for c in ("senate", "house")}
+        calibrated["_change"] = (f"structure {current.get('structure')} -> {calibrated['structure']}; n0 "
+                                 + ", ".join(f"{c} {was[c]} -> {calibrated['chambers'][c]['n0']}" for c in was)
+                                 + f"; calibrated through the {calibrated['calibrated_through']}th Congress")
     # With a cache, the dates the exports used were fetched.
     # Every export read: the paired Congresses, and the ones either side of
     # them for who was seated before and after.
