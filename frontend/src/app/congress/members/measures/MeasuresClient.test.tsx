@@ -136,3 +136,51 @@ describe("a whole-number measure", () => {
     expect(r.violations.map((v) => v.id)).toEqual([]);
   });
 });
+
+describe("votes with the president", () => {
+  it("is a row with its own rule, a readout of range and expected rate, and the full page linked", async () => {
+    const context =
+      "Range 55% to 87% · seat's expected rate 20% · more than the seat's expected rate";
+    const support = {
+      ...DATA.measures[0],
+      key: "presidentSupport" as const,
+      label: "Votes with the president",
+      ruleText: "Its own word rule, not the percentile one.",
+      rule: { kind: "interval" as const, interval: 95, minRecord: 20 },
+      median: null,
+      medianShown: null,
+      partyMedians: [
+        { party: "D", value: 0.2, n: 1, shown: "Democrats' median 20%" },
+        { party: "R", value: 0.1, n: 1, shown: "Republicans' median 10%" },
+      ],
+      points: [
+        { ...point("b", "Bea Ray", "R", 0.1), shown: "10%, 2 of 20 votes", context: "Range a" },
+        { ...point("a", "Al Fox", "D", 0.2), shown: "20%, 4 of 20 votes", context: "Range b" },
+        { ...point("c", "Cy Ng", "I", 0.5), shown: "74%, 20 of 27 votes", context },
+      ],
+    };
+    const data = {
+      ...DATA,
+      measures: [support],
+      members: DATA.members.map((m) => ({ ...m, withPresident: 20, presidentVotes: 27 })),
+    };
+    render(<MeasuresClient chamber="house" data={data} />);
+    expect(screen.getByText("Its own word rule, not the percentile one.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Every vote and the president's position" })
+    ).toHaveAttribute("href", "/congress/president/house");
+    expect(screen.getAllByText("20 / 27")).toHaveLength(3);
+    // Each party's median, labelled; no chamber median between them.
+    expect(screen.getByText("Democrats' median 20%")).toBeInTheDocument();
+    expect(screen.getByText("Republicans' median 10%")).toBeInTheDocument();
+    expect(screen.queryByText(/^Median /)).toBeNull();
+    screen.getByRole("group", { name: /Votes with the president, every representative/ }).focus();
+    await userEvent.keyboard("{End}");
+    expect(
+      screen.getByText(new RegExp(`Cy Ng, I-OR-AL: 74%, 20 of 27 votes, ${context}`))
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/peers/);
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
+  });
+});

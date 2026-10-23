@@ -36,20 +36,6 @@ function votes(
   };
 }
 
-function president(f: SectionFigures["congress"]["president"]): Preview {
-  const h = f.house;
-  if (!h) {
-    return {
-      figure: "Not yet",
-      caption: "no House vote on a position the president stated has been counted yet",
-    };
-  }
-  return {
-    figure: `${Math.round(h.rate * 100)}%`,
-    caption: `of House members' votes went the president's way, on ${n(h.rollCalls)} ${plural(h.rollCalls, "roll call")} with a stated position`,
-  };
-}
-
 /**
  * Each hub card's figure from GET /api/sections, keyed by SECTIONS
  * (lib/routes.ts) section and tab: the other pages of /congress, /elections
@@ -85,7 +71,6 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
             }`,
           }
         : { figure: "Not yet", caption: "no committee meeting recorded yet" },
-    president: ({ congress }) => president(congress.president),
   },
   // The executive branch's agency pages (the figures are under `agencies`
   // in GET /api/sections).
@@ -185,12 +170,11 @@ const BLURBS: Record<string, Record<string, string>> = {
     week: "What each chamber did in the last week Congress met",
     month: "What each chamber did in the last month Congress met",
     members: "Every senator and representative, found by state, town or name",
-    measures: "Each chamber's members side by side on four plain measures",
+    measures: "Each chamber's members side by side on five plain measures",
     compare: "Two members' records side by side",
     bills: "Every bill sitting members sponsored, by how far it has got",
     committees: "Each committee's members, leaders and meetings",
     nominations: "Every presidential nomination this Congress and how far it has got",
-    president: "How often members voted the way the president said to",
   },
   executive: {
     president: "The sitting president's record, documents and nominations",

@@ -340,12 +340,12 @@ export default function NewsChapter() {
           </Box>
           <Box
             title="The committee"
-            dek="A committee is named only when two measurements agree. The row says likely, because it falls short of the bar for fact."
+            dek="A committee is named only when two measurements agree. It learns from the committees bills were sent to, and is refit every day."
             figure={{
               type: "stat",
               value: 82,
               text: "82%",
-              caption: "named right, newer issues (October 2026)",
+              caption: "named right, held out (October 2026)",
             }}
             more="how the committee is chosen"
           >
@@ -354,18 +354,26 @@ export default function NewsChapter() {
               the same committee and do so strongly enough. The first compares the issue with each
               committee&apos;s jurisdiction as the House and Senate rules list it (House Rule X,
               Senate Rule XXV; the intelligence and Indian Affairs committees from their own
-              published statements). The second looks at the most similar of 460 past issues, each
-              read and labelled by hand with the committees that handle it, or with none. Their
-              chair and ranking member come from the committee rosters the site already keeps, as
-              they stand when you read the issue. Tested on issues newer than every labelled one it
-              learned from (measured October 2026), the committee named was one of the right ones
-              82% of the time, and a committee was named for about one issue in five; the rest say
-              nothing rather than guess. That is short of the bar the site sets for stating it as
-              fact (being confident precision is at least 80%), and asking for more certainty
-              didn&apos;t raise it, so the row says &ldquo;likely&rdquo;. Most of the misses were
-              stories no committee clearly handles. The rules&apos; wording alone did much worse
-              (38%, measured October 2026): it dates from 1946 in places and reads nothing like the
-              news.
+              published statements). The second looks at the most similar texts whose committee the
+              record already says: every bill of this Congress, with the committees Congress.gov
+              records it was sent to, and news no committee handles (foreign news that names no U.S.
+              official, and campaign coverage). Nobody labels them by hand. Their chair and ranking
+              member come from the committee rosters the site already keeps, as they stand when you
+              read the issue.
+            </P>
+            <P>
+              The setting is refit every day and tested on days it was not fitted to. A refit
+              replaces the one in use only when it is at least as sure of being right without
+              finding fewer. Measured October 2026, the committee named was right 82% of the time on
+              days it was not fitted to (a bill&apos;s own committee is right; any committee named
+              for news no committee handles is wrong), and about one bill or story in four got one;
+              the rest say nothing rather than guess. That clears the bar the site sets for stating
+              something as fact (being confident at least 80% are right), so the row names the
+              committee plainly; on a day the refit falls short, new issues say
+              &ldquo;likely&rdquo;. Checked against 136 issues read and labelled by hand, the
+              committee named was a right one 36 times in 38, where the setting learned from those
+              labels was right 36 times in 44. The rules&apos; wording alone did much worse (38%,
+              measured October 2026): it dates from 1946 in places and reads nothing like the news.
             </P>
           </Box>
           <Box

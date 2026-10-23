@@ -28,9 +28,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
-from pydantic import BaseModel
 
-from app import schemas
 from app.config import settings
 from app.database import SessionLocal
 from app.election_calendar import federal_states
@@ -320,53 +318,6 @@ def _send_ntfy(subject: str, body: str) -> None:
         logger.exception("ntfy alert failed")
 
 
-def check_current_congress_staleness() -> None:
-    """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
-
-    Unpinned, it can't: the pipeline process advances it to the Congress in
-    office (noon ET on Jan 3 of an odd year, the 20th Amendment's
-    hand-over) at the start of every job (app.config.scoring_congress), and
-    this check advances it first too, so a process that was already running
-    when a new Congress convened scores the new one from its next job, with
-    no restart. What can go stale is an operator's pin: CURRENT_CONGRESS
-    set in the environment (an archived-DB re-run's reproducibility) and
-    left in place past the next Congress — or copied from an old
-    .env.example that set it. Only editing the environment fixes that. The
-    pin holds both chambers' scored windows and House members' district
-    lines (fetch/district_pvi reads the same value), and the alert says so.
-
-    The round-4 audit's original "silent time bomb" finding was that the
-    default was a hardcoded literal nobody would remember to bump.
-    """
-    from app.config import advance_current_congress
-    from app.ordinals import ordinal
-    from app.pipeline.fetch.congress import expected_current_congress
-
-    from app.config import settings as current
-
-    configured = advance_current_congress()
-    expected = expected_current_congress()
-    # Unpinned, advance_current_congress just brought it up to the clock;
-    # it can only read as behind across the instant of the hand-over
-    # between the two reads, and the next call advances it.
-    if expected <= configured or not current.current_congress_pinned:
-        resolve_ops_alert("stale-congress")
-        return
-    send_ops_alert(
-        "CURRENT_CONGRESS is stale",
-        f"CURRENT_CONGRESS is pinned in the environment (.env or the container's environment) "
-        f"to {configured}, but the {ordinal(expected)} Congress is now in session. Both chambers' "
-        f"scored windows (roll-call sessions, bills, Voteview ideal points) and House members' "
-        f"district lines stay on the {ordinal(configured)} Congress while the pin is in place "
-        f"(fetch/district_pvi reads the same setting), so the {ordinal(expected)} Congress's "
-        f"members are scored on a dead Congress's record and on districts they were not elected "
-        f"in. Remove the pin so it follows the clock — production should never set it; a pin is "
-        f"only for re-running an archived database — and restart the backend.",
-        dedupe_key=f"stale-congress-{expected}",
-        condition="stale-congress",
-    )
-
-
 # How far ahead of an election each piece of cycle-specific data has to be
 # in place. The maps must be settled by the year's filing deadlines; voter
 # deadlines start with UOCAVA ballots 45 days out and registration about a
@@ -410,20 +361,21 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
             if missing:
                 gaps["election-ready-district-lean"] = (
                     f"No computed district lean for the {congress}th Congress's lines in {', '.join(missing)} "
-                    f"(they redrew, or app/data/district_lean.json has no table to carry forward). Rebuild it "
-                    f"with backend/scripts/build_district_lean.py for those maps."
+                    f"(they redrew, or app/data/district_lean.json has no table to carry forward): those House "
+                    f"pages show no computed lean until the file has those maps."
                 )
     if today >= election_day - READINESS_LEAD["calendar"] and calendar_election_date() != election_day.isoformat():
         gaps["election-ready-calendar"] = (
             f"app/data/election_calendar.json is for {calendar_election_date() or 'no election'}, not "
-            f"{election_day}: every state page and the homepage strip show no voter deadlines until it is "
-            f"rebuilt for {election_day} (backend/scripts/build_election_calendar.py)."
+            f"{election_day}: every state page and the homepage strip show no voter deadlines until "
+            f"app/data_refresh.py installs the calendar for {election_day} (a refresh it refuses raises its "
+            f"own alert, naming why)."
         )
     if today >= election_day - READINESS_LEAD["poll_close"] and poll_close.file_year() != year:
         gaps["election-ready-poll-close"] = (
             f"app/data/poll_close_times.json is for {poll_close.file_year() or 'no stated year'}, not {year}: "
-            f"election night would hold each state's count to the last cycle's closing times "
-            f"(backend/scripts/fetch_poll_close_times.py {year})."
+            f"election night would hold each state's count to the last cycle's closing times until "
+            f"app/data_refresh.py installs {year}'s (a refresh it refuses raises its own alert, naming why)."
         )
     return gaps
 
@@ -546,40 +498,6 @@ def check_feedback_token_expiration() -> None:
             dedupe_key=f"feedback-token-expiring-{expiration}",
             condition="feedback-token-expiring",
         )
-
-
-def deprecated_api_fields() -> list[str]:
-    """Every public API v1 field marked deprecated (json_schema_extra
-    {"deprecated": True}), as "Schema.field"."""
-    found = []
-    for name, model in vars(schemas).items():
-        if isinstance(model, type) and issubclass(model, BaseModel) and model.__module__ == schemas.__name__:
-            found += [f"{name}.{field}" for field, info in model.model_fields.items()
-                      if (info.json_schema_extra or {}).get("deprecated") is True]
-    return sorted(found)
-
-
-def check_api_v1_sunset() -> None:
-    """Alert once public API v1's sunset (schemas.API_V1_SUNSET) has passed
-    while its deprecated fields are still served. They are the only reason
-    the 0-100 transforms behind them exist (score_calculator's saturation
-    SDs, breadth and participation weights; president_scorer's saturation
-    and economy weights; services/score_trends): numbers nobody measured,
-    kept only for the dated promise, and deleted with v1."""
-    fields = deprecated_api_fields()
-    if utcnow().date() <= date.fromisoformat(schemas.API_V1_SUNSET) or not fields:
-        resolve_ops_alert("api-v1-sunset")
-        return
-    send_ops_alert(
-        "Public API v1's deprecated fields outlived their sunset",
-        f"Public API v1 was to drop its deprecated fields on {schemas.API_V1_SUNSET}; {len(fields)} are still served "
-        f"({', '.join(fields[:8])}{', ...' if len(fields) > 8 else ''}). Remove them, and with them the 0-100 "
-        f"transforms that exist only to feed them (score_calculator's saturation SDs, breadth and participation "
-        f"weights; president_scorer's saturation and economy weights; services/score_trends): picked numbers "
-        f"kept only for the dated promise.",
-        dedupe_key=f"api-v1-sunset-{len(fields)}",
-        condition="api-v1-sunset",
-    )
 
 
 def stock_trades_overrun_budget() -> timedelta:
@@ -778,8 +696,8 @@ def check_pipeline_service_alive() -> None:
                 "Pipeline heartbeat unreadable",
                 f"The API process has not been able to read the pipeline service's heartbeat since "
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
-                "service is running. Check the heartbeat file (scheduler_heartbeat.json on the data "
-                "volume both services mount) and the backend's logs.",
+                "service is running: the heartbeat file (scheduler_heartbeat.json, on the data volume "
+                "both services mount) could not be read. Each liveness tick reads it again.",
                 # Per day, not per spell: when a spell began is each
                 # process's own observation (each API worker, each task
                 # after a rollout), so a key built from it would page once
@@ -815,7 +733,8 @@ def check_pipeline_service_alive() -> None:
         "Pipeline service is not running",
         f"The pipeline service's scheduler has not reported {since}. The site is still being "
         "served, but no scheduled job — the nightly chain, the hourly refreshes — will run until "
-        "it is back. Check `docker service ps civitas_pipeline` and its logs.",
+        "it is back. Swarm restarts a stopped task by itself (restart_policy: any); a chain cut "
+        "short resumes from its link when the service starts (resume_interrupted_chain).",
         # Once per outage — keyed by the last beat before it, which each
         # outage has its own of — not per day: a service that recovers and
         # stops again the same day alerts again.
