@@ -652,7 +652,8 @@ Every hour at :15
        │         cap on ATTEMPTS: when both failed a run published nothing,
        │         and the next hour ranked the same two first again (five
        │         issues on 2026-09-23, none on 2026-09-26).
-       │         Post-composition title deduplication (cosine_sim > 0.92)
+       │         Post-composition title deduplication (the near-identical cut, refit daily
+       │         from data-labelled pairs: 0.89 on 2026-10-23)
        ▼
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.

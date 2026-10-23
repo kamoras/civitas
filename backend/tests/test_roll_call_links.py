@@ -4,6 +4,7 @@ arithmetic, the hourly matching and what the API serves from it."""
 import ast
 import json
 import pathlib
+from datetime import date, timedelta
 
 import numpy as np
 from fastapi import Response
@@ -332,3 +333,34 @@ def test_no_write_is_held_through_the_embedding(file_sessionmaker):
     db.commit()
     db.close()
     assert got_lock and all(got_lock), got_lock
+
+
+def _label(db, issue_id, day, story, related, candidates):
+    db.add(RollCallLinkLabel(issue_id=issue_id, date=day, story=story, source="bill_named",
+                             related=json.dumps(related), candidates=json.dumps(candidates)))
+
+
+def test_with_no_data_supplied_label_the_threshold_in_use_stays_and_says_why(db_session):
+    fit = rcl.refit(db_session, encode=_FAKE, in_use=_CAL)
+    assert fit["adopted"] is False and "no data-supplied label" in fit["kept"]
+    assert rcl.calibration_in_use(db_session, fit)["threshold"] == rcl.calibration()["threshold"]
+
+
+def test_a_refit_from_structural_labels_is_adopted_only_under_the_acceptance_rule(db_session):
+    """Forty days of labelled stories, each with its own vote and an
+    unrelated one: the refit's held-out precision and recall match the
+    threshold in use's, so it is adopted, and the calibration in use names
+    the labels it was fitted on (the acceptance rule's refusals are tested
+    in test_precision_rule)."""
+    for d in range(40):
+        day = (date(2026, 8, 1) + timedelta(days=d)).isoformat()
+        _label(db_session, d, day, "Senate votes to end the Iran war",
+               [f"senate-119-2-{d}"], {f"senate-119-2-{d}": "Remove Armed Forces from hostilities with Iran",
+                                       f"house-119-2-{d}": "Establishing the congressional budget"})
+    db_session.flush()
+    fit = rcl.refit(db_session, encode=_FAKE, in_use={"threshold": 0.99})
+    assert fit["positives"] == 40 and fit["threshold"] is not None
+    assert fit["adopted"] is True and fit["kept"] is None
+    assert rcl.calibration_in_use(db_session, fit)["threshold"] == fit["threshold"]
+    rcl.store_refit(db_session, fit)
+    assert rcl.calibration_in_use(db_session)["data_hash"].startswith("labels:")

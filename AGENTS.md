@@ -632,7 +632,16 @@ first four weeks under the calibration in use, alerting
 outside sampling noise. The alert states the measured shift and asks
 nothing of anyone: hand labels can't be drawn by rule, which is why a gate
 takes a data-supplied label wherever one exists (the relevance gate's
-publisher labels) and records each one that turns up for its next refit. A
+publisher labels) and records each one that turns up for its next refit. A gate with a data-supplied label refits itself from it, and a refit
+replaces the fit in use only under `precision_rule.accept`: on the same
+held-out labelled items (blocks of consecutive days), its precision's exact
+lower bound no lower and its recall no more than one standard error of the
+paired difference lower; otherwise the fit in use stays and the refit is
+recorded with why (`precision_rule.compare`). Today that is the
+near-identical cut (issue pairs plus feed articles the text dates days
+apart, `action_center.fit_near_identical_cut`), the related-vote threshold
+(`roll_call_links.refit`, on `RollCallLinkLabel`) and the outlet reposts
+(`bluesky_engagement`, on `OutletPostLink`). A
 new calibrated gate is added to `calibration_drift.GATES` and observes its
 decisions.
 
@@ -1660,8 +1669,10 @@ linked without one: its title names only the sponsor. Its labels are by hand
 articles named a bill a candidate vote was on, and 2 issues had a vote
 record as their primary source; the committee-routing precedent). Every
 structural link found from now on is kept as a data-supplied label
-(`RollCallLinkLabel`, `record_structural_labels`); recalibrate from those
-once there are enough. Person names are `[name]` in the examples and in live
+(`RollCallLinkLabel`, `record_structural_labels`), and the threshold
+refits itself from them once a day (`roll_call_links.refit`), adopted only
+under `precision_rule.accept` (production held none on 2026-10-23, so the
+hand-labelled threshold stands until they do). Person names are `[name]` in the examples and in live
 text (`NameMask`), and the mask is left out of what is compared. The gate is
 registered with the calibration-drift check (`roll_call_links` in
 `calibration_drift.GATES`).
