@@ -834,10 +834,12 @@ class PaginatedRepresentativesSchema(CamelModel):
 class ScoreTrendSchema(CamelModel):
     """The overall score against the member's score about a week earlier."""
     direction: Literal["up", "down", "stable", "new", "reset"] = Field(
-        "new", description='"new": no earlier score; "reset": earlier scores only under another scoring '
-                           "version or Congress, so not comparable")
-    change: float = Field(0.0, description="Points since the earlier score; 0 when new or reset")
-    previous_score: float | None = Field(None, description="The earlier overall score; null when new or reset")
+        "new", description=_DEPRECATED + '"new": no earlier score; "reset": earlier scores only under another '
+                           "scoring version or Congress, so not comparable", json_schema_extra=_DEPRECATED_FIELD)
+    change: float = Field(0.0, description=_DEPRECATED + "Points since the earlier score; 0 when new or reset",
+                          json_schema_extra=_DEPRECATED_FIELD)
+    previous_score: float | None = Field(None, description=_DEPRECATED + "The earlier overall score; null when new "
+                                         "or reset", json_schema_extra=_DEPRECATED_FIELD)
 
 
 class LeaderboardEntrySchema(CamelModel):
