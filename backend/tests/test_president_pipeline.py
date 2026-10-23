@@ -77,6 +77,13 @@ class TestSyncRoster:
         p = db_session.query(President).filter(President.id == "test-1").one()
         assert p.party == "F"
 
+    def test_a_president_added_from_the_register_carries_its_own_party(self, db_session):
+        """reconcile_with_register adds a president UCSB's EO table doesn't
+        list yet, with Wikidata's party on the entry."""
+        synced = _sync_roster(db_session, [_entry(id="new-48", name="New", term_end=None, number=48, party="D")], {})
+        assert synced == 1
+        assert db_session.query(President).filter(President.id == "new-48").one().party == "D"
+
     def test_a_cited_correction_overrides_the_source(self, db_session):
         """The American Presidency Project tags George Washington Federalist;
         he joined no party (PARTY_CORRECTIONS)."""
