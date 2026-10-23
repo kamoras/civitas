@@ -109,6 +109,14 @@ const approval: PresidentPeerMeasure = {
   sentence:
     "Approval averaged 37.3% during the term. 3 of the other 3 presidencies averaged higher.",
   thin: false,
+  aside:
+    "Lowest single poll so far 34% (Mar 2026) · highest so far 47% (Jan 2025). The strip ranks term averages, not single polls.",
+  detail: "since 2025 · single polls so far from 34% (Mar 2026) to 47% (Jan 2025)",
+  distributionDetails: [
+    "1953–1961 · single polls from 48% (Mar 1958) to 79% (Dec 1956)",
+    null,
+    null,
+  ],
 };
 
 const peers: PresidentPeers = {
@@ -153,6 +161,10 @@ describe("PresidentScorecard", () => {
     expect(within(figure).getAllByText("well below other presidencies")[0]).toBeInTheDocument();
     expect(
       within(figure).getByText(/Compared with 3 presidencies with approval polls \(from 1945\)/)
+    ).toBeInTheDocument();
+    // The single-poll extremes, and that the strip ranks averages.
+    expect(
+      within(figure).getByText(/Lowest single poll so far 34% \(Mar 2026\).*not single polls\./)
     ).toBeInTheDocument();
     // The strip's accessible form: every other presidency, linked.
     expect(within(figure).getByRole("link", { name: "Max Moe" })).toHaveAttribute(
