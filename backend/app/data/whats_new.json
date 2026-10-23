@@ -104,7 +104,7 @@
       "date": "2026-10-20",
       "title": "A page for agency budgets",
       "summary": "Every federal agency's budget for the year, largest first, now has its own page under Executive, each bar linked to the agency's page.",
-      "url": "/agencies/budget"
+      "url": "/executive/budgets"
     },
     {
       "id": "president-portraits",

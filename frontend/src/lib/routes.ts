@@ -138,11 +138,15 @@ export const PRESIDENT_HREF = "/executive/president";
  *  proclamations, memoranda), newest first: a redirect resolved like
  *  PRESIDENT_HREF (app/executive/orders). */
 /** Every agency's budget, largest first: a page of its own, so the
- * "Budgets" tab is never the same page as "Every agency". A static segment
- * under /agencies, so it shadows an agency slug of the same name; the
- * agency sync alerts if the Federal Register ever lists one
- * (RESERVED_SLUGS in backend/app/pipeline/fetch/agencies.py). */
-export const AGENCY_BUDGETS_HREF = "/agencies/budget";
+ * "Budgets" tab is never the same page as "Every agency". Outside
+ * /agencies on purpose: every path under it is an agency's slug, which the
+ * Federal Register names, so a static page there could shadow an agency.
+ * It was /agencies/budget until 2026-10; that address still answers with a
+ * permanent redirect while no agency holds the slug (LEGACY_BUDGETS_SLUG). */
+export const AGENCY_BUDGETS_HREF = "/executive/budgets";
+
+/** The Budgets page's old address under /agencies (app/agencies/[slug]). */
+export const LEGACY_BUDGETS_SLUG = "budget";
 
 export const EXECUTIVE_ORDERS_HREF = "/executive/orders";
 

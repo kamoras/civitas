@@ -505,7 +505,7 @@ export function agencyBudget(
   return null;
 }
 
-/** Every agency's budget, largest first (/agencies/budget). */
+/** Every agency's budget, largest first (/executive/budgets). */
 export function describeAgencyBudgets(): { title: string; description: string } {
   return {
     title: "Federal agency budgets: where the money goes",
