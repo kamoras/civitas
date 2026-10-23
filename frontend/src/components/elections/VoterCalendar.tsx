@@ -47,7 +47,7 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
           </>
         )}
       </p>
-      <p className="mt-0.5 text-small text-ink-lo">
+      <p className="mt-0.5 text-body text-ink-lo">
         {d.rule}
         {d.adjustment && ` ${d.adjustment}`}{" "}
         {href ? (
@@ -96,7 +96,7 @@ function Registration({
   const canRegister = line.status === "open" || line.status === "same_day";
   if (part === "rest")
     return line.sameDay ? (
-      <p className="mt-1 text-small text-ink">After that: {line.sameDay}</p>
+      <p className="mt-1 text-body text-ink">After that: {line.sameDay}</p>
     ) : null;
   return (
     <div className="mt-1">
@@ -105,7 +105,7 @@ function Registration({
         {left && <span className="ml-2 font-mono text-small text-phos">{left}</span>}
       </p>
       {line.sameDay && part === "all" && (
-        <p className="mt-0.5 text-small text-ink">After that: {line.sameDay}</p>
+        <p className="mt-0.5 text-body text-ink">After that: {line.sameDay}</p>
       )}
       {link && canRegister && (
         <p className="mt-1 text-small">
@@ -187,7 +187,7 @@ export default function VoterCalendar({
     );
   }
   const items = (
-    <ul className="mt-2 text-small">
+    <ul className="mt-2 text-body">
       {calendar.items.map((d) => (
         <Row
           key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
@@ -227,7 +227,7 @@ export default function VoterCalendar({
       {!next && (
         <p className="mt-1 text-body text-ink">Every deadline for this election has passed.</p>
       )}
-      {calendar.note && <p className="mt-1 text-small text-ink-lo">{calendar.note}</p>}
+      {calendar.note && <p className="mt-1 text-body text-ink-lo">{calendar.note}</p>}
       {list ? (
         <details className="group mt-2" open>
           <summary className="cursor-pointer list-none font-mono text-small text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">

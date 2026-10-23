@@ -54,7 +54,7 @@ export default function ClosingSoon({
         </p>
       ) : (
         <>
-          <p className="mt-1 text-small text-ink">
+          <p className="mt-1 text-body text-ink">
             In {rows.length} {rows.length === 1 ? "state" : "states"}, registration closes in the
             next {days} days.
           </p>

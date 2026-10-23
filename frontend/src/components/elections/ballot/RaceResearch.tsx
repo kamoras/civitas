@@ -27,7 +27,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   const withRecord = active.filter((c) => c.incumbentRecord || c.memberRecord);
   return (
     <div>
-      <p className="mb-3 text-small text-ink-lo">
+      <p className="mb-3 text-body text-ink-lo">
         A member of Congress in this race is linked to their record and peers when the match to
         their record is certain: one running for re-election, or one who serves in the other chamber
         now. Anyone not linked here may still be under{" "}

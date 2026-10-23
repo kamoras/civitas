@@ -174,7 +174,7 @@ export default function PeriodReportView({
           >
             {lead ? null : <p>{report.sentence}</p>}
             {pending > 0 && (
-              <p className="mt-1 font-sans text-small text-ink-min">
+              <p className="mt-1 font-sans text-body text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
                 log; its passed and confirmed measures are added when the Daily Digest is published.
               </p>

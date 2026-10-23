@@ -370,7 +370,7 @@ export default function ResultsOverview({
               defs={defs}
             />
           </div>
-          <p className="border-t border-white/[0.07] px-4 py-3 text-small text-ink-min">
+          <p className="border-t border-white/[0.07] px-4 py-3 text-body text-ink-min">
             Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state lists its count as
             official, and a race there still only leads: Civitas calls no race.{" "}
@@ -425,7 +425,7 @@ export default function ResultsOverview({
         >
           <p className="font-mono text-small text-signal-amber">Seats changing party</p>
           <p className={`${TYPE.figure} mt-2 tabular-nums text-ink-hi`}>{flips.length}</p>
-          <p className="mt-1 text-small text-ink-lo">
+          <p className="mt-1 text-body text-ink-lo">
             Leader from a different party than the holder, with enough of the count in (
             <Link
               href="/about/elections#election-night"
@@ -436,14 +436,14 @@ export default function ResultsOverview({
             )
           </p>
           {flipsNotShown.length > 0 && (
-            <p className="mt-2 text-small text-ink-min">
+            <p className="mt-2 text-body text-ink-min">
               Not counted: {flipsNotShown.length}{" "}
               {flipsNotShown.length === 1 ? "change" : "changes"} of party announced earlier that
               the latest count doesn&apos;t show; each race&apos;s card says what its count shows
             </p>
           )}
           {redrawn.length > 0 && (
-            <p className="mt-2 text-small text-ink-min">
+            <p className="mt-2 text-body text-ink-min">
               Not counted: House seats in the{" "}
               {redrawn.length === 1 ? "state" : `${redrawn.length} states`} voting on new district
               lines ({redrawn.join(", ")}), which have no previous holder
@@ -532,7 +532,7 @@ export default function ResultsOverview({
                       </span>
                     ))
                   ) : (
-                    <span className="text-small text-ink-lo">
+                    <span className="text-body text-ink-lo">
                       {senateStates.has(state)
                         ? isLive
                           ? refreshFailed
@@ -578,7 +578,7 @@ export default function ResultsOverview({
             );
           })}
         </ul>
-        <p className="mt-3 max-w-3xl text-small text-ink-min">
+        <p className="mt-3 max-w-3xl text-body text-ink-min">
           Live counts come from the {live.size} states whose election offices publish a results feed
           this page can read. For every other state, its own election office publishes the count;
           each state page links there.

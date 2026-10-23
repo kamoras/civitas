@@ -403,7 +403,7 @@ function Chart({ c }: { c: PresidentChart }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className={TYPE.boxTitle}>{c.title}</h3>
-          <p className="text-small text-ink">{c.why}</p>
+          <p className="text-body text-ink">{c.why}</p>
         </div>
         <ShareSectionButton label={c.title} />
       </div>
@@ -451,7 +451,7 @@ export default function PresidentChartsSection({ data }: { data: PresidentCharts
       >
         Through the term
       </h2>
-      <p className="mt-1 max-w-prose text-small text-ink-lo">
+      <p className="mt-1 max-w-prose text-body text-ink-lo">
         Each line or bar is what happened during the term, beside other presidencies over the same
         stretch of theirs. The middle half is drawn where at least {data.minBand} of them reach that
         point. It shows when, not why.

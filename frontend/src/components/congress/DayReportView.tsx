@@ -73,7 +73,7 @@ function ChamberHead({ day }: { day: ChamberDay }) {
         </span>
       </div>
       {day.status === "not_in_session" && day.adjournmentText && (
-        <p className="text-small leading-relaxed text-ink-lo">{day.adjournmentText}</p>
+        <p className="text-body leading-relaxed text-ink-lo">{day.adjournmentText}</p>
       )}
       {day.nextMeeting && (
         <p className="text-small leading-relaxed text-ink-lo">
@@ -81,13 +81,13 @@ function ChamberHead({ day }: { day: ChamberDay }) {
         </p>
       )}
       {awaitingLog(day) && (
-        <p className="text-small leading-relaxed text-ink-lo">
+        <p className="text-body leading-relaxed text-ink-lo">
           {LOG_POSTED[day.chamber]}, and it isn&apos;t out yet for this day. Its record votes are
           below as they are cast; the log follows here when it is published.
         </p>
       )}
       {day.floorLogStatus === "failed" && day.status !== "final" && (
-        <p className="text-small text-signal-amber">
+        <p className="text-body text-signal-amber">
           The {CHAMBER_NAME[day.chamber]}&apos;s floor log could not be read on the last check. What
           is shown may be incomplete.
         </p>
@@ -117,7 +117,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
         </Section>
       )}
       {day.status === "live" && (
-        <p className="border border-white/15 bg-surface px-3 py-2 text-small text-ink-lo">
+        <p className="border border-white/15 bg-surface px-3 py-2 text-body text-ink-lo">
           Measures passed, reported and confirmed appear here when the Congressional Record&apos;s
           Daily Digest for this day is published, usually the next day. Until then this is what the
           chamber itself has published{awaitingLog(day) ? "" : ": its floor log"}.

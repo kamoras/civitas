@@ -174,7 +174,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         />
       </div>
       {held.coverage80 != null && held.coverage80Shown && (
-        <p className="text-small text-ink-min">
+        <p className="text-body text-ink-min">
           What the map said beforehand: on {held.races} past races
           {held.cycles ? ` (${held.cycles[0]} to ${held.cycles[1]})` : ""} it never saw, its 80%
           ranges held {held.coverage80Shown} and its 95% ranges {held.coverage95Shown}
@@ -486,7 +486,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
             <h2 id="map-check-title" className={TYPE.kicker}>
               Did the map&apos;s ranges hold?
             </h2>
-            <p className="mt-1 max-w-3xl text-small text-ink-lo">
+            <p className="mt-1 max-w-3xl text-body text-ink-lo">
               Each official margin against the 80% and 95% ranges the map published before the
               election, as it stood on {asOf}. An honest 80% range holds about 8 results in 10; the
               band is the exact 95% interval for the share measured, the tick what the range
@@ -523,7 +523,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
             <h2 id="swing-map-title" className={TYPE.kicker}>
               Swing from the usual vote
             </h2>
-            <p className="mt-1 max-w-3xl text-small text-ink-lo">
+            <p className="mt-1 max-w-3xl text-body text-ink-lo">
               Each seat&apos;s official margin minus its usual vote, measured on the same scale: a
               lean is doubled to read as a margin, the margin the seat gives when the country splits
               evenly. A measurement of the count, not a call.
