@@ -48,7 +48,7 @@ export default function AppointerIntervals({
       >
         Votes for the government under the appointing president
       </h2>
-      <p className="text-small text-ink">
+      <p className="text-body text-ink">
         Asks whether a justice sided with the federal government more while the appointing
         president&apos;s administration argued its cases.
       </p>
@@ -102,7 +102,7 @@ export default function AppointerIntervals({
             </span>
           </div>
         </ChartReadout>
-        <figcaption id="appointer-caption" className="text-small text-ink">
+        <figcaption id="appointer-caption" className="text-body text-ink">
           {appointer.sentence}
         </figcaption>
         <div className="sr-only">
@@ -131,7 +131,7 @@ export default function AppointerIntervals({
           </table>
         </div>
       </figure>
-      <p className="text-small text-ink-lo">
+      <p className="text-body text-ink-lo">
         Not a measure of loyalty: a justice&apos;s years under the appointing president are always
         the first, and same-length windows later in a career show differences about as large.{" "}
         <a href={JUSTICE_RESEARCH_URL} className="text-phos underline underline-offset-2">

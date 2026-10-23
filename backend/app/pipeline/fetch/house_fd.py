@@ -50,13 +50,20 @@ from app.pipeline.fetch.ptr_common import owner_from_cell
 
 logger = logging.getLogger(__name__)
 
-# Annual report and its amendment, and the new-filer report a member files
-# on taking office — their only report until their first annual one (2026-10:
-# four sitting members, seated in special elections, had nothing else).
-# Candidate and termination reports list assets too, but predate office or
-# describe leaving it.
+# Annual report and its amendment, the new-filer report a member files on
+# taking office, and the candidate report. A member seated in a special
+# election who filed as a candidate may file nothing else until their first
+# annual report: on 2026-10-22, four sitting members' only reports in the
+# Clerk's index were candidate reports (and one's amendment), each filed by
+# the member themselves. A candidate report ranks below every annual report
+# (holdings_pipeline._rank), so it is shown only for such a member, and only
+# when the filer's first name is the member's (a namesake running for the
+# seat files the same type; holdings_pipeline._house_candidates). A
+# termination report describes leaving office.
 NEW_FILER_TYPE = "H"
-ANNUAL_FILING_TYPES = {"O", "A", NEW_FILER_TYPE}
+CANDIDATE_TYPE = "C"
+AMENDMENT_TYPE = "A"
+ANNUAL_FILING_TYPES = {"O", AMENDMENT_TYPE, NEW_FILER_TYPE, CANDIDATE_TYPE}
 
 _CACHE_TIER = "house_fd"
 # Bump whenever parse_schedule_a's output changes for the same PDF: it keys

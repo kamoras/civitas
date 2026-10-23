@@ -57,7 +57,7 @@ export default function Masthead({
               bordered stamp that carried it was a novelty prop, removed in
               #1061 and kept out. What the record is and how it is built is
               on About: the first screen is for the record itself. */}
-          <p className="mt-3 text-small leading-relaxed text-ink-lo">
+          <p className="mt-3 text-body leading-relaxed text-ink-lo">
             No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
             volunteers.
           </p>

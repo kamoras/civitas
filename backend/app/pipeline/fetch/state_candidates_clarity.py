@@ -465,17 +465,18 @@ async def _general_election_id(
     return pick_election(held, state, date.fromisoformat(election_day))
 
 
-def general_contests(summary: dict) -> list[ContestCount]:
+def general_contests(summary: dict, unplaced: list[ContestCount] | None = None) -> list[ContestCount]:
     """Every federal contest in a Clarity sum.json, counts kept. Parties
     come per choice (`P`), since a general-election contest's name carries
-    none; `PR`/`TP` are units reporting / total."""
+    none; `PR`/`TP` are units reporting / total. A contest whose label is
+    no federal seat goes to `unplaced` (office ""), where given."""
     out = []
     for contest in summary.get("Contests") or []:
         if not isinstance(contest, dict):
             continue
         name = contest.get("C") or ""
         parsed = _parse_office(name)
-        if parsed is None:
+        if parsed is None and unplaced is None:
             continue
         names, votes, parties = contest.get("CH") or [], contest.get("V") or [], contest.get("P") or []
         if not names or len(votes) != len(names):
@@ -502,8 +503,8 @@ def general_contests(summary: dict) -> list[ContestCount]:
         # dropped above; without it every share came out a little high.
         # Only a total at least the candidates' sum is believed.
         counted = sum(v for _, _, v in candidates)
-        out.append(ContestCount(
-            office=parsed[0], district=parsed[1], candidates=candidates,
+        (out if parsed else unplaced).append(ContestCount(
+            office=parsed[0] if parsed else "", district=parsed[1] if parsed else None, candidates=candidates,
             total_votes=total if isinstance(total, int) and total >= counted else None,
             reporting_units=pr if isinstance(pr, int) else None,
             total_units=tp if isinstance(tp, int) and tp > 0 else None,
@@ -584,7 +585,8 @@ async def fetch_general_results(
         # Clarity's payload carries no official/certified flag.
         official=False,
         unit_label=unit_label,
-        contests=general_contests(summary),
+        contests=general_contests(summary, unplaced := []),
+        unplaced=unplaced,
         source_updated=updated,
         # current_ver.txt only ever increases as the state republishes —
         # within one EID, which is why it is stored scoped by it

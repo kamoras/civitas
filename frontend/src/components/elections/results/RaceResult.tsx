@@ -160,7 +160,7 @@ export function RaceResultCard({
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-small text-ink-lo">
+      <p className="mt-4 text-body text-ink-lo">
         {[
           result.inLatestRead === false
             ? `The state's latest read didn't include this race; this is its count as read at ${formatEasternTime(result.fetchedAt)}.`
@@ -366,7 +366,7 @@ export function SenateNoCountCard({
           No count
         </span>
       </div>
-      <p className="mt-2 text-small text-ink-min">
+      <p className="mt-2 text-body text-ink-min">
         Civitas shows no count for this race, though it shows one for the state&apos;s other races.
       </p>
     </article>

@@ -74,7 +74,7 @@ export default function VotingAgreement({
             </>
           )}
         </p>
-        <p className="mt-2 font-sans text-small leading-snug text-ink">{data.sentence}</p>
+        <p className="mt-2 font-sans text-body leading-snug text-ink">{data.sentence}</p>
         {data.recentSplits.length > 0 && (
           <>
             <h4 className="mt-3 text-ink-min">Latest votes they split on</h4>

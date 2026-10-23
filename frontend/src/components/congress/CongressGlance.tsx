@@ -74,7 +74,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
       className="min-w-0"
     >
       <Head id="calendar-heading" title="Days in session this Congress" share="Days in session" />
-      <p className="mt-3 text-small text-ink">
+      <p className="mt-3 text-body text-ink">
         The Senate sat <strong className="text-ink-hi">{n(senate.days)}</strong> days and the House{" "}
         <strong className="text-ink-hi">{n(house.days)}</strong> since {shortDate(cal.start)}.
       </p>
@@ -150,7 +150,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
           </span>
         ))}
       </p>
-      <p className="mt-1 text-small leading-relaxed text-ink-min">
+      <p className="mt-1 text-body leading-relaxed text-ink-min">
         One row a month, one cell a day. Lit when the chamber sat, brighter the more record votes it
         took. Today is outlined.
       </p>
@@ -217,7 +217,7 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
       className="min-w-0"
     >
       <Head id="pipeline-heading" title="How far this Congress's bills got" share="Bill pipeline" />
-      <p className="mt-3 text-small text-ink">
+      <p className="mt-3 text-body text-ink">
         Of <strong className="text-ink-hi">{n(pipe.total)}</strong> bills sitting members
         introduced, <strong className="text-ink-hi">{n(law.bills)}</strong> became law (
         {law.shareText}).
@@ -271,7 +271,7 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-small leading-relaxed text-ink-min">
+      <p className="mt-2 text-body leading-relaxed text-ink-min">
         Bars on a log scale, so the few bills near the end still show. Each share is of every bill
         introduced. Pick a step to list its bills.{" "}
         <Link

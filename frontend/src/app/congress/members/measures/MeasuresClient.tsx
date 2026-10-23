@@ -138,7 +138,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="max-w-prose text-small text-ink">{m.why}</p>
+      <p className="max-w-prose text-body text-ink">{m.why}</p>
       {/* The table below is the full text form of these strips. */}
       {wholeCounts(
         m.unit,
@@ -273,7 +273,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
       <h2 id="facts-heading" className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}>
         Every member, the plain facts
       </h2>
-      <p className="mt-1 text-small text-ink-lo">
+      <p className="mt-1 text-body text-ink-lo">
         Alphabetical by default. Sort by any column: a sort is a fact, not a rank.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">

@@ -17,16 +17,25 @@
  *   display    serif   600     44 / 30           the homepage's own title only
  *   title      serif   600     36 / 28           the page's h1
  *   section    serif   600     24 / 22           h2, a part of the page
- *   boxTitle   serif   600     18 / 17           h3, a box or a list item's title
- *   kicker     sans    600     14                a short label over a title (kickerToned: in a tone)
- *   dek        sans    400     18 / 17           one line under the title: what the page is for
- *   body       sans    400     16                running text
- *   small      sans    400     14                source lines, captions, units, dates
- *   label      sans    600     14                table headers, chips, controls
+ *   boxTitle   serif   600     20 / 18           h3, a box or a list item's title
+ *   kicker     sans    600     16 / 15           a short label over a title (kickerToned: in a tone)
+ *   dek        sans    400     20 / 18           one line under the title: what the page is for
+ *   body       sans    400     18 / 17           running text: a box's line, a finding, a note, prose
+ *   small      sans    400     16 / 15           source lines, captions, units, dates
+ *   label      sans    600     16 / 15           table headers, chips, controls
  *   figure     serif   600     30 / 26           a headline number (colour from its context)
  *   figureLg   serif   600     56 / 40           the lead's number
  *   id         DM Mono 400     0.92em            a record number, in its context
- *   quote      sans    400     16                a source's own words, ruled, in curly quotes
+ *   quote      sans    400     18 / 17           a source's own words, ruled, in curly quotes
+ *
+ * Body and small went up two pixels (2026-10-22). Measured on production at
+ * 1280px, most of the main column's text was small (14px): 95% of a member
+ * page, 84% of a state ballot, 69% of the homepage, 68% of the Action
+ * Center, because small carried running sentences (box lines, findings,
+ * notes) as well as captions. Readability rises with size up to about 18pt
+ * and 14 measured worse (Rello, Pielot & Marcos, CHI 2016). So a sentence a
+ * reader reads as prose is body, and small is for what sits beside it: a
+ * source line, a caption, a unit, a date, a chip, a label.
  *
  * `typeScale.test.ts` holds the code to it: no `text-[Npx]`, an h1 to h3
  * sized only from here, and `font-display` only in this file.

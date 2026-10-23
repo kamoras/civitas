@@ -122,7 +122,7 @@ function StateContests({ contests }: { contests: ArchivedStateContests }) {
           <p className="text-small text-ink-min">{sourceLine(contests.judicialSource)}</p>
         </div>
       ))}
-      <p className="text-small text-ink-min">
+      <p className="text-body text-ink-min">
         Civitas read no count for the state&apos;s own contests: the state&apos;s results pages have
         them.
       </p>
@@ -256,7 +256,7 @@ export default function CycleArchive({
   return (
     <div className="space-y-12">
       {record.stillCounting && (
-        <p className="border border-signal-amber/40 px-4 py-3 text-small text-ink-hi">
+        <p className="border border-signal-amber/40 px-4 py-3 text-body text-ink-hi">
           The count is still coming in. This record is copied from it as it moves, and is final once
           the results window closes.{" "}
           <Link href="/elections" className="text-phos underline underline-offset-4">
@@ -285,7 +285,7 @@ export default function CycleArchive({
           <h2 id="final-map-title" className={TYPE.kicker}>
             The map before election day
           </h2>
-          <p className="mt-1 max-w-3xl text-small text-ink-lo">
+          <p className="mt-1 max-w-3xl text-body text-ink-lo">
             {map
               ? `As the campaign's last refresh left it, ${formatAsOf(map.asOf)}: how each seat usually votes and the range the polls suggested. Ranges, not results; kept here as it stood, so it can be read beside the count below.`
               : "No pre-election map was kept for this election: none was on file when the campaign ended."}
@@ -311,7 +311,7 @@ export default function CycleArchive({
           <h2 id="by-state-title" className={TYPE.kicker}>
             Count and ballot, by state
           </h2>
-          <p className="mt-1 max-w-3xl text-small text-ink-lo">
+          <p className="mt-1 max-w-3xl text-body text-ink-lo">
             Each federal race&apos;s count as its state&apos;s own results system last reported it,
             and the whole ballot the site showed: federal candidates, statewide offices, the
             legislature, elected judgeships and statewide measures, quoted from their sources. A

@@ -85,7 +85,7 @@ export default async function HomeTasks() {
           <h2 id="task-congress" className={TITLE}>
             {data?.congress ? congressLine(data.congress) : "This week in Congress"}
           </h2>
-          {data?.congress && <p className="text-small text-ink-lo">{data.congress.sentence}</p>}
+          {data?.congress && <p className="text-body text-ink-lo">{data.congress.sentence}</p>}
           <SourceLine className="mt-3">
             Source: {RECORD_SOURCE}; the next sitting as the Record announces it.
           </SourceLine>
