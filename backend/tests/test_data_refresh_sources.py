@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from app.acceptance import held_out_beats_in_use
 
@@ -134,3 +135,43 @@ def test_the_forecast_priors_are_kept_unless_they_win_on_the_forward_check():
     noise = fit.priors_comparison({"senate": ([-3.0, -3.1, -2.9], [-3.1, -3.0, -2.95]),
                                    "house": ([-3.0, -3.0], [-3.0, -3.0])})
     assert "within noise" in held_out_beats_in_use({"_comparison": noise}, {})
+
+
+def test_cel_is_read_for_the_newest_congress_both_chambers_have_coded():
+    commem = _script("calibrate_commemorative")
+    page = ('<a href="https://x.org/2025/06/CELHouse93to118-REVISED.xlsx">h</a>'
+            '<a href="https://x.org/2025/06/CELHouse93to118Reduced.dta">r</a>'
+            '<a href="https://x.org/2027/05/CELHouse93to119.xlsx">h</a>'
+            '<a href="https://x.org/2027/03/CELSenate93to119.xls">s</a>')
+    congress, files = commem.cel_sources(page)
+    assert congress == 119 and files["senate"].endswith("CELSenate93to119.xls")
+    assert files["house"].endswith("CELHouse93to119.xlsx")
+
+
+def test_the_commemorative_comparison_is_paired_on_held_out_senators():
+    commem = _script("calibrate_commemorative")
+    rng = np.random.default_rng(1)
+    rows, by = [], {}
+    for i in range(40):
+        bills = [{"stage": int(rng.integers(1, 5)), "margin": float(rng.uniform(0, 0.6))} for _ in range(6)]
+        by[f"m{i}"] = bills
+        # V&W's LES: substantive bills only (a commemorative bill, margin over 0.3, counts little).
+        les = sum(b["stage"] * (0.2 if b["margin"] > 0.3 else 1.0) for b in bills)
+        rows.append({"bio": f"m{i}", "majority": float(i % 2), "les": les})
+    members = rows
+    c = commem.held_out_comparison(members, by, refit=0.3, in_use=0.55)
+    assert c["delta"] > c["se"] > 0 and set(c["subgroups"]) == {"majority 0.0", "majority 1.0"}
+    same = commem.held_out_comparison(members, by, refit=0.3, in_use=0.3)
+    assert same["delta"] == 0
+
+
+def test_the_commemorative_rank_correlation_is_pandas_rank_corr():
+    """The port's Spearman (scipy, ties averaged, missing pairs left out) is
+    the research script's pandas `.rank().corr()`."""
+    pd = pytest.importorskip("pandas")
+    commem = _script("calibrate_commemorative")
+    les = [3.0, 1.0, 2.0, 2.0, 5.0, None, 4.0]
+    built = [0.1, 0.4, 0.2, 0.2, 0.9, 0.3, 0.5]
+    members = [{"les": v} for v in les]
+    expected = pd.Series(built).rank().corr(pd.Series(les, dtype=float).rank())
+    assert commem._rank_corr(members, built) == pytest.approx(expected, abs=1e-12)

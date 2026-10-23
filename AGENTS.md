@@ -431,8 +431,22 @@ The correct pattern, established by `_district_pvi()` /
    Δ=…, SE=…"): a measurement, never an alert. Such a refit also runs the
    day after the code it fits changes (its `recipe`), and a fit shipped in
    a commit supersedes a refit installed before it and is what the next
-   refit is measured against. The search calibrations are the first
-   (§3b).
+   refit is measured against. A refit whose parameters equal the copy in
+   use reports `{"unchanged": true}` and installs its new measurements.
+   The search calibrations (§3b), the election map's priors, the
+   position-confidence structure and commemorative detection refit this
+   way. An installed refit that changes what member scoring reads
+   (`DataFile.scoring_inputs`) moves the scoring version by itself:
+   `app/scoring_revisions.py` records it, every snapshot after it carries
+   `scoring_version()` ("v6.38.1": `ALGORITHM_VERSION`, now in
+   `pipeline/analyze/score_version.py`, plus the refits installed under
+   it), the trend charts mark it from the snapshots, /changelog lists it
+   (`GET /api/score-revisions`) and an ops notice says so. Bumping
+   `ALGORITHM_VERSION` for a code change works as before and restarts the
+   count. Every source is found by rule; the one file left on a `stale`
+   check is the computed district lean (its next window needs the next
+   presidential election's precinct returns), and its alert states a
+   fact, not a task.
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):

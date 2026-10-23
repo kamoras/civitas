@@ -3,7 +3,6 @@ own script on its own cadence, gated, the last good copy kept and an alert
 opened on a failure, and a staleness alert where a person must regenerate.
 Offline: the generators here are tiny inline scripts or mocked."""
 
-import gzip
 import importlib.util
 import json
 import pathlib
@@ -14,12 +13,16 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app import committee_routing
+from app import committee_routing, scoring_revisions
+from app.api import feed as feed_api
 from app import data_refresh as dr
 from app.config import settings
 from app.election_phase import ActiveElection
 from app.error_utils import output_summary
+from app.pipeline.analyze import score_calculator, score_version
 from app.pipeline.fetch.state_candidates_common import fec_party_label
 from app.state_names import STATE_NAMES
 
@@ -292,13 +295,24 @@ def test_the_ces_gate_holds_an_older_or_thinner_survey():
     assert dr._ces_gate({"fielded_year": 2026, "members": [{}] * 100, "priors": {"x": 1}}, old)
 
 
-def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_complete(monkeypatch):
+def test_the_position_weight_is_refit_once_its_newest_congress_has_ended(monkeypatch):
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+    assert not dr._position_confidence_due(_ctx(doc={"calibrated_through": 119}))
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
-    assert dr._position_confidence_stale(_ctx(doc={"calibrated_through": 119})) is None
-    assert dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9})) is None
-    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
-    assert "120th has ended" in dr._position_confidence_stale(_ctx(doc={"calibrated_through": 119}))
-    assert "119th" in dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9}))
+    assert dr._position_confidence_due(_ctx(doc={"calibrated_through": 119}))
+    old = dict(dr.read("position_confidence.json"))
+    assert dr._position_confidence_gate(old, old) == []
+    assert dr._position_confidence_gate({**old, "structure": "trend"}, old)
+    assert dr._position_confidence_gate({**old, "calibrated_through": old["calibrated_through"] - 1}, old)
+    spec = next(f for f in dr.DATA_FILES if f.name == "position_confidence.json")
+    assert "{in_use}" in spec.command(_ctx(spec.name)) and spec.scoring_inputs(old) == dr._position_inputs(old)
+
+
+def test_the_commemorative_gate_holds_other_prototypes():
+    old = dict(dr.read("commemorative_calibration.json"))
+    assert dr._commemorative_gate(old, old) == []
+    assert dr._commemorative_gate({**old, "prototype_hash": "x"}, old)
+    assert dr._commemorative_gate({**old, "threshold": 1.5}, old)
 
 
 def test_the_vote_grades_gate():
@@ -364,26 +378,26 @@ def test_the_agency_crosswalk_gate_refuses_a_threshold_that_separates_nothing_or
     assert dr._agency_crosswalk_gate({**old, "toptier_agencies": 20}, old)
 
 
-def test_a_newer_acs_or_onet_is_found(monkeypatch):
-    """The bundled file names ACS and O*NET releases in its _source; a
-    newer one posted is an alert, nothing new is not, and a source that
-    can't be read says nothing."""
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    with gzip.open(dr.BUNDLED / dr.OCCUPATION_FILE, "rt") as f:
-        source = json.load(f)["_source"]
-    year = int(re.search(r"ACS (\d{4})", source)[1])
-    major, minor = (int(x) for x in re.search(r"O\*NET (\d+)\.(\d+)", source).groups())
-    ctx = _ctx(dr.OCCUPATION_FILE, today=date(year + 3, 1, 1))
+def test_the_occupation_crosswalk_is_refreshed_when_a_newer_acs_or_onet_is_out(monkeypatch, db_session):
+    """Yearly, and within a week of a newer release; the publishers are asked
+    at most monthly, and one that can't be read is no newer release."""
+    doc = {"acs_year": 2024, "onet_version": "31.0"}
+    monkeypatch.setattr(dr, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2027, 3, 1))
+    last_week = datetime(2027, 2, 20)
     monkeypatch.setattr(dr, "_url_exists", lambda url: False)
-    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major}_{minor}_text.zip")
-    assert dr._occupation_industry_stale(ctx) is None
-    monkeypatch.setattr(dr, "_url_exists", lambda url: str(year + 1) in url)
-    assert f"ACS {year + 1}" in dr._occupation_industry_stale(ctx)
-    monkeypatch.setattr(dr, "_url_exists", lambda url: False)
-    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major + 1}_0_text.zip db_{major}_{minor}_x")
-    assert f"O*NET {major + 1}.0" in dr._occupation_industry_stale(ctx)
+    monkeypatch.setattr(dr, "_get_text", lambda url: "db_31_0_text.zip")
+    assert not dr._occupation_due(_ctx(dr.OCCUPATION_FILE, doc, today=date(2027, 3, 1), last=last_week))
+    asked = []
+    monkeypatch.setattr(dr, "_url_exists", lambda url: asked.append(url) or "2025" in url)
+    doc2 = {**doc, "acs_year": 2023}  # a different file: asked afresh
+    assert dr._occupation_due(_ctx(dr.OCCUPATION_FILE, doc2, today=date(2027, 3, 1), last=last_week))
+    assert asked
     monkeypatch.setattr(dr, "_get_text", lambda url: None)
-    assert dr._occupation_industry_stale(ctx) is None
+    assert dr._occupation_gate({"acs_year": 2024, "occupations": {"a": {"industry": "X"}}, "titles": {"t": "a"}},
+                               {"acs_year": 2024, "occupations": {"a": {"industry": "X"}}, "titles": {"t": "a"}}) == []
+    assert dr._occupation_gate({"acs_year": 2022}, {"acs_year": 2024})
 
 
 def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval():
@@ -395,10 +409,27 @@ def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval
     assert dr._court_finding_gate({**old, "justices": 40}, old)
 
 
-def test_the_files_still_on_a_staleness_check():
-    assert sorted(f.name for f in dr.DATA_FILES if f.command is None) == [
-        "commemorative_calibration.json", "district_lean.json", "occupation_industry.json.gz",
-        "position_confidence.json"]
+def test_only_the_district_lean_is_left_on_a_staleness_check():
+    """Its next window needs the next presidential election's precinct
+    returns; its alert states that they are out, not a task."""
+    assert [f.name for f in dr.DATA_FILES if f.command is None] == ["district_lean.json"]
+    why = dr._district_lean_stale(_ctx(doc={"_window": "2020+2024"}, today=date(2028, 12, 20)))
+    assert "2028" in why and not any(w in why for w in ("rerun", "Rerun", "research", "commit", "point "))
+
+
+def test_an_installed_refit_that_moves_scoring_inputs_records_a_scoring_revision(alerts):
+    base = score_version.ALGORITHM_VERSION
+    _write_runtime("t_rev.json", {"threshold": 0.3})
+    spec = dr.DataFile("t_rev.json", command=lambda ctx: _writer({"threshold": 0.3, "note": "new measurement"}),
+                       scoring_inputs=lambda d: d.get("threshold"))
+    assert dr.refresh_one(spec, _ctx("t_rev.json", dr.read("t_rev.json"))) == "refreshed"
+    assert score_version.scoring_version() == base  # the same threshold: no revision
+    spec = dr.DataFile("t_rev.json", command=lambda ctx: _writer(
+        {"threshold": 0.4, "_change": "threshold 0.3 -> 0.4"}), scoring_inputs=lambda d: d.get("threshold"))
+    assert dr.refresh_one(spec, _ctx("t_rev.json", dr.read("t_rev.json"))) == "refreshed"
+    assert score_version.scoring_version() == f"{base}.1"
+    assert scoring_revisions.revisions()[-1]["why"] == "threshold 0.3 -> 0.4"
+    assert f"{base}.1" in alerts.send.call_args.args[0] and alerts.send.call_args.kwargs.get("condition") is None
 
 
 def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
@@ -678,3 +709,23 @@ def test_state_pvi_gate_refuses_a_flipped_or_short_candidate():
     assert any("moved more than 5" in f for f in dr._state_pvi_gate(flipped, old))
     short = {**old, "states": {st: v for st, v in old["states"].items() if st != "WY"}}
     assert dr._state_pvi_gate(short, old)
+
+
+def test_scoring_reads_the_refreshed_position_weight(monkeypatch):
+    bundled = score_calculator._position_reliability("house")
+    doc = dict(dr.read("position_confidence.json"))
+    doc["chambers"] = {c: {**v, "n0": 99.0} for c, v in doc["chambers"].items()}
+    _write_runtime("position_confidence.json", doc)
+    assert score_calculator._position_reliability("house")["n0"] == 99.0
+    pathlib.Path(dr.runtime_data_path("position_confidence.json")).unlink()
+    assert score_calculator._position_reliability("house") == bundled
+
+
+def test_the_changelog_lists_scoring_revisions_newest_first():
+    scoring_revisions.record("v9.1", "position_confidence.json", "a" * 64, "structure pooled kept")
+    scoring_revisions.record("v9.1", "commemorative_calibration.json", "b" * 64, "threshold 0.33 -> 0.31")
+    app = FastAPI()
+    app.include_router(feed_api.router, prefix="/api")
+    listed = TestClient(app).get("/api/score-revisions").json()["revisions"]
+    assert [r["version"] for r in listed] == ["v9.1.2", "v9.1.1"]
+    assert scoring_revisions.scoring_version("v9.1") == "v9.1.2" and scoring_revisions.scoring_version("v9.2") == "v9.2"

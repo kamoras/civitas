@@ -11,13 +11,12 @@ titles for it. Anything else (a generic role like "CEO", a non-job like
 the generator's docstring has the measurements behind both rules.
 """
 
-import gzip
-import json
 import re
 from pathlib import Path
 
+from app import data_refresh
+
 _DATA = Path(__file__).resolve().parents[2] / "data" / "occupation_industry.json.gz"
-_data_cache: dict | None = None
 
 
 def _singular(word: str) -> str:
@@ -39,11 +38,9 @@ def normalize_title(text: str) -> str:
 
 
 def _data() -> dict:
-    global _data_cache
-    if _data_cache is None:
-        with gzip.open(_DATA, "rt", encoding="utf-8") as f:
-            _data_cache = json.load(f)
-    return _data_cache
+    """The crosswalk in use: data_refresh's refresh from the newest ACS and
+    O*NET releases, else the bundled file."""
+    return data_refresh.read(_DATA.name)
 
 
 def industry_of_occupation(occupation: str | None) -> str | None:

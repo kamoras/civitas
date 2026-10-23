@@ -21,15 +21,19 @@ copy of its logic), run as a subprocess at low priority:
      Otherwise the copy in use stays and the comparison is recorded in its
      `_refreshed.kept`: a measurement, not an alert.
 
-Files whose regeneration can't honestly be automated (a new survey's
-question ids, a model-selection refit that is a method decision, a source
-behind research-only dependencies) have no command, only a `stale` check
-that alerts when a newer version should exist, saying why a person is
-needed. The bundled copy stays in git as the pre-first-refresh fallback and
-the reproducible baseline; a refresh that moves scores is a data refresh
-within the same method (recorded in `_refreshed` and announced by an ops
+Nothing here asks a person to act. A source that moves is found by rule
+(the newest release a publisher's own listing names); a refit that can't be
+accepted keeps the copy in use with the comparison on its record. One file
+keeps a `stale` check: the computed district lean, whose next window needs
+the next presidential election's precinct returns; its alert states that
+the returns are out, not a task.
+
+The bundled copy stays in git as the pre-first-refresh fallback and the
+reproducible baseline. A refresh that moves scores within the same method
+is a data refresh (recorded in `_refreshed` and announced by an ops
 notice), not a new scoring version, exactly as the per-run population
-references are.
+references are; an accepted refit of a scoring calibration (`scoring_inputs`)
+moves the scoring version by itself (app/scoring_revisions.py).
 
 Readers call `read(name)`, which notices a rewrite from either process.
 """
@@ -54,7 +58,7 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
-from app import committee_routing, site_search
+from app import committee_routing, scoring_revisions, site_search
 from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
@@ -66,6 +70,7 @@ from app.error_utils import output_summary
 from app.file_cache import Uncached, files_stamp, read_json, read_json_preferring
 from app.forecast import model, training_polls
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app.pipeline.analyze import commemorative, score_version
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
@@ -144,6 +149,11 @@ class DataFile:
     # in its _refreshed, never an alert). Runs after the gate. See
     # held_out_beats_in_use.
     accept: Callable[[dict, dict], str | None] | None = None
+    # What member scoring reads from the file. A refit installed with
+    # different values moves scores under unchanged code, so it records a
+    # scoring revision (app/scoring_revisions.py): every snapshot after it
+    # carries the new version, and an ops notice says so.
+    scoring_inputs: Callable[[dict], object] | None = None
 
     @property
     def stem(self) -> str:
@@ -463,7 +473,18 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
                            condition=f"data-check-{spec.stem}")
         else:
             resolve_ops_alert(f"data-check-{spec.stem}")
-    if changed and spec.moves_scores:
+    if changed and spec.scoring_inputs and spec.scoring_inputs(new) != spec.scoring_inputs(ctx.doc):
+        c = new.get("_comparison") or {}
+        why = new.get("_change") or (f"{c.get('metric', 'held-out comparison')}: "
+                                     f"\u0394={float(c.get('delta', 0)):+.4f}, SE={float(c.get('se', 0)):.4f}")
+        version = scoring_revisions.record(score_version.ALGORITHM_VERSION, spec.name, content_sha256(new), why)
+        send_ops_alert(
+            f"{spec.name} refit installed: scores are now {version}",
+            f"app/data/{spec.name} was refit on new data and installed under the acceptance rule ({why}). Member scores move at the next "
+            f"run and their snapshots carry {version}; /changelog lists it.",
+            dedupe_key=f"scoring-revision-{spec.stem}-{content_sha256(new)[:12]}",
+        )
+    elif changed and spec.moves_scores:
         send_ops_alert(
             f"{spec.name} refreshed",
             f"app/data/{spec.name} was regenerated from current data and passed its gates. Scores that read "
@@ -736,33 +757,67 @@ def _casing_gate(new: dict, old: dict) -> list[str]:
     return failures + _drift(new, old, "forms", keep=0.8)
 
 
-# --- staleness of the files a person has to regenerate -------------------
+# --- staleness ------------------------------------------------------------
 
-def _position_confidence_stale(ctx: Context) -> str | None:
+# Constituent Alignment's position weight (scripts/calibrate_position_
+# confidence.py): refit once the newest Congress it was calibrated through
+# has ended, so its Voteview positions are complete, and monthly after until
+# the sitting Congress has full records to pair. Its structure (one curve, a
+# curve per chamber, the latest era's, a window) changes only when the
+# script's one-standard-error choice also beats the structure in use by more
+# than the paired standard error (--in-use); n0 is refitted on the new
+# pairs either way. A changed weight is a scoring revision.
+def _position_confidence_due(ctx: Context) -> bool:
     through = ctx.doc.get("calibrated_through")
-    if isinstance(through, int) and settings.CURRENT_CONGRESS - 1 > through:
-        return (f"calibrated through the {through}th Congress; the {through + 1}th has ended, so its "
-                f"Voteview positions are complete. Rerun scripts/calibrate_position_confidence.py: its "
-                f"structure choice (the one-standard-error rule) is a method decision, so the refit is reviewed, "
-                f"and a changed structure is a scoring version.")
-    return None
+    return isinstance(through, int) and settings.CURRENT_CONGRESS > through and not ctx.tried_within(30)
 
 
-def _commemorative_stale(ctx: Context) -> str | None:
-    measured = [int(m) for m in re.findall(r"les_spearman_(\d+)", json.dumps(sorted(ctx.doc)))]
-    if measured and settings.CURRENT_CONGRESS - 2 > max(measured):
-        return (f"measured against Volden & Wiseman's {max(measured)}th-Congress coding; the "
-                f"{settings.CURRENT_CONGRESS - 2}th's should be published. Rerun "
-                f"scripts/calibrate_commemorative.py (embedding model; a moved threshold is a scoring version).")
-    return None
+def _position_confidence_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if new.get("structure") not in ("pooled", "chamber", "era", "window"):
+        failures.append(f"structure {new.get('structure')}")
+    for chamber in ("senate", "house"):
+        n0 = ((new.get("chambers") or {}).get(chamber) or {}).get("n0")
+        if not isinstance(n0, (int, float)) or n0 <= 0:
+            failures.append(f"{chamber} n0 {n0}")
+    if (new.get("calibrated_through") or 0) < (old.get("calibrated_through") or 0):
+        failures.append(f"calibrated through {new.get('calibrated_through')} against {old.get('calibrated_through')}")
+    if ((new.get("pairs") or {}).get("thin") or 0) < 0.9 * ((old.get("pairs") or {}).get("thin") or 0):
+        failures.append(f"{(new.get('pairs') or {}).get('thin')} thin pairs against {(old.get('pairs') or {}).get('thin')}")
+    for key in ("reference_votes", "uncounted_weight", "prior_until_votes"):
+        if not isinstance(new.get(key), (int, float)):
+            failures.append(f"no {key}")
+    return failures
+
+
+def _position_inputs(doc: dict) -> object:
+    return (doc.get("structure"), {c: v.get("n0") for c, v in (doc.get("chambers") or {}).items()},
+            doc.get("reference_votes"), doc.get("uncounted_weight"), doc.get("prior_until_votes"))
+
+
+# Commemorative-bill detection (scripts/calibrate_commemorative.py):
+# monthly, the newest Congress the Center for Effective Lawmaking has coded
+# (found on its data page); a Congress already measured on the prototypes
+# in use comes back unchanged at once. A moved threshold is installed only
+# under the acceptance rule (held-out Senate LES Spearman), and is a scoring
+# revision.
+def _commemorative_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if new.get("prototype_hash") != commemorative.prototype_hash():
+        failures.append("fitted to other prototypes than the code's")
+    if not 0 < float(new.get("threshold") or 0) < 1:
+        failures.append(f"threshold {new.get('threshold')}")
+    held = ((new.get("classification") or {}).get("senate (held out)") or {}).get("members") or 0
+    if held < 30:
+        failures.append(f"{held} held-out senators")
+    return failures
 
 
 def _district_lean_stale(ctx: Context) -> str | None:
     years = [int(y) for y in re.findall(r"\d{4}", str(ctx.doc.get("_window") or ""))]
     if years and ctx.today >= date(max(years) + 4, 12, 15):
-        return (f"windowed to {ctx.doc['_window']}; the {max(years) + 4} presidential election's precinct returns "
-                f"should be published. The builder (scripts/build_district_lean.py) needs that cycle's sources "
-                f"and certified-canvass corrections researched, as state_pvi.json's do.")
+        return (f"windowed to {ctx.doc['_window']}: the {max(years) + 4} presidential election's precinct returns "
+                f"should be published, and the computed lean (display only, beside Cook's) doesn't read them yet.")
     return None
 
 
@@ -814,39 +869,56 @@ def _url_exists(url: str) -> bool | None:
 
 # Occupation to industry (scripts/fetch_occupation_industry.py): the ACS
 # 1-year PUMS comes out each autumn for the year before, O*NET a few times a
-# year. The script reads the newest of each, but downloads 2.4 GB of
-# records, so this only says when a newer one is out (monthly; nothing when
-# a source can't be read). A rerun moves donors' industries, so scores.
+# year; the script reads the newest of each. Yearly, and within a week of
+# either publisher posting a newer release than the file's (checked at most
+# monthly). It streams 2.4 GB of records to scratch on the data volume, so
+# it is heavy. A new crosswalk moves donors' industries, so scores: a data
+# refresh within the method.
 OCCUPATION_FILE = "occupation_industry.json.gz"
 _PUMS_URL = "https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_pus.zip"
 _ONET_PAGE = "https://www.onetcenter.org/database.html"
 
 
-def _occupation_industry_stale(ctx: Context) -> str | None:
-    if ctx.tried_within(30):
-        return UNCHECKED
-    _record_try(ctx.name, "release check")
+def _occupation_newer_release(ctx: Context) -> bool:
+    """A newer ACS PUMS or O*NET than the file in use reads: asked of the
+    publishers at most monthly (the answer is kept in api_cache)."""
+    db = SessionLocal()
     try:
-        with gzip.open(BUNDLED / OCCUPATION_FILE, "rt", encoding="utf-8") as f:
-            source = str(json.load(f).get("_source") or "")
-    except (OSError, ValueError):
-        return None
-    acs, onet = re.search(r"ACS (\d{4})", source), re.search(r"O\*NET (\d+)\.(\d+)", source)
-    newer = []
-    if acs:
-        year = int(acs[1])
-        posted = [y for y in range(year + 1, ctx.today.year) if _url_exists(_PUMS_URL.format(year=y))]
-        if posted:
-            newer.append(f"the ACS {max(posted)} 1-year PUMS is posted (this file is ACS {year})")
-    page = _get_text(_ONET_PAGE) if onet else None
-    versions = {(int(a), int(b)) for a, b in re.findall(r"db_(\d+)_(\d+)_", page or "")}
-    if onet and versions and max(versions) > (int(onet[1]), int(onet[2])):
-        newest = max(versions)
-        newer.append(f"O*NET {newest[0]}.{newest[1]} is published (this file is {onet[1]}.{onet[2]})")
-    if not newer:
-        return None
-    return ("; ".join(newer) + ". Rerun scripts/fetch_occupation_industry.py --download (it reads the newest of "
-            "each; 2.4 GB of records) and commit the file: donors' industries move, so scores do.")
+        cached = api_cache_get(db, _STATE_TIER, f"{ctx.name}:newer", max_age_hours=24 * 30)
+        if cached is not None and cached.get("for") == [ctx.doc.get("acs_year"), ctx.doc.get("onet_version")]:
+            return bool(cached.get("newer"))
+        year, onet = ctx.doc.get("acs_year"), str(ctx.doc.get("onet_version") or "")
+        newer = isinstance(year, int) and any(
+            _url_exists(_PUMS_URL.format(year=y)) for y in range(year + 1, ctx.today.year))
+        have = tuple(int(x) for x in onet.split(".")) if re.fullmatch(r"\d+\.\d+", onet) else None
+        page = _get_text(_ONET_PAGE) if have else None
+        versions = {(int(a), int(b)) for a, b in re.findall(r"db_(\d+)_(\d+)_", page or "")}
+        newer = newer or bool(have and versions and max(versions) > have)
+        api_cache_set(db, _STATE_TIER, f"{ctx.name}:newer",
+                      {"for": [ctx.doc.get("acs_year"), ctx.doc.get("onet_version")], "newer": newer},
+                      normal_ttl_hours=24 * 30)
+        return newer
+    finally:
+        db.close()
+
+
+def _occupation_due(ctx: Context) -> bool:
+    return not ctx.tried_within(365) or (not ctx.tried_within(7) and _occupation_newer_release(ctx))
+
+
+def _occupation_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if (new.get("acs_year") or 0) < (old.get("acs_year") or 0):
+        failures.append(f"ACS {new.get('acs_year')} is older than {old.get('acs_year')}")
+    for key, keep in (("occupations", 0.9), ("titles", 0.8)):
+        before, after = len(old.get(key) or {}), len(new.get(key) or {})
+        if after < keep * before:
+            failures.append(f"{after} {key} against {before} in use")
+    assigned = [o for o in (new.get("occupations") or {}).values() if o.get("industry")]
+    was = [o for o in (old.get("occupations") or {}).values() if o.get("industry")]
+    if len(assigned) < 0.8 * len(was):
+        failures.append(f"{len(assigned)} occupations assigned an industry against {len(was)}")
+    return failures + _drift(new, old, "titles", keep=0.7)
 
 
 # /environmental's grid factor: the EPA's newest eGRID summary tables, the
@@ -1146,7 +1218,10 @@ DATA_FILES: list[DataFile] = [
              gate=_eavs_gate, timeout_s=900),
     DataFile("agency_crosswalk.json", command=lambda ctx: [PY, _script("calibrate_agency_crosswalk.py"), "{out}"],
              due=_every(30), gate=_agency_crosswalk_gate, timeout_s=300),
-    DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
+    DataFile(OCCUPATION_FILE,
+             command=lambda ctx: [PY, _script("fetch_occupation_industry.py"), "--download", "--work", "{tmp}",
+                                  "--output", "{out}"],
+             due=_occupation_due, gate=_occupation_gate, heavy=True, moves_scores=True, timeout_s=6 * 3600),
     DataFile("court_finding.json",
              command=lambda ctx: [PY, _script("fetch_court_finding.py"), "{out}"],
              due=_every(30), gate=_court_finding_gate, timeout_s=3600),
@@ -1171,7 +1246,15 @@ DATA_FILES: list[DataFile] = [
     DataFile("bluesky_post_windows.json",
              command=lambda ctx: [PY, _script("fetch_bluesky_activity.py"), "refresh", "{out}", "{tmp}"],
              due=_every(90), gate=_windows_gate, timeout_s=3 * 3600),
-    DataFile("position_confidence.json", stale=_position_confidence_stale),
-    DataFile("commemorative_calibration.json", stale=_commemorative_stale),
+    DataFile("position_confidence.json",
+             command=lambda ctx: [PY, _script("calibrate_position_confidence.py"), "--cache", "{tmp}",
+                                  "--in-use", "{in_use}", "--out", "{out}"],
+             due=_position_confidence_due, gate=_position_confidence_gate, scoring_inputs=_position_inputs,
+             heavy=True, timeout_s=6 * 3600),
+    DataFile("commemorative_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_commemorative.py"), "--cache", "{tmp}", "--in-use",
+                                  "{in_use}", "--output", "{out}"],
+             due=_every(30), gate=_commemorative_gate, accept=held_out_beats_in_use,
+             scoring_inputs=lambda doc: doc.get("threshold"), heavy=True, timeout_s=3 * 3600),
     DataFile("district_lean.json", stale=_district_lean_stale),
 ]

@@ -188,18 +188,15 @@ from app.pipeline.analyze.population_reference import (
     LES_REFERENCE,
 )
 from app.pipeline.analyze.score_bounds import clamp
+# The scoring version, in its own module so the data refresh can read it
+# without importing scoring (score_version.py).
+from app.pipeline.analyze.score_version import ALGORITHM_VERSION, scoring_version  # noqa: F401
 from app.score_display import shown_share
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-# Bump when scoring formulas or their data inputs change in a way that
-# shifts scores. Recorded on every ScoreSnapshot so trend charts can
-# annotate methodology changes. Keep frontend/src/lib/scoreVersions.ts (the
-# public changelog) in sync, and add a decision record for the new version
-# under docs/methodology/member-score/ — that is where the reasons go, not
-# here.
-ALGORITHM_VERSION = "v6.38"
+
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -524,7 +521,7 @@ def _state_population() -> dict[str, float]:
     return _state_population_cache[1]
 
 
-_position_reliability_cache: dict | None = None
+_position_reliability_cache: tuple[dict, dict] | None = None  # (the doc read, its chambers)
 
 
 def _position_reliability(chamber: str) -> dict:
@@ -543,17 +540,17 @@ def _position_reliability(chamber: str) -> dict:
     best (a party-line term was tested and found no support). Nothing in it
     follows the sitting Congress.
 
-    Read from app/data/position_confidence.json, and stored in each
+    Read from position_confidence.json (data_refresh.read), and stored in each
     member_ideal_points section at ingest: the score reads the section's
     copy. {} (no weighting, the pre-v6.27 behaviour) if the file or the
     chamber is unavailable: missing data is never punitive.
     """
     global _position_reliability_cache
-    if _position_reliability_cache is None:
-        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "position_confidence.json"
+    # The copy in use: data_refresh's accepted refit, else the bundled file.
+    raw = data_refresh.read("position_confidence.json")
+    if _position_reliability_cache is None or _position_reliability_cache[0] is not raw:
         try:
-            raw = json.loads(path.read_text())
-            _position_reliability_cache = {
+            parsed = {
                 name: {"n0": float(c["n0"]), "half_weight_votes": float(c["half_weight_votes"]),
                        "reference_votes": float(raw["reference_votes"]),
                        "uncounted_weight": float(raw["uncounted_weight"]),
@@ -561,12 +558,10 @@ def _position_reliability(chamber: str) -> dict:
                 for name, c in raw["chambers"].items()
             }
         except Exception:
-            logger.warning(
-                "position_confidence.json unavailable: position congruence will not weight "
-                "thin records; regenerate with scripts/calibrate_position_confidence.py"
-            )
-            _position_reliability_cache = {}
-    return dict(_position_reliability_cache.get(chamber) or {})
+            logger.warning("position_confidence.json unavailable: position congruence will not weight thin records")
+            parsed = {}
+        _position_reliability_cache = (raw, parsed)
+    return dict(_position_reliability_cache[1].get(chamber) or {})
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also
