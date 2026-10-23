@@ -22,7 +22,8 @@ A query goes straight to its page ("direct") when the best match is at
 least `direct_floor` and leads the next page by at least `direct_margin`:
 a wrong jump is worse than a list. Every parameter is fitted on known-item
 queries built from the index itself by scripts/calibrate_site_search.py and
-read from app/data/site_search_calibration.json.
+read from site_search_calibration.json (data_refresh.read: the pipeline's
+refit when one was accepted, else the bundled copy).
 
 Nothing here logs or keeps a query (AGENTS.md §8).
 """
@@ -40,6 +41,7 @@ from urllib.parse import quote
 
 from sqlalchemy import text
 
+from app import data_refresh
 from app.pipeline.analyze.document_authority import (
     _EO_ABBR_RE, _EO_RE, _EO_TITLE_RE, _FR_CITE_RE, _FR_DOC_RE, _PROC_RE, _RIN_RE, _normalize_rin,
 )
@@ -84,15 +86,27 @@ class Params:
     enough: float = 20
 
 
-@lru_cache(maxsize=1)
+_fitted: dict[str, tuple[dict, object]] = {}
+
+
+def _fitted_params(path: Path, cls):
+    """`cls` from the `params` of the copy of `path` in use (refreshed or
+    bundled, data_refresh.read), its defaults where it has none. Rebuilt
+    when that copy is rewritten, from either process."""
+    doc = data_refresh.read(path.name)
+    hit = _fitted.get(path.name)
+    if hit is not None and hit[0] is doc:
+        return hit[1]
+    fitted = doc.get("params") if isinstance(doc.get("params"), dict) else {}
+    value = cls(**{k: float(v) for k, v in fitted.items() if k in cls.__dataclass_fields__})
+    _fitted[path.name] = (doc, value)
+    return value
+
+
 def params() -> Params:
     """The fitted parameters (scripts/calibrate_site_search.py), or the
     defaults above before it has run."""
-    try:
-        fitted = json.loads(CALIBRATION_PATH.read_text())["params"]
-    except (OSError, ValueError, KeyError):
-        return Params()
-    return Params(**{k: float(v) for k, v in fitted.items() if k in Params.__dataclass_fields__})
+    return _fitted_params(CALIBRATION_PATH, Params)
 
 
 _STOP = {"the", "from", "where", "comes", "by", "of", "and", "to", "a", "in", "on", "for", "with", "top"}
@@ -484,15 +498,10 @@ class Fusion:
     weak_weight: float = 1.0
 
 
-@lru_cache(maxsize=1)
 def fusion() -> Fusion:
     """The fitted fusion (scripts/calibrate_search_fusion.py), or the
     defaults above (plain RRF) before it has run."""
-    try:
-        fitted = json.loads(FUSION_PATH.read_text())["params"]
-    except (OSError, ValueError, KeyError):
-        return Fusion()
-    return Fusion(**{k: float(v) for k, v in fitted.items() if k in Fusion.__dataclass_fields__})
+    return _fitted_params(FUSION_PATH, Fusion)
 
 
 def document_url(doc_id: int | str) -> str:
