@@ -318,6 +318,9 @@ export interface BallotMeasure {
   /** The county election office whose copy of the state's document was read, when the
    * state's own site couldn't be (Georgia, Nevada). sourceName stays the state's. */
   republishedBy: string | null;
+  /** The capture date (YYYY-MM-DD) when the state's document was read from the
+   * Internet Archive's copy of it (republishedBy then names the Archive). */
+  archivedOn?: string | null;
   asOf: string | null;
 }
 
