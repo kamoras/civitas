@@ -415,20 +415,25 @@ def _general_options(item: dict) -> list[tuple[str, str | None, int]]:
     return candidates
 
 
-def general_contests(payload: dict, house_patterns: list[re.Pattern] | None = None) -> list[ContestCount]:
+def general_contests(
+    payload: dict, house_patterns: list[re.Pattern] | None = None, unplaced: list[ContestCount] | None = None,
+) -> list[ContestCount]:
+    """Every federal candidate contest; one whose label is no federal seat
+    goes to `unplaced` (office ""), where given."""
     out = []
     for item in payload.get("ballotItems") or []:
         if not isinstance(item, dict) or item.get("contestType") != "Candidate":
             continue
         name = _text(item.get("name"))
         parsed = _office(name, house_patterns or [])
-        if parsed is None:
+        if parsed is None and unplaced is None:
             continue
         status = item.get("reportingStatus") or {}
         reporting, total = status.get("reportingUnits"), status.get("totalUnits")
         vote_total = item.get("voteTotal")
-        out.append(ContestCount(
-            office=parsed[0], district=parsed[1], candidates=_general_options(item),
+        (out if parsed else unplaced).append(ContestCount(
+            office=parsed[0] if parsed else "", district=parsed[1] if parsed else None,
+            candidates=_general_options(item),
             total_votes=vote_total if isinstance(vote_total, int) else None,
             reporting_units=reporting if isinstance(reporting, int) else None,
             total_units=total if isinstance(total, int) and total > 0 else None,
@@ -567,7 +572,8 @@ async def fetch_general_results(
         # Utah's 2024 general read 29 of 29 counties on Nov 7 with 976,132
         # presidential votes of the 1.49 million it certified.
         units_complete=False,
-        contests=general_contests(payload, _house_patterns(source)),
+        contests=general_contests(payload, _house_patterns(source), unplaced := []),
+        unplaced=unplaced,
         # lastUpdated only — when the count last changed. asOf is when the
         # payload was rendered (a year past lastUpdated in Utah's 2024
         # file), and falling back to it for one poll stored a stamp every

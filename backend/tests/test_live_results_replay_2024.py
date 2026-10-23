@@ -213,11 +213,9 @@ class TestColoradoClarity2024:
         self._seed(db)
         self._serve(feed, 351526)
         await _sync(db, feed, monkeypatch, "CO", freeze_utcnow, datetime(2024, 11, 6, 2, 32))
-        # The next version renames CO-3's contest past the reader.
+        # The next version no longer lists CO-3's contest at all.
         step = json.loads(json.dumps(next(v for v in self.SERIES["versions"] if v["version"] == 351576)))
-        for c in step["Contests"]:
-            if c["C"].endswith("District 3"):
-                c["C"] = "Representative 3"
+        step["Contests"] = [c for c in step["Contests"] if not c["C"].endswith("District 3")]
         feed.serve(f"{self.BASE}/122598/current_ver.txt", "351576")
         feed.serve(f"{self.BASE}/122598/351576/json/sum.json", json.dumps({"Contests": step["Contests"]}),
                    {"Last-Modified": "Wed, 06 Nov 2024 02:39:29 GMT"})
@@ -234,6 +232,30 @@ class TestColoradoClarity2024:
             is False
         assert api._result_json(rows["2024-HOUSE-CO-8"], db.get(Race, "2024-HOUSE-CO-8"), last_ok)["inLatestRead"] \
             is True
+
+
+    async def test_a_race_whose_contest_is_renamed_is_placed_by_its_candidates(
+            self, db_session, feed, monkeypatch, freeze_utcnow):
+        db = db_session
+        self._seed(db)
+        self._serve(feed, 351526)
+        await _sync(db, feed, monkeypatch, "CO", freeze_utcnow, datetime(2024, 11, 6, 2, 32))
+        # The next version renames CO-3's contest past the reader.
+        step = json.loads(json.dumps(next(v for v in self.SERIES["versions"] if v["version"] == 351576)))
+        for c in step["Contests"]:
+            if c["C"].endswith("District 3"):
+                c["C"] = "Representative 3"
+        feed.serve(f"{self.BASE}/122598/current_ver.txt", "351576")
+        feed.serve(f"{self.BASE}/122598/351576/json/sum.json", json.dumps({"Contests": step["Contests"]}),
+                   {"Last-Modified": "Wed, 06 Nov 2024 02:39:29 GMT"})
+        feed.serve(f"{self.BASE}/122598/351576/json/en/electionsettings.json",
+                   json.dumps(self.SERIES["electionsettings"]))
+        alerts = []
+        monkeypatch.setattr(er, "send_ops_alert", lambda subject, body, **kw: alerts.append((subject, kw)))
+        out = await _sync(db, feed, monkeypatch, "CO", freeze_utcnow, datetime(2024, 11, 6, 2, 45))
+        assert out["status"] == "ok" and "dropped" not in out and alerts == []
+        stored = db.get(RaceResult, "2024-HOUSE-CO-3")
+        assert stored.fetched_at == datetime(2024, 11, 6, 2, 45)
 
 
 class TestNewMexicoTotalVote2024:
