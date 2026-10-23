@@ -82,6 +82,14 @@ def captured_on(url: str | None) -> date | None:
         return None
 
 
+def original_url(url: str) -> str:
+    """The state's own URL a Wayback page address is a capture of; any
+    other address as it is."""
+    if captured_on(url) is None:
+        return url
+    return url[len(WAYBACK):].split("/", 1)[1]
+
+
 def newest_from_cdx(rows: list) -> Capture | None:
     """The newest 200 capture in a CDX JSON answer (header row first)."""
     if not isinstance(rows, list) or len(rows) < 2:

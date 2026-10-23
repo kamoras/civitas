@@ -44,6 +44,8 @@ def test_captured_on_reads_only_a_wayback_address():
     assert web_archive.captured_on(f"https://web.archive.org/web/20261020123456/{BALLOT}") == date(2026, 10, 20)
     assert web_archive.captured_on(BALLOT) is None
     assert web_archive.captured_on(None) is None
+    assert web_archive.original_url(f"https://web.archive.org/web/20261020123456/{BALLOT}") == BALLOT
+    assert web_archive.original_url(BALLOT) == BALLOT
 
 
 def _archive(rows_by_url: dict, bodies: dict, seen: list):

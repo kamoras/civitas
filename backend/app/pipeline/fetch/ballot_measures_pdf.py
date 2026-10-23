@@ -480,7 +480,9 @@ async def _from_archive(
     if reader is None:
         return None
     stored = _stored_measures(db, state, election_date)
-    known = [m.source_url for m in stored if m.source_url and not web_archive.captured_on(m.source_url)]
+    # The state's own addresses this election was read from: an earlier
+    # archived read names its capture, which names the state's URL.
+    known = list(dict.fromkeys(web_archive.original_url(m.source_url) for m in stored if m.source_url))
     pairs = await reader(client, year, known)
     if not pairs or not _agrees_with_stored(state, pairs, stored):
         return None
