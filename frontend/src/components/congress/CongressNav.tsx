@@ -6,19 +6,23 @@ interface Step {
   label: string;
 }
 
-/** Day | Week | Month, and the previous and next period. */
+type Period = "congress" | "day" | "week" | "month";
+
+/** The floor's four views, This Congress | Day | Week | Month, and the
+ *  previous and next period. Every view links to the others, so a reader
+ *  who opens a day can get back to the whole Congress from the same row. */
 export function PeriodNav({
   active,
   hrefs,
-  previous,
-  next,
+  previous = null,
+  next = null,
 }: {
-  active: "day" | "week" | "month";
-  hrefs: Record<"day" | "week" | "month", string>;
-  previous: Step | null;
-  next: Step | null;
+  active: Period;
+  hrefs: Record<Period, string>;
+  previous?: Step | null;
+  next?: Step | null;
 }) {
-  const seg = (key: "day" | "week" | "month", label: string) => (
+  const seg = (key: Period, label: string) => (
     <Link
       href={hrefs[key]}
       aria-current={active === key ? "page" : undefined}
@@ -39,8 +43,13 @@ export function PeriodNav({
       </Link>
     ) : null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="group" aria-label="Report period" className="grid grid-cols-3">
+    <div className="@container flex flex-wrap items-center justify-between gap-3">
+      <div
+        role="group"
+        aria-label="Report period"
+        className="grid grid-cols-2 @min-[28rem]:grid-cols-4"
+      >
+        {seg("congress", "This Congress")}
         {seg("day", "Day")}
         {seg("week", "Week")}
         {seg("month", "Month")}
