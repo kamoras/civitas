@@ -7,12 +7,13 @@ story the site is already showing, matched by the article the post links
 (its address after redirects, without scheme, query or trailing slash),
 never by a similarity threshold.
 
-It replaced a cosine threshold (0.78, set by hand). Measured 2026-10-21 on
-the outlets' public feeds against a production snapshot (114 days, 6,274
-posts): the cosine gate would have reposted 602 posts, 37 a week, and only
-54 of them linked an article the matched issue cites. Its precision could
-not be measured at all, since a post about no issue has no label. The link
-rule reposts 83 posts, 5.1 a week, and is right by construction: the post
+It replaced a cosine threshold (0.78, set by hand). Measured 2026-10-24 on
+the outlets' public feeds against production's stored issues (119 days,
+6,531 posts, each matched against the issues of its own day and the day
+before): the cosine gate would have reposted 623 posts, 36.6 a week, and
+only 51 of them linked an article the matched issue cites. Its precision
+could not be measured at all, since a post about no issue has no label. The
+link rule reposts 80 posts, 4.7 a week (on 50 days, at most 5 a day), and is right by construction: the post
 links a source of the issue. That is also within the posting volume the
 account keeps to (AGENTS.md: posting everything taught readers to skip
 it).
