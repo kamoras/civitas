@@ -767,7 +767,7 @@ Every hour at :15
        │         Daily member spotlight: the member's most distinctive
        │         finding, with no score or rank.  (Also runs on the early-abort paths above — it
        │         doesn't depend on the news)
-       │         Repost + like outlet posts that match active issues.
+       │         Repost + like outlet posts linking an article an active issue cites.
 ```
 
 **Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, every "top issue" would be the same story from NPR, BBC, PBS and The Hill. Clustering first, then ranking by source breadth, surfaces the most distinct newsworthy topics.
@@ -2688,7 +2688,7 @@ civitas/
 │   │   │   │   ├── ollama_client.py          # LLM backend abstraction
 │   │   │   │   ├── bluesky_poster.py         # Post new/updated action issues
 │   │   │   │   ├── bluesky_spotlight.py      # Daily member spotlight (templated)
-│   │   │   │   ├── bluesky_engagement.py     # Repost/like matching outlet posts
+│   │   │   │   ├── bluesky_engagement.py     # Repost/like outlet posts linking a cited article
 │   │   │   │   ├── trend_poster.py           # "On the record" trend posts (templated)
 │   │   │   │   ├── trend_evidence.py         # Pinned trend-to-record matching
 │   │   │   │   ├── trend_relevance.py        # Trend gates: relevance, tragedy, loaded kNN

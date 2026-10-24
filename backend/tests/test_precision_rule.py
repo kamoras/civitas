@@ -84,7 +84,7 @@ def test_held_out_passes_nothing_where_the_fit_missed_the_bar():
 
 # The two named variants pick among the same passing thresholds: the
 # highest bound (BEST_BOUND, the default) or the lowest threshold, the most
-# passes the bar allows (LOWEST_PASSING, the outlet reposts).
+# passes the bar allows (LOWEST_PASSING, committee routing).
 _GRID = [0.5, 0.6, 0.7, 0.8]
 # 40 right at 0.85, 10 right and 1 wrong at 0.75, 20 wrong at 0.55.
 _SCORES = np.array([0.85] * 40 + [0.75] * 11 + [0.55] * 20)
