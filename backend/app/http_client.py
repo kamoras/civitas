@@ -149,9 +149,13 @@ async def bounded(awaitable, timeout: Any, *, label: str = "request"):
 # A bot wall's challenge: the site refusing an automated client. Cloudflare
 # says so in a header (`cf-mitigated: challenge`); Imperva/Incapsula marks
 # every response it serves (`x-iinfo`), so there only a refusal counts, or
-# a page that is its challenge script. AGENTS.md §7: getting past a wall is
-# not an option, it is the site saying no.
+# a page that is its challenge script. Akamai's edge (`Server: AkamaiGHost`,
+# where the origin is something else) answers a refused client itself with
+# an "Access Denied" page (Senate eFD's terms agreement, 2026-10-23: Bot
+# Manager's 403 to httpx, curl and headless Chromium alike). AGENTS.md §7:
+# getting past a wall is not an option, it is the site saying no.
 _CHALLENGE_BODY_MARKERS = (b"_Incapsula_Resource", b"Just a moment...", b"/cdn-cgi/challenge-platform/")
+_AKAMAI_DENIED = b"<TITLE>Access Denied</TITLE>"
 
 
 def is_bot_challenge(response: httpx.Response) -> bool:
@@ -166,6 +170,8 @@ def is_bot_challenge(response: httpx.Response) -> bool:
         head = response.content[:4096]
     except httpx.ResponseNotRead:  # a stream nobody has read: headers only
         return False
+    if refused and headers.get("server", "") == "AkamaiGHost" and _AKAMAI_DENIED in head:
+        return True
     return (refused or "x-iinfo" in headers) and any(m in head for m in _CHALLENGE_BODY_MARKERS)
 
 

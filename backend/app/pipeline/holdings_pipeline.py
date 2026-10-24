@@ -61,7 +61,7 @@ from app.pipeline.fetch.senate_fd import (
 from app.pipeline.fetch.senate_fd import report_still_loads as senate_report_still_loads
 from app.pipeline.fetch.senate_ptr import accept_terms as senate_accept_terms
 from app.pipeline.fetch.ptr_common import normalize_date
-from app.pipeline.fetch.senate_ptr import senate_filing_id
+from app.pipeline.fetch.senate_ptr import EfdRefused, senate_filing_id
 from app.pipeline.filer_matching import (
     FilerMatcher,
     current_representatives,
@@ -1088,8 +1088,8 @@ async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
                 kind, blobs = await scan_pages.fetch_house_scan(client, source_url)
             timeout = max(deadline - time.monotonic(), 0) + SCAN_RENDER_GRACE.total_seconds()
             manifest = await scan_pages.store_scan(filing_id, source_url, kind, blobs, timeout)
-        except (scan_pages.ScanUnavailable, SessionLapsed, _TermsRefused, OSError) as e:
-            reason = str(e) or type(e).__name__
+        except (scan_pages.ScanUnavailable, SessionLapsed, _TermsRefused, EfdRefused, OSError) as e:
+            reason = last_reason = str(e) or type(e).__name__
             logger.warning("Scan pages: %s not stored: %s", source_url, reason)
             scan_pages.record_failure(filing_id, source_url, reason)
             failed += 1
@@ -1099,7 +1099,7 @@ async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
     removed = scan_pages.prune({filing_id for filing_id, _, _ in reports})
     logger.info("Scan pages: %d filings stored (%d pages), %d failed, %d removed", stored, pages, failed, removed)
     if failed and not stored:
-        raise RuntimeError(f"scan pages: {failed} filings tried, none could be fetched and rendered")
+        raise RuntimeError(f"scan pages: {failed} filings tried, none could be fetched and rendered; last: {last_reason}")
     return pages
 
 
@@ -1147,7 +1147,8 @@ async def run_holdings_phases(
                 f"The {label} phase of tonight's stock-trades run failed. Reports it stored "
                 "before failing are kept (each member is committed as it's done); every "
                 "other member's stored holdings stay as they were and will age until a "
-                "run succeeds. The cause and its traceback are on the run row (admin, Pipelines).",
+                "run succeeds; the next nightly run tries again. The cause and its traceback "
+                "are on the run row (admin, Pipelines).",
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
                 condition=f"holdings-failed-{step}",
             )
