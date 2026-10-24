@@ -750,8 +750,7 @@ paired difference lower; otherwise the fit in use stays and the refit is
 recorded with why (`precision_rule.compare`). Today that is the
 near-identical cut (issue pairs plus feed articles the text dates days
 apart, `action_center.fit_near_identical_cut`), the related-vote threshold
-(`roll_call_links.refit`, on `RollCallLinkLabel`), the outlet reposts
-(`bluesky_engagement`, on `OutletPostLink`) and committee routing (bills'
+(`roll_call_links.refit`, on `RollCallLinkLabel`) and committee routing (bills'
 committee referrals and texts no committee handles,
 `scripts/calibrate_committee_routing.py`, run daily by `data_refresh` and
 installed through `data_refresh.precision_rule_accepts`); the member-photo

@@ -2022,11 +2022,13 @@ class RollCallLinkLabel(Base):
 
 
 class OutletPostLink(Base):
-    """What the outlet-repost gate saw for each news outlet post it scored
-    (pipeline/analyze/bluesky_engagement.py), with the article the post
-    links once resolved through the outlet's shortener: a data-supplied
-    label for the gate's daily refit, kept so labels accumulate past the
-    60-day api_cache prune."""
+    """What the outlet-repost cosine gate saw for each news outlet post it
+    scored, with the article the post links. No longer written: the gate
+    was replaced by the structural rule (pipeline/analyze/bluesky_engagement.py,
+    a post is reposted only when it links an article a live issue cites),
+    which keeps each post's resolved link in its api_cache row. Still
+    mapped because the image before writes it; dropped in a later release
+    (migrations/README.md, "Pending contract")."""
     __tablename__ = "outlet_post_links"
 
     uri: Mapped[str] = mapped_column(String, primary_key=True)

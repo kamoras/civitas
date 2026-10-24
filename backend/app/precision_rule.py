@@ -12,11 +12,11 @@ written through this module records the one it used (`precision_rule`):
   generalizes). For a gate whose pass is shown as fact.
 - LOWEST_PASSING: the lowest threshold whose bound clears the bar, i.e. the
   most passes the bar allows. For a gate whose volume is the point and
-  whose pass is someone else's words, not a claim of ours: the outlet
-  reposts (bluesky_engagement), where the best bound cut reposts from about
-  37 a week to 9 (the owner's decision, 2026-10-21). It sits at the edge
-  BEST_BOUND avoids, so its held-out figures matter more; a daily refit on
-  fresh labels is what keeps it honest.
+  whose pass is someone else's words, not a claim of ours, or whose
+  decisions number in the thousands (committee routing,
+  scripts/calibrate_committee_routing.py). It sits at the edge BEST_BOUND
+  avoids, so its held-out figures matter more; a daily refit on fresh
+  labels is what keeps it honest.
 """
 
 from __future__ import annotations
