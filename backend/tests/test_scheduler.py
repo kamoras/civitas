@@ -811,3 +811,15 @@ def test_a_nightly_chain_a_reset_held_off_starts_when_the_reset_ends():
         assert scheduler.run_missed_nightly() is True
         assert scheduler.run_missed_nightly() is False
     nightly.assert_called_once()
+
+
+def test_one_data_refresh_pass_at_a_time_however_long_it_runs():
+    """A pass can outlast its lease; the hourly tick after doesn't start a second."""
+    with patch.object(scheduler_module, "_start_job", side_effect=lambda fn, **kw: fn()), \
+         patch.object(scheduler_module.data_refresh, "run_refreshes") as run:
+        assert scheduler_module._data_refresh_pass.acquire(blocking=False)
+        try:
+            scheduler_module._data_refresh()
+        finally:
+            scheduler_module._data_refresh_pass.release()
+        run.assert_not_called()

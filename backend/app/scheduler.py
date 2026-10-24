@@ -791,13 +791,27 @@ def _data_refresh() -> None:
     again today); the files that load the embedding model or are CPU-bound
     wait while a pipeline runs."""
     def _run():
-        with lease.job(lease.DATA_REFRESH, who="Data file refresh") as held:
-            if not held:
-                return
-            outcomes = data_refresh.run_refreshes(pipeline_busy=pipelines_running)
-            logger.info("Data file refresh: %s", outcomes)
+        # One pass at a time in this process, however long it runs: a pass
+        # of heavy files can outlast the lease's six hours (the computed
+        # lean alone is allowed ten), and the hourly tick after the lapse
+        # would otherwise start a second beside it. The pipeline process is
+        # always one process, stopped before its successor starts.
+        if not _data_refresh_pass.acquire(blocking=False):
+            logger.info("Data file refresh: the last pass is still running")
+            return
+        try:
+            with lease.job(lease.DATA_REFRESH, who="Data file refresh") as held:
+                if not held:
+                    return
+                outcomes = data_refresh.run_refreshes(pipeline_busy=pipelines_running)
+                logger.info("Data file refresh: %s", outcomes)
+        finally:
+            _data_refresh_pass.release()
 
     _start_job(_run, name="data-refresh")
+
+
+_data_refresh_pass = threading.Lock()
 
 
 async def _fill_amendment_purposes() -> dict:
