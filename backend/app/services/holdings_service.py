@@ -35,7 +35,9 @@ from app.schemas import (
     ReadoutMarkSchema,
     is_open_ended,
 )
+from app.services.disclosure_sources import source_status
 from app.services.pagination import paginate_bounds
+from app.services.president_service import _is_sitting
 
 # The `category` query parameter accepts exactly the category keys.
 HOLDING_CATEGORY_PATTERN = "^(" + "|".join(HOLDING_CATEGORIES) + ")$"
@@ -274,6 +276,18 @@ def _latest_disclosure(db: Session, **owner_filter) -> FinancialDisclosure | Non
     )
 
 
+def _holdings(db: Session, page: int, per_page: int, category: str | None, **owner) -> HoldingsSchema:
+    disclosure = _latest_disclosure(db, **owner)
+    if disclosure is None:
+        return HoldingsSchema(available=False)
+    return _build(db, disclosure, page, per_page, category)
+
+
+def _with_status(holdings: HoldingsSchema, status) -> HoldingsSchema:
+    holdings.source_status = status
+    return holdings
+
+
 def get_senator_holdings(
     db: Session, senator_id: str, page: int = 1, per_page: int = 15, category: str | None = None,
 ) -> HoldingsSchema | None:
@@ -281,10 +295,8 @@ def get_senator_holdings(
     annual report has been ingested for them."""
     if db.query(Senator.id).filter(Senator.id == senator_id).first() is None:
         return None
-    disclosure = _latest_disclosure(db, senator_id=senator_id)
-    if disclosure is None:
-        return HoldingsSchema(available=False)
-    return _build(db, disclosure, page, per_page, category)
+    return _with_status(_holdings(db, page, per_page, category, senator_id=senator_id),
+                        source_status(db, "senate", "holdings"))
 
 
 def get_rep_holdings(
@@ -293,10 +305,8 @@ def get_rep_holdings(
     """See get_senator_holdings."""
     if db.query(Representative.id).filter(Representative.id == rep_id).first() is None:
         return None
-    disclosure = _latest_disclosure(db, representative_id=rep_id)
-    if disclosure is None:
-        return HoldingsSchema(available=False)
-    return _build(db, disclosure, page, per_page, category)
+    return _with_status(_holdings(db, page, per_page, category, representative_id=rep_id),
+                        source_status(db, "house", "holdings"))
 
 
 def get_president_holdings(
@@ -304,9 +314,8 @@ def get_president_holdings(
 ) -> HoldingsSchema | None:
     """See get_senator_holdings. Only the sitting president's annual report
     is ingested (holdings_pipeline.ingest_president_holdings)."""
-    if db.query(President.id).filter(President.id == president_id).first() is None:
+    president = db.query(President).filter(President.id == president_id).first()
+    if president is None:
         return None
-    disclosure = _latest_disclosure(db, president_id=president_id)
-    if disclosure is None:
-        return HoldingsSchema(available=False)
-    return _build(db, disclosure, page, per_page, category)
+    return _with_status(_holdings(db, page, per_page, category, president_id=president_id),
+                        source_status(db, "president", "holdings") if _is_sitting(db, president) else None)

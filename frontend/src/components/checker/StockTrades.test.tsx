@@ -26,7 +26,20 @@ const { base } = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/api", () => ({
-  fetchSenatorStockTrades: vi.fn(),
+  fetchSenatorStockTrades: vi.fn().mockResolvedValue({
+    trades: [],
+    total: 0,
+    page: 1,
+    perPage: 15,
+    totalPages: 0,
+    lateCount: 0,
+    sourceStatus: {
+      lastRead: "2026-10-22T10:00:00",
+      failingSince: "2026-10-23T10:00:00",
+      kind: "wall",
+      note: "Senate disclosures last read Oct 22, 2026. The Senate's disclosure site has refused automated reads since Oct 23; new filings appear once it allows them again.",
+    },
+  }),
   fetchRepStockTrades: vi.fn(),
   fetchPresidentStockTrades: vi.fn().mockResolvedValue({
     trades: [
@@ -81,5 +94,12 @@ describe("StockTrades", () => {
     // annual report's row nor the scan's asserts on-time or late.
     expect(screen.getAllByText(/Late disclosure|on time/)).toHaveLength(1);
     expect(screen.getByText("Late disclosure")).toBeInTheDocument();
+  });
+
+  it("says a failed read is a failed read, never no trades", async () => {
+    render(<StockTrades politicianId="ron-doe" filer="senate" />);
+    expect(await screen.findByText("None on file")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Stock trades/ }));
+    expect(screen.getByRole("note")).toHaveTextContent(/refused automated reads since Oct 23/);
   });
 });

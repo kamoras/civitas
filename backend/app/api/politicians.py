@@ -624,7 +624,7 @@ def _member_boxes(branch: str, entity, identity: dict, scorecard: dict | None, r
         trades = (get_senator_stock_trades if senate else get_rep_stock_trades)(db, entity.id, 1, 1)
         return member_boxes.boxes(
             db, branch, entity, identity, scorecard, breakdown, holdings,
-            (trades.total, trades.late_count) if trades else (0, 0), record, on_ballot, seat_race,
+            (trades.total, trades.late_count, trades.source_status and trades.source_status.note) if trades else (0, 0, None), record, on_ballot, seat_race,
         )
     except Exception:
         logger.exception("Boxes for %s (%s) failed to build", entity.id, branch)

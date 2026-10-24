@@ -22,7 +22,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.error_utils import record_exception
+from app.error_utils import failure_kind, record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
@@ -160,6 +160,9 @@ class ProgressTracker:
         # outlives the container's log.
         error = sys.exception()
         cause = record_exception(self._run, error, key) if error is not None else None
+        # Whether a bot wall refused the read or it failed some other way:
+        # what a page reading this run says (services/disclosure_sources.py).
+        step["failureKind"] = failure_kind(error) if error is not None else "outage"
         self._flush()
         self._record_timing(step)
         # Every caller logs the exception and carries on, and the run still
