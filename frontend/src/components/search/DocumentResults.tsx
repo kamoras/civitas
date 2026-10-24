@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
 import PaperworkFold from "@/components/shared/PaperworkFold";

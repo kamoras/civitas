@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import type { RedistrictingIndex } from "@/types/redistricting";
 import { pageMetadata } from "@/lib/site";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { AgencyDocument } from "@/types/agency";
 import { describeDaysLeftOn, formatUtcDate, safeHref } from "@/lib/formatting";
 import { exploreHref } from "@/lib/exploreHref";

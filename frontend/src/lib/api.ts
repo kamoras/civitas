@@ -1597,6 +1597,12 @@ export interface VisitorStatsDay {
   confirmedVisitors: number | null;
   /** Cold page loads whose browser painted the page while it was in view. */
   firstPaintLoads: number;
+  /** Cold page loads whose browser reported its load event. */
+  loadsReported: number;
+  /** More confirmed visitors than loads reported: some confirmations came
+   *  from clients that never reported a load (a crawler running full Chrome
+   *  on 2026-10-23 and 10-24). Marked, since stored visits can't be told apart. */
+  visitorsExceedLoads: boolean;
   /** The stored count for every day, whatever counted it then. */
   uniqueVisitors: number;
   pageViews: number;

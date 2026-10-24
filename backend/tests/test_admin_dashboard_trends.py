@@ -211,6 +211,25 @@ class TestVisitorStats:
 
         assert admin_visitor_stats(days=1, db=db_session)[0]["firstPaintLoads"] == 5
 
+    def test_a_day_with_more_visitors_than_reported_loads_is_marked(self, db_session, monkeypatch):
+        # 2026-10-23: a crawler running full Chrome was confirmed by its own
+        # prefetches and reported no loads; the stored hashes can't be told
+        # apart, so the day is marked from the two stored counts.
+        monkeypatch.setattr("app.api.admin.CONFIRMED_VISITS_SINCE", _days_ago(3))
+        db_session.add_all([
+            *(SiteVisit(date=_days_ago(1), visitor_hash=f"c{i}") for i in range(3)),
+            PageLoadTiming(date=_days_ago(1), path="/", metric="load", bucket_ms=1000, device="", count=1),
+            PageLoadTiming(date=_days_ago(1), path="/", metric="fcp", bucket_ms=500, device="", count=9),
+            SiteVisit(date=_today(), visitor_hash="reader"),
+            PageLoadTiming(date=_today(), path="/", metric="load", bucket_ms=1000, device="desktop", count=2),
+            SiteVisit(date=_days_ago(4), visitor_hash="before-confirmation"),
+        ])
+        db_session.commit()
+
+        result = admin_visitor_stats(days=5, db=db_session)
+        assert [r["loadsReported"] for r in result] == [0, 0, 0, 1, 2]
+        assert [r["visitorsExceedLoads"] for r in result] == [False, False, False, True, False]
+
     def test_confirmation_starts_the_first_whole_day_of_the_rebuilt_counting(self):
         assert CONFIRMED_VISITS_SINCE == "2026-10-11"
 

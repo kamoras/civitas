@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { describeUpdate, formatEasternTime, raceLabel } from "@/lib/results";
 import type { ResultEvent } from "@/types/election";
 import { TYPE } from "@/lib/typeStyles";

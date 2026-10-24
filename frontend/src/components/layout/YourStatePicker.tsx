@@ -4,7 +4,7 @@ import { membersHref } from "@/lib/routes";
 import { useEffect, useId, useRef, useState } from "react";
 import { useYourState } from "@/hooks/useYourState";
 import { stateFromPoint } from "@/lib/stateFromPoint";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { stateBallotHref } from "@/lib/elections";
 

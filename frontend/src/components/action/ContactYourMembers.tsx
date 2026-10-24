@@ -2,7 +2,7 @@
 
 import { membersHref } from "@/lib/routes";
 import { useId, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import {
   fetchHouseDistrictsByCounty,
   fetchIssueMembers,

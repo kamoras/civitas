@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useYourState } from "@/hooks/useYourState";
 import { STATE_NAMES } from "@/lib/stateCodes";
 

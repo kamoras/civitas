@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import CiteThis from "@/components/shared/CiteThis";

@@ -6,7 +6,10 @@
  *    visitors never ran a page).
  *  - "router": a same-origin request the page's own script makes once it
  *    runs in a browser — in practice Next's router prefetching the links in
- *    view. It counts the page that client opened.
+ *    view. It counts the page that client opened. Links prefetch only on
+ *    a page in view in a browser no automation drives
+ *    (components/Link.tsx): a crawler running full Chrome was confirmed
+ *    by its own prefetches from 2026-10-23.
  *
  *  Both are requests the site needs in order to work, so a reader whose
  *  blocker refuses tracking requests is counted without anything more being

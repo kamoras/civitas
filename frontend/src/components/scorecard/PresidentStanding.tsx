@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { PresidentPeerMeasure, PresidentPeers } from "@/types/presidentPeers";
 import { onThisPage } from "@/lib/onThisPage";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";

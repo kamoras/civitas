@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import BoxGrid from "@/components/shared/BoxGrid";
 import { CHIP } from "@/components/shared/RecordBox";
 import Holdings from "@/components/checker/Holdings";

@@ -3,7 +3,7 @@
 import { Dek } from "@/components/shared/Type";
 import { TYPE } from "@/lib/typeStyles";
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { President } from "@/types/president";
 import type { PresidentPeers } from "@/types/presidentPeers";
 import type { PresidentCharts } from "@/types/presidentCharts";

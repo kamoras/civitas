@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import { MARK_ATTR, type ReadoutMark } from "@/types/readout";
 

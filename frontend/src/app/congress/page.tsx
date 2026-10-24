@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { fetchGlance, fetchLatestDay, fetchWeek } from "@/lib/congressServer";

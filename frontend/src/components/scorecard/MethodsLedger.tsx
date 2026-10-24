@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { Senator } from "@/types/senator";
 import type {
   AlignmentFacts,

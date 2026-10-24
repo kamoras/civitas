@@ -2,6 +2,7 @@
 
 import Form from "next/form";
 import { useRef, useState } from "react";
+import { usePrefetchAllowed } from "@/components/Link";
 import type { ExploreStats } from "@/lib/api";
 import { EYEBROW } from "@/lib/typeStyles";
 import { BRANCH_FILTERS, type DocumentQuery } from "@/lib/documentSearch";
@@ -33,6 +34,8 @@ export default function DocumentFilters({
   agencyName: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  // next/form prefetches its action like a link does (components/Link.tsx).
+  const prefetchAllowed = usePrefetchAllowed();
   // The controls show the address's filters. A choice shows at once and
   // submits; when the address changes some other way (a link on the page),
   // the controls follow it (state derived from props, set during render).
@@ -51,7 +54,12 @@ export default function DocumentFilters({
   const agencies = stats?.agencies ?? [];
 
   return (
-    <Form ref={formRef} action="/search" className="space-y-4">
+    <Form
+      ref={formRef}
+      action="/search"
+      prefetch={prefetchAllowed ? null : false}
+      className="space-y-4"
+    >
       <input type="hidden" name="tab" value="documents" />
       {d.q && <input type="hidden" name="q" value={d.q} />}
       {d.politicianId && <input type="hidden" name="politician_id" value={d.politicianId} />}

@@ -3,7 +3,7 @@
 import { asLabel } from "@/lib/formatting";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import RaceMap from "@/components/elections/RaceMap";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";

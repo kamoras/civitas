@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { reachedHref, stageHref } from "@/lib/congress";
 import type { StageMilestones } from "@/types/bill";
 

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { mapHref } from "@/lib/electionMap";
 import type { MapSeatLine } from "@/types/electionMap";
 

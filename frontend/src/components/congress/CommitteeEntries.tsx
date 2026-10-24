@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { CommitteeEntry } from "@/types/congress";
 import { CHAMBER_NAME, billHref, dayHref, shortDate } from "@/lib/congress";
 import { TYPE } from "@/lib/typeStyles";

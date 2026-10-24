@@ -19,7 +19,7 @@
  */
 
 import { TYPE } from "@/lib/typeStyles";
-import Link from "next/link";
+import Link from "@/components/Link";
 import {
   describeDaysLeftOn,
   formatUtcDate,

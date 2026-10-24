@@ -99,6 +99,7 @@ export function TrafficDashboard({ token }: { token: string }) {
   const confirmedTotal = days.reduce((s, d) => s + (d.confirmedVisitors ?? 0), 0);
   const paintedTotal = days.reduce((s, d) => s + d.firstPaintLoads, 0);
   const viewsTotal = days.reduce((s, d) => s + d.pageViews, 0);
+  const exceeded = days.filter((d) => d.visitorsExceedLoads);
 
   const lt = data?.loadTimes;
   const ltDays = lt?.days ?? [];
@@ -175,6 +176,19 @@ export function TrafficDashboard({ token }: { token: string }) {
               "No visits recorded in this range."
             )}
           />
+          {exceeded.length > 0 && (
+            <p className="text-small text-ink-lo lg:col-span-2">
+              More confirmed visitors than loads reported on{" "}
+              {exceeded
+                .map(
+                  (d) =>
+                    `${formatDay(d.date)} (${(d.confirmedVisitors ?? 0).toLocaleString("en-US")} against ${d.loadsReported.toLocaleString("en-US")})`
+                )
+                .join(", ")}
+              : those counts include clients that ran the page but never reported a load, and the
+              stored visits can&apos;t be told apart afterwards.
+            </p>
+          )}
           <LineChart
             title="Page views per day"
             subtitle="every page load, not deduped by visitor"

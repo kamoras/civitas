@@ -2,7 +2,7 @@
 
 import { MEMBERS_HREF } from "@/lib/routes";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import RaceContext from "@/components/elections/ballot/RaceContext";

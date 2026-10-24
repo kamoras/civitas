@@ -1,7 +1,7 @@
 "use client";
 
 import { membersHref } from "@/lib/routes";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useEffect, useState } from "react";
 import type { StateMemberRecord } from "@/types/congress";
 import { useYourState } from "@/hooks/useYourState";

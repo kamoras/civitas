@@ -1,7 +1,7 @@
 "use client";
 
 import HowToRead from "@/components/shared/HowToRead";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
 import { PARTY_COLORS, PARTY_PLURAL } from "@/lib/partyStyles";

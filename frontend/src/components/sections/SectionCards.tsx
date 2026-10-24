@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { NOMINATIONS_HREF } from "@/lib/nominations";
 import { SECTIONS, sectionLeaves, type SectionKey, type SectionPage } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";

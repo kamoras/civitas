@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { absoluteUrl, pageMetadata } from "@/lib/site";

@@ -200,7 +200,11 @@ export function OverviewDashboard({
           }
           note={
             today
-              ? `${today.firstPaintLoads.toLocaleString("en-US")} first-paint loads`
+              ? `${today.firstPaintLoads.toLocaleString("en-US")} first-paint loads${
+                  today.visitorsExceedLoads
+                    ? `; more visitors than the ${today.loadsReported.toLocaleString("en-US")} loads reported`
+                    : ""
+                }`
               : loadFailed.visits
                 ? "couldn't load"
                 : undefined

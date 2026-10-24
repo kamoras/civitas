@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { RecordId } from "@/components/shared/Type";
 import { connection } from "next/server";
 import type { ReactNode } from "react";

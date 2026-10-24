@@ -3,7 +3,7 @@
 import { TYPE } from "@/lib/typeStyles";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
-import Link from "next/link";
+import Link from "@/components/Link";
 import Navbar from "@/components/layout/Navbar";
 import { documentsHref, membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";

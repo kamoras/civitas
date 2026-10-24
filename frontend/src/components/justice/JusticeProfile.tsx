@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { Dek } from "@/components/shared/Type";
 import { TYPE } from "@/lib/typeStyles";
 import { onThisPage } from "@/lib/onThisPage";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 interface Step {

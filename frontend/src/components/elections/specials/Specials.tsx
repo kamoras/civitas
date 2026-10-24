@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { SeatVacancy, SpecialElection, SpecialsBoard } from "@/types/specials";
 import { safeHref } from "@/lib/formatting";
 import { dayText, longDate } from "@/lib/specials";

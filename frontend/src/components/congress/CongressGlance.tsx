@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { CongressGlance as Glance } from "@/types/congress";
 import {
   BILL_STATUS_SOURCE,

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { BallotCandidate } from "@/types/election";
 import { DEM_AFFILIATE_PARTIES, candidateName, incumbencyLabel } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";

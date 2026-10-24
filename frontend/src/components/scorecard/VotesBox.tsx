@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
 import { rollCallHref } from "@/lib/congress";
 import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";

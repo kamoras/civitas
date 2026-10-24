@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { MapKind, RedistrictingWatch as Watch } from "@/types/redistricting";
 import { longDate } from "@/lib/specials";
 import { safeHref } from "@/lib/formatting";

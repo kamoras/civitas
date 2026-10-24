@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import type { ArchiveIndex } from "@/types/electionArchive";
 import { electionArchiveHref, ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";

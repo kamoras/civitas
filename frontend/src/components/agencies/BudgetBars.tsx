@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { AgencyIndex } from "@/types/agency";
 import { money } from "@/lib/agencies";
 import { agencyHref } from "@/lib/routes";

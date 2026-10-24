@@ -1334,6 +1334,33 @@ strips `RSC`, `Next-Router-Prefetch` and `_rsc` before the proxy runs, which
 is why the router request is known by its fetch metadata, and why the proxy
 can't tell a prefetch from a click.
 
+A third failure (2026-10-23): a crawler that runs the page. Full Chrome
+(Windows and macOS User-Agents, Chrome 148 to 150, not `HeadlessChrome`)
+from rotating cloud addresses (Tencent Cloud's 43.x and others, one page
+per address) loaded a bill, member or agency page, fetched `/api/config`
+and the page's data, and Next prefetched the page's ~15 links, so every
+load was confirmed: 762 of the 801 page-plus-router clients in nginx's log
+for 2026-10-24 (to 17:48 UTC) were these, none of which sent a load
+timing, against 15 of the other 39 that did (confirmed visitors 458 and 788 against 53 and 28
+cold loads; every earlier day since `CONFIRMED_VISITS_SINCE` had visitors
+at or under loads). The page's script can tell what its headers can't, so
+**prefetching happens only on a page shown to a person**:
+`components/Link.tsx` (every in-app link; `Link.test.tsx` fails on a direct
+`next/link` import) and the Documents filter's `next/form` pass
+`prefetch={false}` while `navigator.webdriver` is set or the page is not
+visible, and prefetch as before once it is (a background tab when the
+reader turns to it, within the hold's `_PENDING_S`). No request is added
+and nothing is kept; the confirmation is still the router request the
+site makes anyway, now from a page in view outside automation, the same
+conditions the load-timing beacon already had. Under `next build`, Chrome
+driven with `navigator.webdriver` made 0 router requests on `/about` and
+21 without it. A crawler that hides `webdriver` and keeps its page visible
+still passes, as it would any other check a page can make. The days
+before the fix can't be corrected (the stored hashes can't be told
+apart), so `GET /api/admin/visitor-stats` marks a day whose confirmed
+visitors exceed its reported loads (`visitorsExceedLoads`, from the two
+stored counts) and the Traffic tab lists those days with both numbers.
+
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
 Timing, and the server keeps only a counter per (day, route template, metric,

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { RegistrationClosing } from "@/types/thisWeek";
 import { useYourState } from "@/hooks/useYourState";
 import { stateBallotHref } from "@/lib/elections";

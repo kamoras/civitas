@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { usePathname } from "next/navigation";
 import { fetchPoliticianSuggestions, type PoliticianSuggestion } from "@/lib/api";
 import { PARTY_COLORS } from "@/lib/partyStyles";

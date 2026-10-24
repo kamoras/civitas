@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { BoxTitle, PageTitle, SectionHeading } from "./Type";
 import type { ReactNode } from "react";
 import type { BoxTone, Figure } from "@/types/figure";

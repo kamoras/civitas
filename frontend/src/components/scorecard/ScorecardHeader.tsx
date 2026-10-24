@@ -2,7 +2,7 @@ import type { Senator } from "@/types/senator";
 import { Dek } from "@/components/shared/Type";
 import { TYPE, toned } from "@/lib/typeStyles";
 import type { ReactNode } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { Committee, MemberBoxes } from "@/types/politicians";
 import { More } from "@/components/shared/RecordBox";
 import { asLabel, safeHref } from "@/lib/formatting";
