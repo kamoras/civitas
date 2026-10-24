@@ -27,7 +27,7 @@ from app.background import WritesElsewhere, WritesHeld, start_writer, writing
 from app.config import settings
 from app.database import SessionLocal, init_db
 from app.models import ExploreDocument
-from app.ops_alerts import check_pipeline_service_alive, resolve_ops_alert
+from app.ops_alerts import check_pipeline_service_alive, resolve_ops_alert, resolve_orphaned_alerts
 from app.pipeline import lease, vector_store
 from app.pipeline.run_tracker import sweep_orphaned_runs
 from app.scheduler import resume_interrupted_chain, start_scheduler, stop_scheduler
@@ -394,6 +394,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # API process sweeping on its own restart would mark a run live in
         # the pipeline process as dead.
         _invalidate_orphaned_pipelines()
+        # New code arrives with this start: an alert whose check it renamed
+        # or removed has nothing left to resolve it.
+        resolve_orphaned_alerts()
         start_scheduler()
     if serves_reads:
         # Pre-build the bills-in-flight collection cache on a background

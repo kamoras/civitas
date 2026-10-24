@@ -396,7 +396,7 @@ The correct pattern, established by `_district_pvi()` /
    a different scoring dimension) reads the same JSON file or calls the
    same loader — never a second hardcoded copy of the same numbers.
 4. The data refreshes itself. Register the file in `app/data_refresh.py`'s
-   `DATA_FILES`: a daily job (`scheduler._data_refresh`, lease
+   `DATA_FILES`: a job (`scheduler._data_refresh`, hourly from 15:40 to 01:40 UTC so a pass a deploy cut short is taken up the same day, each file tried at most once a day; lease
    `DATA_REFRESH`, outside the nightly chain) runs the generating script
    itself as a low-priority subprocess on the file's cadence (`due`),
    writes the candidate to a scratch file, gates it (`gate`: shape,
@@ -1566,6 +1566,18 @@ for Election) and the chain's liveness (`pipeline_chain`, which counts any
 run's progress write) use the same rule with their own windows. A new long
 step that writes nothing until it ends must heartbeat, or past six hours it
 reads as hung.
+
+An ops alert about a condition stays open until the code that detects it
+resolves it, so a check that is renamed or removed would leave its alert
+open for good (2026-10: `election-ready-town-ballots` after #1247; the
+search calibrations' `data-stale-*` after #1257). Every condition the code
+can raise is listed in `ops_alerts.CONDITIONS`, and the pipeline process
+closes, at start, any open alert whose condition matches none
+(`resolve_orphaned_alerts`); the data refresh closes a `data-*` alert no
+file in `DATA_FILES` can raise any more (`resolve_retired_conditions`).
+`tests/test_alert_conditions.py` reads every `send_ops_alert` call's
+condition from the source and fails on one the list lacks or an entry no
+code raises: a new condition goes in the list.
 
 Outside the chain, the **agency sync** (`fetch/agencies.py`,
 `scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's
