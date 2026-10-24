@@ -22,7 +22,8 @@ search_ptr_filings below drives an actual headless Chromium tab
 (Playwright) through the real search form for this reason — every other
 request in this module (accept_terms, and fetch_and_parse_ptr's
 per-filing page fetch) is NOT behind this gate and stays on the fast
-httpx path. A full historical backfill (~2,400 filings, ~24 pages) runs in
+httpx path. (Since 2026-10-23 Akamai refuses the terms agreement itself,
+to httpx and the browser alike: see EFD_WALL_NOTE.) A full historical backfill (~2,400 filings, ~24 pages) runs in
 roughly 20s; a normal incremental run (since_date watermark, usually well
 under 100 new filings) is closer to 9s, almost all of it one-time browser
 launch/navigation overhead.
@@ -46,6 +47,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_p
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.http_client import is_bot_challenge
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
@@ -109,16 +111,44 @@ def _extract_csrf_token(html_text: str) -> str | None:
     return match.group(1) if match else None
 
 
+class EfdRefused(RuntimeError):
+    """eFD's edge refused this client outright (a bot wall's answer, not an
+    outage): nothing is read past it (AGENTS.md §7). Raised rather than
+    returned as None, so the failed step says which it is."""
+
+
+# Since 2026-10-23 Akamai's Bot Manager answers the terms agreement's POST
+# with its own 403 "Access Denied" (Server: AkamaiGHost, a bm_s cookie) to
+# httpx, curl and Playwright's Chromium (full browser and headless shell
+# alike), while the home page still loads; the search and every report page
+# sit behind that agreement, and eFD is the only public source of senators'
+# reports. Nothing here passes the wall: each run asks once, and reads again
+# the first night the agreement is accepted.
+EFD_WALL_NOTE = (
+    "Senate eFD's Akamai edge refused the statutory terms agreement (HTTP 403 Access Denied: "
+    "a bot wall, not an outage), and nothing is read past it. Stored Senate trades, holdings "
+    "and scanned pages stay as last read; the next stock-trades run asks again"
+)
+
+
+def _raise_if_walled(response: httpx.Response) -> None:
+    if is_bot_challenge(response):
+        reference = response.headers.get("x-reference-error")
+        raise EfdRefused(EFD_WALL_NOTE + (f" (Akamai reference {reference})" if reference else "") + ".")
+
+
 async def accept_terms(client: httpx.AsyncClient) -> str | None:
     """Establish a session and accept the statutory use-restriction gate.
 
     Returns the CSRF token to use for the subsequent search request, or
     None if the gate couldn't be passed (caller should abort the run
-    rather than silently searching without a valid session).
+    rather than silently searching without a valid session). Raises
+    EfdRefused when a bot wall answers instead.
     """
-    home_resp = await _request_with_retry(client, "GET", HOME_URL)
+    home_resp = await _request_with_retry(client, "GET", HOME_URL, bot_challenge_ok=True)
     if home_resp is None:
         return None
+    _raise_if_walled(home_resp)
     token = _extract_csrf_token(home_resp.text)
     if token is None:
         logger.error("Senate eFD home page had no CSRF token — page structure may have changed")
@@ -129,9 +159,11 @@ async def accept_terms(client: httpx.AsyncClient) -> str | None:
         data={"prohibition_agreement": "1", "csrfmiddlewaretoken": token},
         headers={"Referer": HOME_URL},
         follow_redirects=True,
+        bot_challenge_ok=True,
     )
     if accept_resp is None:
         return None
+    _raise_if_walled(accept_resp)
 
     search_resp = await _request_with_retry(client, "GET", SEARCH_URL)
     if search_resp is None:
@@ -253,6 +285,8 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
                     return await _scrape_via_page(page, since_date, report_type, filer_type)
                 finally:
                     await browser.close()
+        except EfdRefused:
+            raise  # a wall answers a fresh browser the same way
         except SearchUnavailable as e:
             reason = str(e)
         except Exception as e:
@@ -319,6 +353,8 @@ async def _scrape_via_page(
     if await page.locator("#agree_statement").count() > 0:
         await _click(page.locator("#agree_statement"))
         await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
+        if await page.title() == "Access Denied":  # Akamai's own refusal page
+            raise EfdRefused(EFD_WALL_NOTE + ".")
 
     responses = await _submit_search(page, since_date, report_type, filer_type)
     found = _Found()

@@ -210,6 +210,41 @@ def test_one_files_error_never_stops_the_rest(alerts):
     assert out == {"t_err.json": "error", "t_after.json": "current"}
 
 
+def test_an_alert_no_file_can_raise_any_more_is_closed():
+    # #1257 took the search calibrations' staleness checks away: their
+    # data-stale-* alerts had nothing left to close them.
+    files = [dr.DataFile("t_refit.json", command=lambda ctx: _writer({"v": 1})),
+             dr.DataFile("t_old.json", stale=lambda ctx: "a newer one is out")]
+    open_now = {"data-stale-t-refit", "data-stale-t-old", "data-refresh-t-refit", "data-refresh-t-gone",
+                "data-check-t-refit", "step-failed-PipelineRun-x"}
+    retired = ["data-check-t-refit", "data-refresh-t-gone", "data-stale-t-refit"]
+    with patch.object(dr, "open_conditions", return_value=open_now), \
+         patch.object(dr, "resolve_ops_alert") as resolve:
+        assert dr.resolve_retired_conditions(files) == retired
+    assert sorted(c.args[0] for c in resolve.call_args_list) == retired
+
+
+def test_a_file_is_tried_once_a_day_however_often_the_job_runs(alerts):
+    """The job runs hourly through the evening to take up a pass a deploy
+    cut short; a file whose due() stays true is not rebuilt every hour."""
+    spec = dr.DataFile("t_daily.json", command=lambda ctx: _writer({"v": 1}), due=lambda ctx: True)
+    earlier_today = datetime.combine(date(2028, 3, 1), datetime.min.time())
+    with patch.object(dr, "utcnow", return_value=earlier_today.replace(hour=20)), \
+         patch.object(dr, "_last_try", return_value=(earlier_today, True, None)), \
+         patch.object(dr, "refresh_one") as refresh:
+        assert dr.run_refreshes([spec]) == {"t_daily.json": "current"}
+    refresh.assert_not_called()
+
+
+def test_a_pipeline_started_mid_pass_holds_the_heavy_files_after_it(alerts):
+    asked = iter([False, True])
+    first = dr.DataFile("t_h1.json", command=lambda ctx: _writer({"v": 1}), due=lambda ctx: True, heavy=True)
+    second = dr.DataFile("t_h2.json", command=lambda ctx: _writer({"v": 2}), due=lambda ctx: True, heavy=True)
+    with patch.object(dr, "_last_try", return_value=(None, False, None)), patch.object(dr, "_record_try"):
+        out = dr.run_refreshes([first, second], pipeline_busy=lambda: next(asked))
+    assert out == {"t_h1.json": "refreshed", "t_h2.json": "waiting for the pipeline"}
+
+
 # ── when each file is due, at future dates ───────────────────────────
 
 def _election(day, phase="campaign"):

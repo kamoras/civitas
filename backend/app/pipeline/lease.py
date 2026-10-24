@@ -152,7 +152,8 @@ HUNG_AFTER = {
     AGENCY_SYNC: timedelta(hours=1),
     # Held for a whole House run, whose run lock goes stale at this too.
     DISTRICT_LINES: _pipeline_timeout(),
-    # Its longest generator is bounded at four hours (data_refresh timeout_s).
+    # Hung by then unless one generator runs long (the computed lean is allowed
+    # ten hours); scheduler._data_refresh keeps one pass at a time in-process.
     DATA_REFRESH: timedelta(hours=6),
 }
 
