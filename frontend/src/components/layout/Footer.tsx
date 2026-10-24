@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { BSKY_PROFILE_URL, GITHUB_REPO_URL, SITE_TAGLINE } from "@/lib/site";
 
 /**

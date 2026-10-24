@@ -13,7 +13,7 @@ import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";
 import { fetchSenatorVotes, fetchRepVotes, type VotePeriod } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { shortDate, voteTitle } from "@/components/scorecard/format";
 import Pagination from "@/components/shared/Pagination";
 import { useLatestRequest } from "@/hooks/useLatestRequest";

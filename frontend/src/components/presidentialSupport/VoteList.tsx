@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { SupportRollCall } from "@/types/presidentialSupport";
 import { shortDate, billPageHref, rollCallHref } from "@/lib/congress";
 

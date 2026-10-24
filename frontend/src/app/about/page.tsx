@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { ReactNode } from "react";
 import { pageMetadata, GITHUB_REPO_URL, SITE_DOMAIN } from "@/lib/site";
 import { aboutPageJsonLd } from "@/lib/seo";

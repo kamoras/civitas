@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { absoluteUrl, agencyFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";

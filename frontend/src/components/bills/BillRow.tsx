@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { BillInFlight } from "@/types/bill";
 import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";

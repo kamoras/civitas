@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { pageMetadata } from "@/lib/site";
 import { usableRecord } from "@/lib/ssrPayload";
 import Navbar from "@/components/layout/Navbar";

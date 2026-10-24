@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { sendActionTap, type ActionTapKind } from "@/lib/api";
 
 /**

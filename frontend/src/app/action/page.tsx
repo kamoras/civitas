@@ -3,7 +3,7 @@
 import RelatedVotes from "@/components/action/RelatedVotes";
 import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/Link";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";

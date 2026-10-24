@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { pageMetadata } from "@/lib/site";
 import CourtFinding from "@/components/about/CourtFinding";
 import { JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";

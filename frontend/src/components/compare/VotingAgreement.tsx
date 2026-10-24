@@ -1,7 +1,7 @@
 "use client";
 
 import { asLabel } from "@/lib/formatting";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchCompareAgreement } from "@/lib/api";
 import { asciiScoreBar } from "@/lib/representation";

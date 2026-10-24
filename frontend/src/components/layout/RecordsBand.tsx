@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useEffect, useId, useRef, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";

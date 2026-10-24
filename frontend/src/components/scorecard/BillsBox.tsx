@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { SponsoredBill } from "@/types/senator";
 import type { EffectivenessFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";

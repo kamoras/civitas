@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import RateTrack from "@/components/presidentialSupport/RateTrack";
 import VoteList from "@/components/presidentialSupport/VoteList";
 import MethodNotes from "@/components/presidentialSupport/MethodNotes";

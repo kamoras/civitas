@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { CaseLinks, CourtDecisionPage, CourtJustice } from "@/types/court";
 import { splitLabel, surname } from "@/lib/court";
 import { TYPE } from "@/lib/typeStyles";

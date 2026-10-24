@@ -2,7 +2,7 @@
 
 import HowToRead from "@/components/shared/HowToRead";
 import { useId, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchPeerComparison } from "@/lib/api";

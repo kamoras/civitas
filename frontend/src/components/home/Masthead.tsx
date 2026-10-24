@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";

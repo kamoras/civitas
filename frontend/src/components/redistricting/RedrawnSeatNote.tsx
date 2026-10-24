@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import { fetchRedistrictedSeat } from "@/lib/api";
 import { oldDistrictSentence, redistrictingHref } from "@/lib/redistricting";

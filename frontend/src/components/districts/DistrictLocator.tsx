@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import {
   decodeArcs,
   districtsAt,

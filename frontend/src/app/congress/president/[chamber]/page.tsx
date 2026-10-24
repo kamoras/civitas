@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { congressOrdinal } from "@/lib/sources";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";

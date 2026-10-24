@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { BallotCandidate, FundingSourceKey, FundingSources } from "@/types/election";
 import { SERIES } from "@/components/admin/charts/palette";
 import { cashOnHandDisplay, formatCurrency, midSentence } from "@/lib/formatting";

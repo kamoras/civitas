@@ -395,7 +395,17 @@ def admin_visitor_stats(
     loads whose browser reported a first contentful paint (PageLoadTiming's
     ``fcp`` cells, every device): a browser that drew the page while it was
     in view, the closest thing to a person reading it that is counted
-    without identifying anyone. ``uniqueVisitors`` is the SiteVisit count
+    without identifying anyone. ``loadsReported`` counts every cold load
+    whose browser reported its load event (the ``load`` cells), and
+    ``visitorsExceedLoads`` is true on a day with more confirmed visitors
+    than that: a confirmed visitor's browser ran the page, and a page in view
+    outside automation reports its load, so on such a day some confirmations
+    came from clients that never did. Every day from CONFIRMED_VISITS_SINCE
+    to 2026-10-22 had visitors at or under loads (the closest 73 against 74);
+    on 2026-10-23 and 10-24 a crawler running full Chrome made it 458 against
+    53 and 788 against 28 (AGENTS.md §8). The stored hashes can't be told
+    apart afterwards, so such a day is marked, not corrected.
+    ``uniqueVisitors`` is the SiteVisit count
     for every day, as stored. Page views sum PageView's raw hit counter.
     Every day in the window is present, zero-filled:
     the dashboard draws this as a line, and a day with no rows skipped rather
@@ -421,11 +431,19 @@ def admin_visitor_stats(
         .group_by(PageLoadTiming.date)
         .all()
     )
+    loaded = dict(
+        db.query(PageLoadTiming.date, func.sum(PageLoadTiming.count))
+        .filter(PageLoadTiming.date >= dates[0], PageLoadTiming.metric == "load")
+        .group_by(PageLoadTiming.date)
+        .all()
+    )
     return [
         {
             "date": d,
             "confirmedVisitors": int(visitors.get(d, 0)) if d >= CONFIRMED_VISITS_SINCE else None,
             "firstPaintLoads": int(painted.get(d) or 0),
+            "loadsReported": int(loaded.get(d) or 0),
+            "visitorsExceedLoads": d >= CONFIRMED_VISITS_SINCE and visitors.get(d, 0) > (loaded.get(d) or 0),
             "uniqueVisitors": int(visitors.get(d, 0)),
             "pageViews": int(views.get(d) or 0),
         }

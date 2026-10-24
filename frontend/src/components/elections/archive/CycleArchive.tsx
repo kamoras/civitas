@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { SourceLine } from "@/components/shared/Type";
 import ElectionMap from "@/components/elections/map/ElectionMap";
 import MapAccountability from "@/components/elections/archive/MapAccountability";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { pageMetadata } from "@/lib/site";
 import { MEASURES_HREF } from "@/lib/routes";
 import {

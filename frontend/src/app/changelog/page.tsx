@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import { pageMetadata, TOPIC_FEEDS } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";

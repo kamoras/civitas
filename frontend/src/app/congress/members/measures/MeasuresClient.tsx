@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import Navbar from "@/components/layout/Navbar";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { MEASURES_HREF } from "@/lib/routes";

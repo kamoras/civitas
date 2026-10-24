@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchMapSeats } from "@/lib/api";
 import { redistrictingHref } from "@/lib/redistricting";

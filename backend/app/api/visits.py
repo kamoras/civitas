@@ -646,7 +646,10 @@ def _confirmed_paths(ip: str, kind: VisitSignal, path: str) -> list[str]:
     Chrome User-Agents from thousands of residential addresses was ~7,000 of
     a day's 7,357 counted visitors, and it never ran a page). The page's
     first router request from the same client — sent only by the page's
-    own script running in a browser — counts every page it holds. A
+    own script running in a browser, and only once the page is in view in
+    a browser no automation drives (frontend components/Link.tsx; from
+    2026-10-23 a crawler running full Chrome was confirmed by its own
+    prefetches) — counts every page it holds. A
     navigation counts its own page too, once the client has run a page
     today; one that hasn't is no reader clicking a link.
 

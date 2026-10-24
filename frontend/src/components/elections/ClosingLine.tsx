@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { RegistrationClosing } from "@/types/thisWeek";
 import { shortDate } from "@/lib/congress";
 import { CALENDAR_HREF } from "@/lib/routes";

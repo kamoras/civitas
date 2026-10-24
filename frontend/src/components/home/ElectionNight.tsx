@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { ResultsSummary, ResultsSummaryState } from "@/types/election";
 import { NOT_FINAL, formatEasternTime } from "@/lib/results";
 import { fetchResultsSummary } from "@/lib/resultsSummaryServer";

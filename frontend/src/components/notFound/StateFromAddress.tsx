@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { usePathname } from "next/navigation";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { stateBallotHref } from "@/lib/elections";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { ArchiveIndex } from "@/types/electionArchive";
 import type { Season } from "@/types/specials";
 import { electionArchiveHref } from "@/lib/routes";

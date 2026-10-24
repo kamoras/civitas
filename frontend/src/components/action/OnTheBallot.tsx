@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { IssueBallot } from "@/types/action";
 import { stateBallotHref } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";

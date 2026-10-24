@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import type { ThisWeek } from "@/types/thisWeek";
 import { RECORD_SOURCE, shortDate } from "@/lib/congress";

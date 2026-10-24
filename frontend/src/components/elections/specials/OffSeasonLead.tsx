@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import { CALENDAR_HREF } from "@/lib/routes";
 import { calendarEntries, longDate } from "@/lib/specials";

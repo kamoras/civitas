@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import StateAtAGlance from "@/components/elections/ballot/StateAtAGlance";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { agencyHref } from "@/lib/routes";
 
 /** An issuing agency's name, linking its page when the document says which

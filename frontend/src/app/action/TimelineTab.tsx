@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { retryKeepingFocus } from "@/lib/tabFocus";
 import { fetchTimeline } from "@/lib/api";

@@ -1,7 +1,7 @@
 "use client";
 
 import { congressOrdinal } from "@/lib/sources";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useMemo, useState, type ReactNode } from "react";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";

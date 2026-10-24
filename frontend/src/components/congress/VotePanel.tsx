@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { BillPassage, BillRecordVote, CoveragePart, VoteDetail } from "@/types/congress";
 import { CHAMBER_NAME, resultTone, rollCallHref, shortDate, voteResult } from "@/lib/congress";

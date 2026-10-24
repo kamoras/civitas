@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import type { ElectionCalendar, Season } from "@/types/specials";
 import { CALENDAR_HREF } from "@/lib/routes";
 import { dayText, longDate } from "@/lib/specials";

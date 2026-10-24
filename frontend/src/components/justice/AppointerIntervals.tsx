@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { onThisPage } from "@/lib/onThisPage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { overlay } from "@/lib/chartColors";

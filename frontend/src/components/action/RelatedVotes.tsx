@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { SECTION_HEADING } from "@/components/action/IssueEnrichment";
 import { CHAMBER_NAME, rollCallHref, voteResult, voteTally } from "@/lib/congress";
 import { formatUtcDate } from "@/lib/formatting";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { describeAgencyIndex } from "@/lib/seo";
 import { fetchAgencyIndex } from "@/lib/agencyServer";

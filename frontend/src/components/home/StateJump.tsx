@@ -2,7 +2,7 @@
 
 import { membersHref } from "@/lib/routes";
 import { useId } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useRouter } from "next/navigation";
 import { useYourState } from "@/hooks/useYourState";
 import { INLINE_LINK } from "@/lib/controlStyles";

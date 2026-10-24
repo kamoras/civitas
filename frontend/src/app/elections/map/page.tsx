@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { connection } from "next/server";
 import type { ElectionMapResponse } from "@/types/electionMap";
 import { absoluteUrl, pageMetadata } from "@/lib/site";

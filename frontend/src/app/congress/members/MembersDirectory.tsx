@@ -7,7 +7,7 @@ import {
   stateBallotHref,
 } from "@/lib/elections";
 import { Suspense, useId, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";

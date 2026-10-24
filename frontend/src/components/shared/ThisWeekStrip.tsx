@@ -1,5 +1,5 @@
 import { EYEBROW, TYPE } from "@/lib/typeStyles";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { OPEN_COMMENTS_HREF } from "@/lib/routes";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";

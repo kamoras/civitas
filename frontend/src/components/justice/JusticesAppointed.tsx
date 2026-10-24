@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import Photo from "@/components/Photo";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchJusticesAppointedBy } from "@/lib/api";

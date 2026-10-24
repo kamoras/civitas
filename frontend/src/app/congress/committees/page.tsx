@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { pageMetadata } from "@/lib/site";
 import { fetchCommitteeRecord, fetchCommittees } from "@/lib/congressServer";
 import { CHAMBER_NAME, billHref, currentCongress, dayHref, longDate } from "@/lib/congress";

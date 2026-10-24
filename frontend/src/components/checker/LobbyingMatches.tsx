@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency, safeHref } from "@/lib/formatting";
 import { billPageHref } from "@/lib/congress";

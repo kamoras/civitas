@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { shortDate } from "@/lib/congress";
 import { STATUS_LABEL, STATUS_STYLE, nominationHref } from "@/lib/nominations";
