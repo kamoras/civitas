@@ -649,7 +649,7 @@ def _calendar_command(ctx: Context) -> list[str] | None:
     if election.phase != "campaign":
         return None
     return [PY, _script("build_election_calendar.py"), "--election", election.election_day.isoformat(),
-            "--output", "{out}"]
+            "--output", "{out}", "--in-use", "{in_use}"]
 
 
 def _calendar_due(ctx: Context) -> bool:

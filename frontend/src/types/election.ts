@@ -510,8 +510,12 @@ export interface VoterDeadline {
      * read from a county election office's printing while the state's own
      * source couldn't be read (labelled on the page). */
     status: "verified" | "statute" | "republished";
+    /** When it was last confirmed on its source. */
     checkedOn?: string;
-    detail?: string;
+    /** Set when the last build couldn't re-read it (its page unreadable,
+     * or the deadline passed and the state took it off the page): when it
+     * was last confirmed, and why not again. The backend's sentence. */
+    detail?: string | null;
   };
 }
 
