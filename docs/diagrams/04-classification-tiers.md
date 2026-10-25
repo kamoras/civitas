@@ -9,7 +9,7 @@ Cheaper techniques run first (computational parsimony, Jurafsky & Martin 2023).
 flowchart TB
     IN(["Entity to classify<br/>bill · donor · employer · stance"]) --> T0
 
-    T0{"Tier 0 — disclosed pre-filters<br/>three narrow, code-commented cases"}
+    T0{"Tier 0 — disclosed pre-filters<br/>four narrow, code-commented cases"}
     T0 -->|"hit"| T0OUT["Fast-path result"]
     T0 -->|"miss (the normal path)"| T1
 
@@ -59,7 +59,7 @@ hallucinated categories outside the taxonomy (`SPORTS`, `RESTAURANT`) and took
 40+ minutes for ~5,000 donors, against under 5 seconds for kNN, with less
 consistent results.
 
-## The three disclosed tier-0 exceptions
+## The four disclosed tier-0 exceptions
 
 These are precision pre-filters for specific, *measured* embedding-model
 weaknesses — not a replacement for the classifier. Anything they don't catch
@@ -71,6 +71,7 @@ definition in code.
 | Bill stance direction | `bill_analyzer.py::derive_stance` | A tier-0 check against the same word set used to build the pro/anti prototypes, used only to break ties or lower the acceptance margin when the embedding result is already ambiguous. Verified 2026-07 on n=2979 real bill titles: removing it changes 1.5% of outcomes, always by recovering a genuinely directional bill the embedding alone scored neutral. |
 | Hotel / lodging industry | `industry_classifier.py::classify_industry_with_provenance` | Hotel brand names measurably score as `MEDIA` rather than `REAL_ESTATE` in this embedding space — a specific, verified anomaly. |
 | PAC and payment processors | `donor_classifier_ai.py` | Names containing "PAC" (an FEC filing convention) or matching a closed set of processor brands (ActBlue, WinRed, Anedot). ALL-CAPS FEC-formatted names score inconsistently against mixed-case prototypes. |
+| Claim actors with a capitalised word | `post_composer._looks_like_an_actor` (called by `is_acting_party`) | Admits a claim's actor span that is a capitalised name ahead of the kNN vote, which decides every span the rule refuses. It admits rather than filters, and stays because the vote alone, measured on the same labelled set and replay, lost more real claims than it recovered. |
 
 Two further structural lookups decode already-known facts rather than classify
 anything: the FEC entity-type-code map (`CCM` → `CandidateAffiliated`, decoding

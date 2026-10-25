@@ -498,13 +498,13 @@ export default function DataChapter() {
               processing.
             </P>
             <P>
-              Classification avoids hand-written keyword lists, with three narrow, documented
+              Classification avoids hand-written keyword lists, with four narrow, documented
               exceptions: a check for a bill&apos;s leading verb, a hotel-brand tier for industries,
-              and a PAC-suffix and payment-processor tier for donors. Each exists because of a
-              specific, measured failure of the embedding model, and runs only as a first filter in
-              front of the embedding classifier, never in place of it. The project&apos;s
-              classification notes (docs/methodology/classification.md) list each with its
-              measurement.
+              a PAC-suffix and payment-processor tier for donors, and a rule that accepts a quoted
+              claim&apos;s actor when the actor is a capitalised name. Each exists because of a
+              specific, measured failure of the embedding model, and runs only ahead of the
+              embedding classifier, never in place of it. The project&apos;s classification notes
+              (docs/methodology/classification.md) list each with its measurement.
             </P>
           </Box>
         </Boxes>
