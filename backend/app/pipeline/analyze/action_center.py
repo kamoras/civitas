@@ -29,7 +29,7 @@ from collections import Counter
 from difflib import SequenceMatcher
 from functools import lru_cache
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Iterator, NamedTuple
 import uuid
@@ -250,15 +250,27 @@ def _relevance_reference() -> np.ndarray:
 # the data itself says is NOT one story (or one fact) would merge. Those are
 # pairs that share a distinctive entity (_shares_distinctive_entity, the
 # monitors' test) but whose stated occasions differ: for articles, the days
-# their own text dates the event to (stated_days: a weekday read against
-# the publication date, or a month and day) at least STATED_DAY_GAP apart;
-# for claims, lines of two issues published within a day of each other as
-# separate stories, leaving out any pair that quotes one sentence. A wrong
-# merge publishes a chimera, and a wrong restatement call drops a real
-# fact, so both cuts are precision-first, and both carry CUT_MARGIN. Where a fit has fewer than
+# their headline and first sentence date the event to (stated_days on
+# occasion_text: a weekday read against the publication date, or a month
+# and day) at least STATED_DAY_GAP apart; for claims, lines of two issues
+# published within a day of each other as separate stories, leaving out any
+# pair that quotes one sentence. A wrong merge publishes a chimera, and a
+# wrong restatement call drops a real fact, so both cuts are
+# precision-first, and both carry CUT_MARGIN. Where a fit has fewer than
 # MIN_HARD_NEGATIVES such pairs it keeps the stored cut, or the bundled one
 # (app/data/cluster_pair_calibration.json, claim_restatement_calibration.json,
 # written by scripts/calibrate_action_cuts.py with the same fit).
+#
+# The clustering cut differs in two ways (2026-10-25). It sits above
+# CLUSTER_NEGATIVE_QUANTILE of those pairs, not all of them, and a refit
+# replaces the cut in use only under precision_rule.accept, held out on
+# CUT_FOLDS blocks of days, where the pairs the data calls one event are two
+# sources of one stored issue and two articles about one actor dated the
+# same day (fit_cluster_cut). Fitted to the maximum and adopted unchecked,
+# one mislabelled pair (NPR's "first official day was on Monday" against
+# the same exit reported Friday, 0.77) held the cut at 0.87 from 2026-10-17:
+# complete linkage joined no two articles, single articles rarely reach two
+# verified claims, and new issues stopped.
 #
 # Clustering also refuses outright to join two articles whose stated days
 # differ by STATED_DAY_GAP or more (_cluster_articles), whatever their
@@ -269,6 +281,19 @@ def _relevance_reference() -> np.ndarray:
 # has the comparison.
 STATED_DAY_GAP = 2
 MIN_HARD_NEGATIVES = 30
+# Blocks of consecutive days a refit is held out on (_held_out_against).
+CUT_FOLDS = 4
+# The share of two-event pairs the clustering cut is fitted above. With the
+# label read from headline and first sentence, the top pairs of the four
+# weeks to 2026-10-25 (538) were one event's reaction days later (a
+# candidate's ad, and the president defending it two days on, 0.77 and
+# 0.72; a Treasury rule and China's answer, 0.75), which the hand-judged
+# rubric calls one event: the maximum still gave 0.87. The 99th percentile
+# leaves out the top five and gives 0.72, where the 553 hand-judged pairs
+# (app/data/cluster_pair_judgments.json as it was before #1051 removed it;
+# a held-out check, never fitted to) merge one judged different-event pair
+# and 17 judged same-event ones; 0.995 gave 0.85 and kept the cut stuck.
+CLUSTER_NEGATIVE_QUANTILE = 0.99
 # How far back each fit reads: about four weeks of national-feed articles
 # (feed_articles), and three weeks of published issues.
 CLUSTER_REFIT_DAYS = 28
@@ -295,7 +320,7 @@ CUT_MARGIN = 0.10
 # twice (left out of the restatement fit's negatives).
 SAME_SENTENCE_RUN = 5
 
-_CUTS_TIER = "action-cuts"
+_CUTS_TIER = calibration_drift.CUTS_TIER
 _CUTS_TTL_HOURS = 24 * 400
 _CLUSTER_CALIBRATION_PATH = _DATA_DIR / "cluster_pair_calibration.json"
 _cuts_cache: dict = {}
@@ -308,18 +333,41 @@ _MONTH_DAY_RE = re.compile(
     r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b", re.IGNORECASE)
 
 
+# What a stated day in an article's lead may belong to other than the event
+# it reports: a start date ("Katie Zacharia's first official day was on
+# Monday", NPR's whole description of her exit four days later, which made
+# the two accounts of that exit a "two occasions" pair at 0.77 and held the
+# clustering cut at 0.87 from 2026-10-17), and a photo credit in parentheses.
+_START_DAY_RE = re.compile(
+    r"\bfirst(?:\s+\w+){0,2}\s+day\s+(?:\w+\s+){0,3}?(?:was|is|will\s+be|began|begins|starts|started)\b[^.;]*",
+    re.IGNORECASE)
+_CREDIT_RE = re.compile(r"\([^()]*\b(?:credit|photo|photograph|getty|reuters|afp)\b[^()]*\)", re.IGNORECASE)
+
+
+def occasion_text(title: str, description: str | None) -> str:
+    """Where an article dates its own event: the headline and the
+    description's first sentence (_split_body_items: an abbreviation's
+    period is no break, a credit no sentence). A day named later in a
+    description is usually another occasion's: the background ("after a
+    rally on Monday"), the reaction to it, what comes next."""
+    items = _split_body_items(description or "")
+    return f"{title}. {items[0][0] if items else ''}"
+
+
 def stated_days(text: str, published: date | None) -> frozenset[date]:
     """The days TEXT dates what it reports to: each weekday it names, read
     as the most recent such day on or before `published`, and each month
-    and day it names, in `published`'s year. Empty without a publication
-    date to read them against."""
+    and day it names, in `published`'s year, leaving out a start date and a
+    photo credit (_START_DAY_RE). Empty without a publication date to read
+    them against. Callers pass occasion_text."""
     if published is None:
         return frozenset()
+    text = _CREDIT_RE.sub(" ", _START_DAY_RE.sub(" ", text or ""))
     days: set[date] = set()
-    for m in _WEEKDAY_RE.finditer(text or ""):
+    for m in _WEEKDAY_RE.finditer(text):
         back = (published.weekday() - _WEEKDAYS.index(m.group(1).lower())) % 7
         days.add(published - timedelta(days=back))
-    for m in _MONTH_DAY_RE.finditer(text or ""):
+    for m in _MONTH_DAY_RE.finditer(text):
         try:
             days.add(date(published.year, _MONTH_ABBREVIATIONS.index(m.group(1).lower()[:3]) + 1, int(m.group(2))))
         except ValueError:
@@ -340,46 +388,102 @@ def cluster_text(title: str, summary: str | None, chars: int = CLUSTER_DESCRIPTI
     return f"{title}. {(summary or '')[:chars]}"
 
 
-def _zero_merge_cut(negative_scores: Sequence[float]) -> float:
-    """The lowest 0.01 cut no negative reaches."""
-    return round(math.floor(max(negative_scores) * 100 + 1) / 100, 2)
+def _zero_merge_cut(negative_scores: Sequence[float], quantile: float = 1.0) -> float:
+    """The lowest 0.01 cut no negative reaches (with `quantile` below 1,
+    none above that quantile of them: the rest are taken for label noise)."""
+    top = float(np.quantile(np.asarray(negative_scores, float), quantile, method="higher"))
+    return round(math.floor(top * 100 + 1) / 100, 2)
 
 
-def fit_cluster_cut(articles: Sequence[tuple[str, str, datetime]]) -> dict | None:
-    """The clustering cut for (title, description, published) articles
-    (module comment above STATED_DAY_GAP): each pair published within one
-    run's window scored on the run's day-centred embeddings, the fitted cut
-    the lowest no stated-day-disagreeing pair with a shared distinctive
-    entity reaches, plus CUT_MARGIN."""
+def _held_out_against(scores: np.ndarray, same: np.ndarray, days: np.ndarray, in_use: float,
+                      cut: Callable[[np.ndarray], float]) -> dict:
+    """A refit's rule held out on CUT_FOLDS blocks of consecutive days (each
+    block scored by `cut` of the other blocks' different-story pairs, and
+    only when they hold MIN_HARD_NEGATIVES of them) against the cut in use
+    on the same pairs: precision_rule.compare, and precision_rule.accept's
+    `kept` (None to adopt the refit)."""
+    fold = precision_rule.fold_of(days, CUT_FOLDS)
+    passed = np.zeros(len(scores), bool)
+    scored = np.zeros(len(scores), bool)
+    for f in range(CUT_FOLDS):
+        test = fold == f
+        train_negatives = scores[~test & ~same]
+        if not test.any() or len(train_negatives) < MIN_HARD_NEGATIVES:
+            continue
+        scored |= test
+        passed[test] = scores[test] >= cut(train_negatives)
+    held_out = precision_rule.compare(same[scored], passed[scored], scores[scored] >= in_use)
+    return {"in_use": in_use, "held_out": held_out, "kept": precision_rule.accept(held_out)}
+
+
+def fit_cluster_cut(articles: Sequence[tuple], issue_sources: Sequence[Sequence[str]] = (),
+                    in_use: float | None = None) -> dict | None:
+    """The clustering cut for (title, description, published[, url])
+    articles (module comment above STATED_DAY_GAP), from the pairs published
+    within one run's window, scored on the run's day-centred embeddings.
+
+    Two events: the pair shares a distinctive entity and its stated days
+    disagree. One event: both articles are sources of one stored issue
+    (`issue_sources`, each issue's source URLs), or the pair shares a
+    distinctive entity and a stated day. The cut is the lowest above
+    CLUSTER_NEGATIVE_QUANTILE of the two-event pairs, plus CUT_MARGIN. None
+    with fewer than MIN_HARD_NEGATIVES two-event pairs.
+
+    With `in_use`, the rule is held out on blocks of days against the cut in
+    use (_held_out_against): `kept` says why the cut in use stays, or is
+    None when the refit is adopted."""
     if len(articles) < 2:
         return None
-    embeddings = _embed_texts([cluster_text(t, d) for t, d, _ in articles])
-    when = [p for _, _, p in articles]
-    days = [stated_days(f"{t} {d}", p.date()) for t, d, p in articles]
-    signatures = [_issue_signature(t, [d]) for t, d, _ in articles]
+    titles, descriptions, when = [a[0] for a in articles], [a[1] for a in articles], [a[2] for a in articles]
+    issues_of: dict[str, set[int]] = {}
+    for n, urls in enumerate(issue_sources):
+        for url in urls:
+            issues_of.setdefault(url, set()).add(n)
+    sources = [issues_of.get(a[3], set()) if len(a) > 3 else set() for a in articles]
+    embeddings = _embed_texts([cluster_text(t, d) for t, d in zip(titles, descriptions)])
+    days = [stated_days(occasion_text(t, d), p.date()) for t, d, p in zip(titles, descriptions, when)]
+    signatures = [_issue_signature(t, [d]) for t, d in zip(titles, descriptions)]
     df: Counter = Counter()
     for s in signatures:
         df.update(s)
     window = timedelta(hours=MAX_ARTICLE_AGE_HOURS)
     order = sorted(range(len(articles)), key=lambda n: when[n])
-    negatives = []
+    scores, same, pair_days = [], [], []
     for a, i in enumerate(order):
         for j in order[a + 1:]:
             if when[j] - when[i] > window:
                 break
-            if not days_disagree(days[i], days[j]):
+            if sources[i] & sources[j]:
+                label = True
+            elif not _shares_distinctive_entity(signatures[i], signatures[j], df, len(articles)):
                 continue
-            if not _shares_distinctive_entity(signatures[i], signatures[j], df, len(articles)):
+            elif days_disagree(days[i], days[j]):
+                label = False
+            elif days[i] & days[j]:
+                label = True
+            else:
                 continue
             # Centred on the pool one run holding both would have seen.
             pool = [n for n in order if when[j] - window < when[n] <= when[j]]
             centred = _center_titles(embeddings[[i, j]], embeddings[pool].mean(axis=0))
-            negatives.append(float(centred[0] @ centred[1]))
-    if len(negatives) < MIN_HARD_NEGATIVES:
+            scores.append(float(centred[0] @ centred[1]))
+            same.append(label)
+            pair_days.append(when[j].date().toordinal())
+    scores, same, pair_days = np.array(scores), np.array(same, bool), np.array(pair_days)
+    if (~same).sum() < MIN_HARD_NEGATIVES:
         return None
-    fitted = _zero_merge_cut(negatives)
-    return {"threshold": round(min(fitted + CUT_MARGIN, 0.99), 2), "fitted": fitted,
-            "margin": CUT_MARGIN, "negatives": len(negatives), "articles": len(articles)}
+
+    def cut(negatives: np.ndarray) -> float:
+        return round(min(_zero_merge_cut(negatives, CLUSTER_NEGATIVE_QUANTILE) + CUT_MARGIN, 0.99), 2)
+
+    threshold = cut(scores[~same])
+    out = {"threshold": threshold, "fitted": _zero_merge_cut(scores[~same], CLUSTER_NEGATIVE_QUANTILE),
+           "margin": CUT_MARGIN, "quantile": CLUSTER_NEGATIVE_QUANTILE, "negatives": int((~same).sum()),
+           "negatives_reaching": int((scores[~same] >= threshold).sum()), "positives": int(same.sum()),
+           "positives_joined": int((scores[same] >= threshold).sum()), "articles": len(articles)}
+    if in_use is not None:
+        out.update(_held_out_against(scores, same, pair_days, in_use, cut))
+    return out
 
 
 def _shared_run(a: str, b: str) -> int:
@@ -457,7 +561,7 @@ def stated_day_negatives(articles: Sequence[tuple[str, str, datetime]]) -> list[
     whose own text dates them days apart (days_disagree): two occasions, the
     clustering fit's label (fit_cluster_cut) at the issue rematch's reach."""
     when = [p for _, _, p in articles]
-    days = [stated_days(f"{t} {d}", p.date()) for t, d, p in articles]
+    days = [stated_days(occasion_text(t, d), p.date()) for t, d, p in articles]
     signatures = [_issue_signature(t, [d]) for t, d, _ in articles]
     df: Counter = Counter()
     for s in signatures:
@@ -475,10 +579,6 @@ def stated_day_negatives(articles: Sequence[tuple[str, str, datetime]]) -> list[
     return pairs
 
 
-# Blocks of consecutive days the near-identical refit is held out on.
-NEAR_IDENTICAL_FOLDS = 4
-
-
 def fit_near_identical_cut(issues: Sequence, articles: Sequence[tuple[str, str, datetime]] = (),
                            in_use: float | None = None) -> dict | None:
     """The near-identical title cut (comment above near_identical_cut): the
@@ -489,10 +589,8 @@ def fit_near_identical_cut(issues: Sequence, articles: Sequence[tuple[str, str, 
     title is an outlet's headline, scored the same way. None with fewer than
     MIN_HARD_NEGATIVES different-story pairs.
 
-    With `in_use`, the same fit is held out on NEAR_IDENTICAL_FOLDS blocks of
-    consecutive days (fitted on the other blocks' different-story pairs) and
-    compared with the cut in use on the same pairs (precision_rule.compare);
-    `kept` says why the cut in use stays (precision_rule.accept), or is
+    With `in_use`, the fit is held out on blocks of days against the cut in
+    use (_held_out_against): `kept` says why the cut in use stays, or is
     None when the refit is adopted."""
     pairs = near_identical_pairs(issues)
     article_pairs = stated_day_negatives(articles)
@@ -506,7 +604,7 @@ def fit_near_identical_cut(issues: Sequence, articles: Sequence[tuple[str, str, 
         same_story.append(same)
         days.append(max(issue_days[i], issue_days[j]).toordinal())
     if article_pairs:
-        titles = _embed_texts_sim([t for t, _, _ in articles])
+        titles = _embed_texts_sim([a[0] for a in articles])
         for i, j in article_pairs:
             scores.append(float(titles[i] @ titles[j]))
             same_story.append(False)
@@ -520,38 +618,30 @@ def fit_near_identical_cut(issues: Sequence, articles: Sequence[tuple[str, str, 
     out = {"threshold": threshold, "fitted": _zero_merge_cut(scores[~same_story].tolist()), "margin": CUT_MARGIN,
            "negatives": int((~same_story).sum()), "article_negatives": len(article_pairs),
            "positives": int(same_story.sum()), "positives_joined": int((scores[same_story] >= threshold).sum())}
-    if in_use is None:
-        return out
-    # A block is scored only when the other blocks hold enough different-
-    # story pairs to fit on, and both cuts are compared on the same blocks.
-    fold = precision_rule.fold_of(days, NEAR_IDENTICAL_FOLDS)
-    passed = np.zeros(len(scores), bool)
-    scored = np.zeros(len(scores), bool)
-    for f in range(NEAR_IDENTICAL_FOLDS):
-        test = fold == f
-        train_negatives = scores[~test & ~same_story]
-        if not test.any() or len(train_negatives) < MIN_HARD_NEGATIVES:
-            continue
-        scored |= test
-        passed[test] = scores[test] >= cut(train_negatives)
-    out["in_use"] = in_use
-    out["held_out"] = precision_rule.compare(same_story[scored], passed[scored], scores[scored] >= in_use)
-    out["kept"] = precision_rule.accept(out["held_out"])
+    if in_use is not None:
+        out.update(_held_out_against(scores, same_story, days, in_use, cut))
     return out
 
 
 def refit_cuts(db: Session) -> None:
-    """Refit both cuts on the first refresh of each UTC day, inside a
-    savepoint of the refresh's session (it commits). A fit with too few
-    pairs leaves the stored cut in place. The new cuts are used in this
+    """Refit the cuts on the first refresh of each UTC day (so the first
+    refresh after a restart), inside a savepoint of the refresh's session
+    (it commits). A fit with too few pairs leaves the stored cut in place,
+    and so does a clustering or near-identical refit precision_rule.accept
+    refuses (recorded under "<key>-refit"). The new cuts are used in this
     process at once."""
     today = utcnow().date().isoformat()
     if _cuts_cache.get("refit_on") == today:
         return
     _cuts_cache["refit_on"] = today
     since = utcnow() - timedelta(days=CLUSTER_REFIT_DAYS)
-    articles = [(r.title, r.description, r.published or r.seen_at) for r in
+    articles = [(r.title, r.description, r.published or r.seen_at, r.url) for r in
                 db.query(FeedArticle).filter(FeedArticle.kept.is_(True), FeedArticle.seen_at >= since)]
+    # Two articles one issue published as its sources are one event: the
+    # issues of the same weeks (and the two days a story is rematched for).
+    issue_sources = [_json_set_list(r.source_urls) for r in db.query(ActionIssue.source_urls).filter(
+        ActionIssue.source_type.is_(None),
+        ActionIssue.date >= (since - timedelta(days=REMATCH_WINDOW_DAYS)).date().isoformat())]
     issue_since = (utcnow() - timedelta(days=RESTATEMENT_REFIT_DAYS)).date().isoformat()
     issues = []
     for row in db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since):
@@ -566,7 +656,8 @@ def refit_cuts(db: Session) -> None:
     near_rows = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None)).all()
     near_articles = [(r.title, r.description, r.published or r.seen_at)
                      for r in db.query(FeedArticle).filter(FeedArticle.kept.is_(True))]
-    fits = {"cluster": fit_cluster_cut(articles), "restatement": fit_restatement_cut(issues),
+    fits = {"cluster": fit_cluster_cut(articles, issue_sources, in_use=float(cluster_calibration()["threshold"])),
+            "restatement": fit_restatement_cut(issues),
             "near_identical": fit_near_identical_cut(near_rows, near_articles, in_use=near_identical_cut())}
     for key, fitted in fits.items():
         if fitted is None:
@@ -645,6 +736,28 @@ MAX_ISSUES = 2
 # Three candidates per slot; a cluster that is tried costs one extraction
 # pass, and a run stops trying the moment both slots are filled.
 CANDIDATE_POOL = MAX_ISSUES * 3
+
+# The clusters that failed the claims gates (no verified claim, or fewer
+# than two) on one Eastern day, by their article URLs. The locate calls are
+# cached by day, rank and source text (locate_claim), so a cluster that
+# keeps its rank fails the same way every hour: on 2026-10-24 and 25 the
+# same six clusters filled CANDIDATE_POOL every hour and no lower-ranked
+# cluster was ever tried. A cluster an article joins is another set and is
+# tried again. In memory: a restart only means one more try.
+_failed_clusters: dict[str, set[frozenset[str]]] = {}
+
+
+def _cluster_signature(cluster: Sequence[NewsArticle]) -> frozenset[str]:
+    return frozenset(a.url for a in cluster)
+
+
+def _failed_today(today: str) -> set[frozenset[str]]:
+    """Today's failed cluster signatures (the set to add to); earlier
+    days' are dropped."""
+    for day in [d for d in _failed_clusters if d != today]:
+        del _failed_clusters[day]
+    return _failed_clusters.setdefault(today, set())
+
 
 # Fact rule (6) guards against cross-topic contamination: facts pulled
 # from an unrelated article that survived cluster-coherence filtering. A
@@ -1813,7 +1926,7 @@ def _cluster_articles(
     # Two articles whose own text dates the event to days STATED_DAY_GAP or
     # more apart are two occasions: put them past any cut, so complete
     # linkage never joins them (or any cluster holding both).
-    days = [stated_days(f"{a.title} {a.summary or ''}", a.published.date() if a.published else None)
+    days = [stated_days(occasion_text(a.title, a.summary), a.published.date() if a.published else None)
             for a, _ in items]
     for i, j in itertools.combinations(range(len(items)), 2):
         if days_disagree(days[i], days[j]):
@@ -1826,6 +1939,9 @@ def _cluster_articles(
     groups: dict[int, list[NewsArticle]] = {}
     for (article, _), label in zip(items, labels):
         groups.setdefault(int(label), []).append(article)
+    # The gate's pass, for the drift check: an article joined to another.
+    sizes = Counter(int(label) for label in labels)
+    calibration_drift.observe("cluster", [sizes[int(label)] for label in labels], 2)
     logger.info(
         "Clustering (complete linkage, threshold=%.2f): %d articles → %d clusters",
         threshold, len(items), len(groups),
@@ -5465,6 +5581,17 @@ def _run_refresh(db: Session) -> int:
     # 5. Rank clusters (outlets, officials, civic documents, trending)
     _set_refresh_state(stage="rank")
     ranked_clusters, ranked_signals = _rank_clusters(clusters, trending, db)
+    # A cluster that already failed the claims gates today is passed over,
+    # so the candidate pool reaches the clusters ranked below it
+    # (_failed_today).
+    failed = _failed_today(today)
+    tryable = [i for i, c in enumerate(ranked_clusters) if _cluster_signature(c) not in failed]
+    if len(tryable) < len(ranked_clusters):
+        action_metrics.increment("clusters_skipped_failed_today", len(ranked_clusters) - len(tryable))
+        logger.info("Passing over %d cluster(s) that failed the claims gates earlier today",
+                    len(ranked_clusters) - len(tryable))
+        ranked_clusters = [ranked_clusters[i] for i in tryable]
+        ranked_signals = [ranked_signals[i] for i in tryable]
 
     # 5b. Candidates in rank order, skipping a cluster on the same story as
     # one already published this run (e.g., "Tariff hikes" and "Market
@@ -5708,6 +5835,7 @@ def _run_refresh(db: Session) -> int:
             # the race and related developments."
             logger.info("No verifiable claim in cluster rank %d — no issue", rank)
             action_metrics.increment("clusters_without_claims")
+            failed.add(_cluster_signature(cluster))
             continue
 
         # The headline of the top-ranked real article. A real outlet's
@@ -5807,6 +5935,7 @@ def _run_refresh(db: Session) -> int:
                 rank, len(cluster_claims), title[:60],
             )
             action_metrics.increment("issues_skipped_too_few_facts")
+            failed.add(_cluster_signature(cluster))
             continue
 
         # Post-LLM title dedup: skip if this LLM-generated title is too

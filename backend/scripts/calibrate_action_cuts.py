@@ -5,7 +5,8 @@ Writes app/data/cluster_pair_calibration.json and
 app/data/claim_restatement_calibration.json: the cuts action_center.refit_cuts
 fits once a day (fit_cluster_cut, fit_restatement_cut), fitted here on the
 database DATABASE_URL points at (a production snapshot): its stored
-national-feed articles (feed_articles) and its published issues. Nothing
+national-feed articles (feed_articles) and its published issues (whose
+sources are the clustering fit's one-event pairs). Nothing
 is labelled by hand. A database that does not yet hold four weeks of
 feed_articles can be given the articles as a JSON list of {"title",
 "description", "published"} with --articles. Rerun when the fit changes,
@@ -46,13 +47,16 @@ def main() -> None:
         if args.articles:
             rows = json.loads(args.articles.read_text())
             articles = [(r["title"], r["description"] or "",
-                         datetime.datetime.fromisoformat(r["published"].replace("Z", "+00:00")).replace(tzinfo=None))
+                         datetime.datetime.fromisoformat(r["published"].replace("Z", "+00:00")).replace(tzinfo=None),
+                         r.get("url"))
                         for r in rows]
             article_source = f"the {len(articles)} national-feed articles in {args.articles.name}"
         else:
-            articles = [(r.title, r.description, r.published or r.seen_at)
+            articles = [(r.title, r.description, r.published or r.seen_at, r.url)
                         for r in db.query(FeedArticle).filter(FeedArticle.kept.is_(True))]
             article_source = f"the {len(articles)} kept national-feed articles in feed_articles"
+        issue_sources = [json.loads(r.source_urls or "[]")
+                         for r in db.query(ActionIssue.source_urls).filter(ActionIssue.source_type.is_(None))]
         issues = []
         since = (datetime.date.today() - datetime.timedelta(days=RESTATEMENT_REFIT_DAYS)).isoformat()
         for row in db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= since):
@@ -61,7 +65,7 @@ def main() -> None:
             except ValueError:
                 facts = []
             issues.append((row.id, row.date, [row.summary or "", *facts]))
-    cluster, restatement = fit_cluster_cut(articles), fit_restatement_cut(issues)
+    cluster, restatement = fit_cluster_cut(articles, issue_sources), fit_restatement_cut(issues)
     if cluster is None or restatement is None:
         sys.exit(f"too few labelled pairs (cluster {cluster}, restatement {restatement})")
     cluster.update({

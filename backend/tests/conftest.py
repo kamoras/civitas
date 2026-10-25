@@ -187,6 +187,16 @@ def _throttle_dir(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _no_failed_clusters_carried():
+    """The Action Center remembers the day's failed clusters in a module
+    global (action_center._failed_clusters); one test's failures must not
+    make the next test's identical clusters be passed over."""
+    module = sys.modules.get("app.pipeline.analyze.action_center")
+    if module is not None:
+        module._failed_clusters.clear()
+
+
+@pytest.fixture(autouse=True)
 def throttle_store(_throttle_dir):
     """A fresh store for api/throttle.py for every test, in a file of its
     own; yields its path. Autouse: the default lives in /dev/shm, where

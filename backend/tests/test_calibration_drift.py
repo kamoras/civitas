@@ -148,3 +148,38 @@ def test_a_daily_refit_keeps_the_baseline_while_its_parameters_hold(tmp_path, mo
     assert cd._calibration_sha("committee_routing_calibration.json", keys) == first
     path.write_text('{"reference": "data", "k": 15, "alpha": 0.0, "temperature": 5.0, "threshold": 0.55, "x": 2}')
     assert cd._calibration_sha("committee_routing_calibration.json", keys) != first
+
+
+def test_an_action_center_cut_is_the_stored_refit_in_use(store, freeze_utcnow):
+    """The clustering and near-identical cuts are refit by the Action Center
+    every day into api_cache; the calibration in use is that stored cut's
+    threshold, and the bundled file only before the first refit."""
+    from app.pipeline.cache import api_cache_set
+
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    for gate in ("cluster", "near_identical"):
+        assert gate in cd.GATES and cd.REFITTING[gate] is None and cd.PARAMETERS[gate] == ("threshold",)
+    bundled = cd._calibration_sha("cluster_pair_calibration.json", ("threshold",), store, "cluster")
+    api_cache_set(store, cd.CUTS_TIER, "cluster", {"threshold": 0.75, "date": "2028-03-01"},
+                  normal_ttl_hours=24)
+    first = cd._calibration_sha("cluster_pair_calibration.json", ("threshold",), store, "cluster")
+    assert first != bundled
+    api_cache_set(store, cd.CUTS_TIER, "cluster", {"threshold": 0.75, "date": "2028-03-02"},
+                  normal_ttl_hours=24)
+    assert cd._calibration_sha("cluster_pair_calibration.json", ("threshold",), store, "cluster") == first
+
+
+def test_a_daily_refitting_cut_is_alerted_only_if_drift_outlasts_its_refits(store, freeze_utcnow):
+    """The Action Center refits its cuts every day, so drift requests no
+    data refresh; drift still there after REFIT_GRACE_DAYS is alerted."""
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    moved = lambda g: "moved" if g == "cluster" else None  # noqa: E731
+    with patch.object(cd, "drift", side_effect=moved), patch.object(cd.data_refresh, "request_refit") as request, \
+         patch.object(cd, "send_ops_alert") as send, patch.object(cd, "resolve_ops_alert"):
+        cd.check_all()
+        request.assert_not_called()
+        assert not [c for c in send.call_args_list if c.kwargs["condition"] == "calibration-drift-cluster"]
+        freeze_utcnow(datetime(2028, 3, 1, 12) + timedelta(days=cd.REFIT_GRACE_DAYS))
+        cd.check_all()
+        sent = [c for c in send.call_args_list if c.kwargs["condition"] == "calibration-drift-cluster"]
+        assert sent and "action-cuts cluster-refit" in sent[0].args[1]

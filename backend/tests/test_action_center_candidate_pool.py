@@ -228,3 +228,29 @@ def test_a_live_blog_listing_several_stories_never_titles_an_issue(db_session, r
     assert [i.title for i in issues] == ["Story 3 headline 1", "Story 6 headline 0"]
     assert CLUSTERS[2][0].url in json.loads(issues[0].source_urls)
     assert not live & set(asked)
+
+
+def test_a_cluster_that_failed_the_claims_gates_today_is_passed_over(db_session, refresh, monkeypatch):
+    """The locate calls are cached by day, rank and source, so a cluster that
+    failed keeps failing: on 2026-10-24 and 25 the same six filled the pool
+    every hour. Later runs that day skip it and reach lower ranks; a cluster
+    an article joins is a different set and is tried again."""
+    tried = []
+    extract = action_center.claim_layer.extract_claims
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims",
+                        lambda cluster, locate: tried.append(_cluster_number(cluster)) or extract(cluster, locate))
+    action_center._run_refresh(db_session)
+    assert tried == [1, 2, 3, 4, 5]
+    tried.clear()
+    action_center._run_refresh(db_session)
+    assert tried == [3, 5]  # 1, 2 and 4 failed today; 3 and 5 fill both slots again
+    tried.clear()
+    CLUSTERS[0].append(_article(1, 9))
+    try:
+        action_center._run_refresh(db_session)
+    finally:
+        CLUSTERS[0].pop()
+    assert tried[0] == 1  # grown, it is another cluster
+    # A new day forgets.
+    assert action_center._failed_today("2999-01-01") == set()
+    assert list(action_center._failed_clusters) == ["2999-01-01"]

@@ -72,7 +72,14 @@ GATES = {
     "member_photo": ("member_photo_calibration.json", "members switched to the bioguide portrait"),
     "roll_call_links": ("roll_call_link_calibration.json", "stories linked to a related vote in Congress"),
     "near_identical": ("action_thresholds.json", "issue pairs joined as one story by their titles alone"),
+    "cluster": ("cluster_pair_calibration.json", "feed articles clustered with another report of their event"),
 }
+
+# Gates whose fit in use is the Action Center's daily refit, stored in
+# api_cache (tier CUTS_TIER, under the gate's key: action_center.refit_cuts),
+# with the bundled file as the fallback before the first refit.
+CUTS_TIER = "action-cuts"
+STORED_CUTS = {"near_identical": "near_identical", "cluster": "cluster"}
 
 
 # A self-refitting gate's file: what defines its calibration in use is its
@@ -80,13 +87,18 @@ GATES = {
 PARAMETERS = {
     "committee_routing": ("reference", "k", "alpha", "temperature", "threshold"),
     "member_photo": ("margin", "depiction_ceiling"),
+    "near_identical": ("threshold",),
+    "cluster": ("threshold",),
 }
 
 # Gates that refit themselves from data-supplied labels, by the data_refresh
-# file whose refit drift requests.
+# file whose refit drift requests; None for a gate the Action Center refits
+# every day anyway (STORED_CUTS), where there is nothing to request.
 REFITTING = {
     "committee_routing": "committee_routing_calibration.json",
     "member_photo": "member_photo_calibration.json",
+    "near_identical": None,
+    "cluster": None,
 }
 REFIT_GRACE_DAYS = 3
 
@@ -141,11 +153,15 @@ def _days(db, gate: str, start: date, end: date) -> tuple[int, int]:
     return n, passed
 
 
-def _calibration_sha(filename: str, keys: tuple[str, ...] | None = None) -> str:
-    """The content of the calibration in use (only `keys` when given): a
-    refit copy on the data volume when there is one, else the bundled file."""
+def _calibration_sha(filename: str, keys: tuple[str, ...] | None = None, db=None,
+                     stored: str | None = None) -> str:
+    """The content of the calibration in use (only `keys` when given): the
+    Action Center's stored refit (`stored`, its STORED_CUTS key), else a
+    refit copy on the data volume, else the bundled file."""
     bundled = pathlib.Path(__file__).resolve().parent / "data" / filename
-    doc = read_json_preferring(runtime_data_path(filename), bundled, default={})
+    doc = api_cache_get(db, CUTS_TIER, stored, max_age_hours=_KEEP_HOURS) if stored else None
+    if not doc:
+        doc = read_json_preferring(runtime_data_path(filename), bundled, default={})
     if keys is not None:
         doc = {k: doc.get(k) for k in keys}
     return hashlib.sha256(json.dumps(doc, sort_keys=True).encode()).hexdigest()
@@ -167,7 +183,8 @@ def drift(gate: str, today: date | None = None) -> str | None:
     today = today or utcnow().date()
     db = SessionLocal()
     try:
-        since = _since(db, gate, _calibration_sha(filename, PARAMETERS.get(gate)), today)
+        sha = _calibration_sha(filename, PARAMETERS.get(gate), db, STORED_CUTS.get(gate))
+        since = _since(db, gate, sha, today)
         if today < since + 2 * WINDOW:
             return None  # a baseline and a separate recent window aren't there yet
         n0, p0 = _days(db, gate, since, since + WINDOW)
@@ -203,12 +220,15 @@ def _refit_for_drift(gate: str, why: str | None) -> str | None:
             api_cache_set(db, _TIER, key, {"date": first}, normal_ttl_hours=_KEEP_HOURS)
     finally:
         db.close()
-    data_refresh.request_refit(REFITTING[gate], f"calibration drift: {why}")
+    if REFITTING[gate]:
+        data_refresh.request_refit(REFITTING[gate], f"calibration drift: {why}")
     if today < date.fromisoformat(first) + timedelta(days=REFIT_GRACE_DAYS):
         logger.info("Calibration drift on %s: refit requested (%s)", gate, why)
         return None
-    return (f"{why} Refits from data-supplied labels have been requested every day since {first} and the "
-            f"drift remains: see the refit's record in app/data/{REFITTING[gate]} (_refreshed.kept).")
+    record = (f"app/data/{REFITTING[gate]} (_refreshed.kept)" if REFITTING[gate]
+              else f"api_cache {CUTS_TIER} {STORED_CUTS[gate]}-refit")
+    return (f"{why} Refits from data-supplied labels have run every day since {first} and the "
+            f"drift remains: see the refit's record in {record}.")
 
 
 def check_all() -> dict[str, str | None]:
