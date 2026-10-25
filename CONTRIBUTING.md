@@ -6,7 +6,7 @@ Thanks for your interest in contributing. Civitas is a civic transparency projec
 
 - Read the [Code of Conduct](CODE_OF_CONDUCT.md) — it covers the usual ground, plus a
   section on political subject matter that is specific to this project
-- Read the [README](README.md) to understand how the pipeline and scoring work
+- Read the [README](README.md), then [docs/data-pipeline.md](docs/data-pipeline.md) and [docs/methodology/scoring.md](docs/methodology/scoring.md) to understand how the pipeline and scoring work
 - All scores are computed from public federal records. The platform is intentionally non-partisan — changes to scoring weights or methodology require clear academic or empirical justification
 - No user accounts, no tracking, no PII processing — contributions should preserve this
 

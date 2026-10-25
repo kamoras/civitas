@@ -162,7 +162,7 @@ right after the Digest lands its cached render is still the earlier record.
 Every Congress post is in the Congress feed as soon as it is published; the
 Bluesky send waits for the posting window (`broadcast.SCHEDULED_KINDS`,
 `app/data/bluesky_post_windows.json`) when it is written outside it, and goes
-when the window opens that Eastern day (README, "When posts reach Bluesky").
+when the window opens that Eastern day ([publishing.md](../publishing.md), "When posts reach Bluesky").
 
 **Became law.** The week and month reports list Congress.gov's own list of
 the Congress's laws (`GET /law/{congress}`, read by the hourly bill refresh,
@@ -189,7 +189,7 @@ before any later one on the measure, counts when the statement supports or
 opposes passage. `/congress/president/house` and `/senate` show each
 member's rate beside the rate expected for their party and seat lean, with
 every counted vote and its statement. Informational, not scored; see the
-README's "Votes with the President".
+[congress.md](../congress.md#votes-with-the-president).
 
 **Nominations.** A daily job at 14:50 UTC, outside the nightly chain and
 skipped while any chain pipeline runs (`scheduler._nominations_sync`,

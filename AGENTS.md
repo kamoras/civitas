@@ -193,7 +193,7 @@ embedding-based PAC naming context detector.
 Four narrow, disclosed exceptions exist today (bill stance direction's
 tier-0 verb check, industry classification's hotel-brand tier, donor
 classification's PAC-suffix/payment-processor tier, and the claim
-composer's capitalised-actor rule — see README "Classification Strategy"
+composer's capitalised-actor rule — see `docs/methodology/classification.md`
 for the full list and each one's empirical justification). Each earns its
 place by the same bar: a *specific, measured* embedding-model failure mode,
 documented in code at the point of definition, running ahead of a genuine
@@ -831,7 +831,7 @@ same rule on held-out MRR at 10. When it was introduced (2026-10-20, on a produc
 `evaluate_explore_search.py`'s table was identical before and after (the
 hybrid ranker did not change: ALL hybrid MRR 0.610, R@20 0.916), and
 through `/search` the site-search probe types held at MRR 0.990 while the
-document probe types rose from 0.316 to 0.666 (README, Site search).
+document probe types rose from 0.316 to 0.666 (`docs/search.md`, Site search).
 
 ### 4. Content-based party alignment
 
@@ -3352,7 +3352,7 @@ figure column) for boxes that are a list a reader scans, such as the
 ballot's contests, whose money and commands sit behind "More". A box page
 must not push the thing a reader came for further down than the page it
 replaced: measure the first contest (or record) and the page's length
-before and after on a phone, as the ballot page's README entry does. A
+before and after on a phone, as the ballot page's entry in `docs/elections.md` does. A
 note that must come before the content (§7's "what these lists are") is
 one line with the rest behind "More" (`components/elections/NoteLine.tsx`),
 not a paragraph or a box. On a ballot page the box lines are counts and
