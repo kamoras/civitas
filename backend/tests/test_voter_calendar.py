@@ -188,7 +188,7 @@ class _Pages:
         self.pages = pages
 
     def get(self, url, **kwargs):
-        status, body = self.pages[url]
+        status, body = self.pages.get(url, (404, ""))
         return httpx.Response(status, content=body.encode(), headers={"content-type": "text/html"},
                               request=httpx.Request("GET", url))
 
@@ -211,17 +211,88 @@ def test_the_generator_writes_a_verified_item(generator):
     assert item["date"] == "2026-10-26" and item["verification"]["status"] == "verified"
 
 
-@pytest.mark.parametrize("pages, quote", [
-    ({"https://sos.example.gov/a": (200, "<p>Some other page.</p>")}, "at least 8 days before"),
-    ({"https://sos.example.gov/a": (403, "<h1>Access Denied</h1>")}, "at least 8 days before"),
-    ({"https://sos.example.gov/a": (200, "<p>at least 8 days before</p>")}, ""),
+# 2026-10-24, 2 p.m. Eastern: WA's 8-days-before deadline (Oct 26) is ahead.
+_NOW = datetime(2026, 10, 24, 18, tzinfo=ZoneInfo("UTC"))
+
+
+@pytest.mark.parametrize("pages", [
+    {"https://sos.example.gov/a": (200, "<p>Some other page.</p>")},
+    {"https://sos.example.gov/a": (403, "<h1>Access Denied</h1>")},
 ])
-def test_the_generator_refuses_an_item_it_could_not_verify(generator, pages, quote):
-    """A quote missing from its page, a page that refuses the read, and an item with
-    no quote at all: nothing is written from memory."""
+def test_an_item_it_could_not_verify_is_never_written_and_never_stops_the_rest(generator, pages):
+    """A quote missing from its page and a page that refuses the read, with
+    no earlier verification: no date from memory, the deadline named as
+    unconfirmed, and every other state still built."""
+    out = generator.build(_sources({
+        "NY": {"timeZone": "America/New_York", "items": [_reg("https://sos.example.gov/a", "at least 8 days before")]},
+        "WA": {"timeZone": "America/Los_Angeles", "items": [_reg("https://sos.example.gov/w", "eight days")]},
+    }), _Pages({**pages, "https://sos.example.gov/w": (200, "<p>Eight days before.</p>")}), None, now=_NOW)
+    ny = out["states"]["NY"]
+    assert ny["items"] == [] and ny["unread"] is True and ny["incomplete"] is True
+    assert [(u["kind"], u["method"]) for u in ny["unconfirmed"]] == [("registration", "online")]
+    assert out["states"]["WA"]["items"][0]["verification"]["status"] == "verified"
+
+
+def test_a_malformed_item_still_stops_the_build(generator):
     with pytest.raises(SystemExit):
         generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [
-            _reg("https://sos.example.gov/a", quote)]}}), _Pages(pages), None)
+            _reg("https://sos.example.gov/a", "")]}}), _Pages({}), None)
+
+
+def _in_use(state, item, checked="2026-10-17"):
+    return {"electionDate": "2026-11-03", "states": {state: {"timeZone": "America/Los_Angeles", "items": [
+        {**item, "verification": {"status": "verified", "checkedOn": checked}}]}}}
+
+
+def test_a_passed_deadline_the_state_took_off_its_page_keeps_its_verification(generator):
+    """States take a passed date off their pages (California's online
+    registration, 2026-10-24): the deadline stays, as confirmed before it
+    passed, and the recheck says why it wasn't confirmed again."""
+    item = {**_reg("https://sos.example.gov/a", "at least 8 days before"), "daysBefore": 15}
+    resolved = generator.resolve(item, date(2026, 11, 3), "WA[0]")
+    out = generator.build(_sources({"WA": {"timeZone": "America/Los_Angeles", "items": [item]}}),
+                          _Pages({"https://sos.example.gov/a": (200, "<p>Vote on Nov 3.</p>")}), None,
+                          in_use=_in_use("WA", resolved), now=_NOW)
+    [kept] = out["states"]["WA"]["items"]
+    assert kept["date"] == "2026-10-19" and kept["verification"]["checkedOn"] == "2026-10-17"
+    assert kept["verification"]["recheck"] == {"on": "2026-10-24", "result": "quote not on the page", "passed": True}
+    assert "unconfirmed" not in out["states"]["WA"]
+
+
+def test_a_deadline_ahead_keeps_its_verification_only_while_its_page_is_unreadable(generator):
+    item = _reg("https://sos.example.gov/a", "at least 8 days before")
+    in_use = _in_use("WA", generator.resolve(item, date(2026, 11, 3), "WA[0]"))
+    sources = _sources({"WA": {"timeZone": "America/Los_Angeles", "items": [item]}})
+    walled = generator.build(sources, _Redirecting({"https://sos.example.gov/a": (
+        403, "<title>Just a moment...</title>", None, {"cf-mitigated": "challenge"})}), None, in_use=in_use, now=_NOW)
+    assert walled["states"]["WA"]["items"][0]["verification"]["recheck"]["result"].startswith("blocked by a bot wall")
+    # The page answered without it, and the deadline is still ahead: the
+    # state may have moved it, so no date is kept.
+    changed = generator.build(sources, _Pages({"https://sos.example.gov/a": (200, "<p>Rules changed.</p>")}), None,
+                              in_use=in_use, now=_NOW)
+    assert changed["states"]["WA"]["items"] == [] and changed["states"]["WA"]["unconfirmed"]
+    # Nor is a verification from another election's calendar.
+    other = {**in_use, "electionDate": "2024-11-05"}
+    assert generator.build(sources, _Redirecting({"https://sos.example.gov/a": (
+        403, "<title>Just a moment...</title>", None, {"cf-mitigated": "challenge"})}), None, in_use=other,
+        now=_NOW)["states"]["WA"]["items"] == []
+
+
+def test_a_passage_the_state_moved_is_found_on_its_own_site(generator):
+    """Idaho moved its calendar to /calendar/list/ (2026-10-24): the quote is
+    looked for among the links of the cited page and the host's front page,
+    never off the host, and verified there."""
+    pages = _Pages({
+        "https://sos.example.gov/calendar/": (200, '<a href="/calendar/list/">List</a>'
+                                                   '<a href="https://elsewhere.example.com/x">x</a>'),
+        "https://sos.example.gov/calendar/list/": (200, "<p>Register at least 8 days before.</p>"),
+        "https://elsewhere.example.com/x": (200, "<p>at least 8 days before</p>"),
+    })
+    out = generator.build(_sources({"WA": {"timeZone": "America/Los_Angeles", "items": [
+        _reg("https://sos.example.gov/calendar/", "at least 8 days before")]}}), pages, None, now=_NOW)
+    [item] = out["states"]["WA"]["items"]
+    assert item["source"]["url"] == "https://sos.example.gov/calendar/list/"
+    assert item["verification"]["movedFrom"] == "https://sos.example.gov/calendar/"
 
 
 def test_the_generator_marks_a_state_with_no_readable_source(generator):
@@ -309,7 +380,7 @@ def test_a_carried_item_is_kept_only_where_its_page_says_it_for_the_new_election
         # The state's page still shows the old election: not verified for the new one.
         "https://sos.example.gov/b": (200, "<p>Must be received by noon on Election Day, Tuesday, November 3, 2026.</p>"),
     })
-    out = generator.build({**sources, "states": {"WA": sources["states"]["WA"]}}, pages, None, strict=False)
+    out = generator.build({**sources, "states": {"WA": sources["states"]["WA"]}}, pages, None)
     assert out["electionDate"] == "2028-11-07"
     assert [i["date"] for i in out["states"]["WA"]["items"]] == ["2028-10-30"]
     assert out["states"]["WA"]["incomplete"] is True
@@ -319,6 +390,20 @@ def test_a_calendar_missing_some_deadlines_says_so(calendar):
     calendar({"WA": {**WA, "incomplete": True}})
     note = voter_calendar.calendar_for_state("WA", ELECTION, _utc(2026, 10, 1, 12))["note"]
     assert "Not every one of Washington's deadlines is confirmed" in note
+
+
+def test_the_page_names_what_it_couldnt_confirm_and_why_a_kept_deadline_wasnt_rechecked(calendar):
+    kept = {**WA["items"][0], "verification": {"status": "verified", "checkedOn": "2026-10-17", "recheck": {
+        "on": "2026-10-24", "result": "blocked by a bot wall (403)", "passed": False}}}
+    unconfirmed = [{"kind": "early_voting", "method": "in_person", "basis": None, "why": "quote not on the page",
+                    "source": {"publisher": "SOS", "url": "https://sos.example.gov/vote"}, "checkedOn": "2026-10-24"}]
+    calendar({"WA": {**WA, "items": [kept, *WA["items"][1:]], "incomplete": True, "unconfirmed": unconfirmed}})
+    cal = voter_calendar.calendar_for_state("WA", ELECTION, _utc(2026, 10, 24, 12))
+    assert cal["note"] == ("Early in-person voting: not listed, because we couldn't confirm it on Washington's own "
+                           "pages on Oct 24. Check with your county election office.")
+    item = next(i for i in cal["items"] if i["date"] == "2026-10-26")
+    assert item["verification"]["detail"] == "Secretary of State's site blocked our recheck on Oct 24."
+    assert all(i["verification"]["detail"] is None for i in cal["items"] if i is not item)
 
 
 def test_the_refreshed_calendar_wins_over_the_bundled_one(calendar):
@@ -337,7 +422,7 @@ class _Redirecting(_Pages):
     """A client whose GET answers each URL with (status, html[, final url, headers])."""
 
     def get(self, url, **kwargs):
-        status, body, *rest = self.pages[url]
+        status, body, *rest = self.pages.get(url, (404, ""))
         final = (rest[0] if rest else None) or url
         headers = {"content-type": "text/html", **(rest[1] if len(rest) > 1 else {})}
         return httpx.Response(status, content=body.encode(), headers=headers,
@@ -387,9 +472,9 @@ def test_a_state_with_no_registration_is_held_to_its_quote(generator):
 
 
 def test_the_generator_names_every_failed_deadline_and_never_links_a_dead_register_page(generator, capsys):
-    """Every unverified deadline in one run, and nothing written; a register
-    page that fails its check is left out (vote.gov instead) and named, but
-    doesn't hold back the deadlines."""
+    """Every unverified deadline named in one run; a register page that
+    fails its check is left out (vote.gov instead) and named, but doesn't
+    hold back the deadlines."""
     pages = _Pages({"https://sos.example.gov/a": (200, "<p>at least 8 days before</p>"),
                     "https://sos.example.gov/b": (200, "<p>x</p>"),
                     "https://olvr.sos.example.gov/": (404, "")})
@@ -397,9 +482,9 @@ def test_the_generator_names_every_failed_deadline_and_never_links_a_dead_regist
         code: {"timeZone": "America/Los_Angeles", "items": [_reg("https://sos.example.gov/b", "missing")]}
         for code in ("OR", "WA")
     }
-    with pytest.raises(SystemExit) as exc:
-        generator.build(_sources(states), pages, None)
-    assert "OR[0]" in str(exc.value) and "WA[0]" in str(exc.value)
+    generator.build(_sources(states), pages, None, now=_NOW)
+    err = capsys.readouterr().err
+    assert "OR[0] registration: not verified" in err and "WA[0] registration: not verified" in err
     out = generator.build(_sources({"WA": {
         "timeZone": "America/Los_Angeles", "items": [_reg("https://sos.example.gov/a", "at least 8 days before")],
         "register": {"url": "https://olvr.sos.example.gov/"}}}), pages, None)
@@ -584,5 +669,7 @@ def test_a_walled_state_source_falls_back_to_its_labelled_republication_and_back
 def test_a_state_source_that_answers_without_the_passage_never_falls_back(generator):
     pages = _Redirecting({"https://law.example.gov/5-210": (200, "<p>Repealed.</p>"),
                           "https://www.vote.nyc/deadlines": (200, "<p>Register in person is October 24, 2026</p>")})
-    with pytest.raises(SystemExit):
-        generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [_ny_item()]}}), pages, None)
+    out = generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [_ny_item()]}}), pages, None,
+                          now=_NOW)
+    assert out["states"]["NY"]["items"] == [] and out["states"]["NY"]["unread"] is True
+    assert out["states"]["NY"]["unconfirmed"][0]["source"]["url"] == "https://law.example.gov/5-210"

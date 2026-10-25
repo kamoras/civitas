@@ -71,7 +71,7 @@ from app.error_utils import output_summary
 from app.file_cache import Uncached, files_stamp, read_json, read_json_preferring
 from app.forecast import model, training_polls
 from app.ordinals import ordinal
-from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app.ops_alerts import open_conditions, resolve_ops_alert, send_ops_alert
 from app.pipeline.analyze import commemorative, score_version
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
@@ -130,6 +130,11 @@ class Context:
         return self.last_tried is not None and (utcnow().date() - self.last_tried.date()).days < days
 
 
+def never_stale(ctx: Context) -> object:
+    """A file with no staleness check of its own (it refreshes itself)."""
+    return None
+
+
 @dataclass(frozen=True)
 class DataFile:
     """One generated file and how it stays current. `command` returns the
@@ -141,7 +146,7 @@ class DataFile:
     command: Callable[[Context], list[str] | None] | None = None
     due: Callable[[Context], bool] = lambda ctx: False
     gate: Callable[[dict, dict], list[str]] = lambda new, old: []
-    stale: Callable[[Context], object] = lambda ctx: None  # str (alert), None (current) or UNCHECKED
+    stale: Callable[[Context], object] = never_stale  # str (alert), None (current) or UNCHECKED
     heavy: bool = False  # loads the embedding model or is CPU-bound: not while a pipeline runs
     moves_scores: bool = False
     timeout_s: int = 3600
@@ -534,10 +539,34 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
     return "refreshed" if changed else "unchanged"
 
 
-def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = False) -> dict[str, str]:
+def resolve_retired_conditions(files: list[DataFile]) -> list[str]:
+    """Close the open data-refresh-*, data-check-* and data-stale-* alerts
+    no file in `files` can raise or resolve any more: a file dropped from
+    DATA_FILES, or one whose command, check or staleness check was taken
+    away. #1257 replaced the search calibrations' staleness checks with
+    refits, and their 2026-10-21 alerts stayed open, since only a check
+    that still exists resolves its own condition. Returns those closed."""
+    live = set()
+    for spec in files:
+        live |= {f"data-refresh-{spec.stem}"} if spec.command else set()
+        live |= {f"data-check-{spec.stem}"} if spec.check else set()
+        live |= {f"data-stale-{spec.stem}"} if spec.stale is not never_stale else set()
+    retired = sorted(c for c in open_conditions()
+                     if c.startswith(("data-refresh-", "data-check-", "data-stale-")) and c not in live)
+    for condition in retired:
+        resolve_ops_alert(condition)
+    return retired
+
+
+def run_refreshes(files: list[DataFile] | None = None, *,
+                  pipeline_busy: bool | Callable[[], bool] = False) -> dict[str, str]:
     """Every file's staleness check, and each due refresh. One file's
-    failure never stops the others."""
+    failure never stops the others. `pipeline_busy` may be a callable,
+    asked before each heavy file: a pass runs for hours, and a pipeline
+    started meanwhile holds the heavy files after it."""
     outcomes: dict[str, str] = {}
+    if files is None:
+        resolve_retired_conditions(DATA_FILES)
     for spec in files if files is not None else DATA_FILES:
         try:
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
@@ -556,10 +585,14 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
             # when it can matter (it reads the generator's whole import
             # tree, about 5 s for every file).
             current = (recipe(template) if template is not None and (ctx.last_failed or spec.accept)
-                       else None)
+                       and not ctx.tried_within(1) else None)
             fixed = current is not None and current != ctx.last_recipe
-            if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
-                if spec.heavy and pipeline_busy:
+            # At most one try a day: the job runs hourly through the evening
+            # to take up a pass a deploy cut short, and a file whose due()
+            # stays true after a failed build (an uncovered map) would
+            # otherwise be rebuilt every hour.
+            if spec.command and not ctx.tried_within(1) and (spec.due(ctx) or shipped or fixed):
+                if spec.heavy and (pipeline_busy() if callable(pipeline_busy) else pipeline_busy):
                     outcomes[spec.name] = "waiting for the pipeline"
                 else:
                     if current is None and template is not None:
@@ -649,7 +682,7 @@ def _calendar_command(ctx: Context) -> list[str] | None:
     if election.phase != "campaign":
         return None
     return [PY, _script("build_election_calendar.py"), "--election", election.election_day.isoformat(),
-            "--output", "{out}"]
+            "--output", "{out}", "--in-use", "{in_use}"]
 
 
 def _calendar_due(ctx: Context) -> bool:

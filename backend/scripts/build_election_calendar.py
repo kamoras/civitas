@@ -25,21 +25,25 @@ every cited page to confirm the quoted passage is still on it:
     the same deadline (`republished`), labelled as such on the page. The
     own source is tried first on every run.
 
-An item whose page could not be read (a bot wall, which is never worked
-around -- AGENTS.md section 7 -- or an outage) or no longer carries the
-passage is refused: the script exits without writing, naming it. A date a
-voter acts on is never published from memory. Fix the citation, or drop
-the item. A state none of whose deadlines can be read from any official
-source carries `unread` instead of items, and its page says so and sends
-the reader to the state's own lookup and county office.
+An item that can't be verified this run never holds back the others
+(build() says what happens to it): a passage the state moved is found on
+another page of the same host; a deadline verified before, whose page is
+now unreadable (a bot wall, which is never worked around -- AGENTS.md
+section 7 -- or an outage) or which has passed (states take passed dates
+off their pages), keeps that verification with the date it was last
+confirmed and why it wasn't now; any other is left out and named as
+unconfirmed, so a date a voter acts on is never published from memory. A
+state none of whose deadlines can be read from any official source
+carries `unread` instead of items, and its page says so and sends the
+reader to the state's own lookup and county office.
 
 Run from the repo (network required), after editing the sources file:
     PYTHONPATH=backend python3 backend/scripts/build_election_calendar.py \
-        [--cache DIR] [--text URL]
+        [--cache DIR] [--text URL] [--in-use FILE]
 
 --text URL prints the normalised text a quote is matched against (for
 copying a quote out of a page exactly). --cache DIR keeps fetched pages
-between runs. Exits 1 on a malformed entry or an item it could not verify.
+between runs. Exits 1 on a malformed entry.
 """
 
 import argparse
@@ -51,8 +55,10 @@ import pathlib
 import re
 import sys
 import unicodedata
+from zoneinfo import ZoneInfo
 
 import httpx
+import lxml.etree
 import lxml.html
 import pdfplumber
 
@@ -211,7 +217,7 @@ def carry(sources: dict, election: dt.date) -> tuple[dict, dict[str, list[str]]]
     between the two elections, and a weekend adjustment a state makes (a
     Sunday deadline moved to Monday) still applies. A citation that prints
     the dates is re-dated the same way (redate_quote) and must be on the
-    cited page again in that form (build(), strict=False): a state's page
+    cited page again in that form (build()): a state's page
     updated for the new election verifies it; a document about one
     election (a year's calendar PDF) does not, and that item is left out.
     Never carried: a rule worded as a calendar date ("October 15"), not a
@@ -315,18 +321,106 @@ def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pa
     return {**out, "status": "verified"}, None
 
 
-def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, strict: bool = True) -> dict:
+# How many pages of the cited host a moved citation is looked for on: the
+# links of the cited page and of the host's front page, in document order.
+# A state authority's front page and a deadlines page link a few dozen
+# pages each; the reads are shared across a state's items in one run.
+MOVED_SEARCH_PAGES = 40
+_DATE_FIELDS = ("date", "endDate", "time", "endTime")
+
+
+def _links(url: str, client: httpx.Client) -> list[str]:
+    """The same-host links of the page at `url`, in document order."""
+    try:
+        r = client.get(url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+    except httpx.HTTPError:
+        return []
+    if r.status_code >= 400 or is_bot_challenge(r) or "html" not in r.headers.get("content-type", ""):
+        return []
+    host = httpx.URL(url).host
+    try:
+        doc = lxml.html.fromstring(r.content, base_url=str(r.url))
+    except (ValueError, lxml.etree.ParserError):
+        return []
+    doc.make_links_absolute(str(r.url))
+    out = []
+    for href in doc.xpath("//a/@href"):
+        link = href.split("#")[0]
+        if link.startswith("https://") and httpx.URL(link).host == host and link not in out:
+            out.append(link)
+    return out
+
+
+def find_moved(src: dict, client: httpx.Client, cache: pathlib.Path | None,
+               pages: dict[str, tuple[str | None, str]]) -> str | None:
+    """The page of the cited host that now carries the quoted passage, when
+    the cited page answers without it: the state moved the passage (a
+    rebuilt site, a page renamed for the election). Looked for among the
+    links of the cited page and of the host's front page, never off the
+    cited host, and verified as any citation is: the exact quote on the
+    page. None when no such page holds it."""
+    url = httpx.URL(src["url"])
+    quote = normalise(src["quote"])
+    candidates = []
+    for start in (str(url), f"{url.scheme}://{url.host}/"):
+        candidates += [link for link in _links(start, client) if link not in candidates and link != str(url)]
+    for link in candidates[:MOVED_SEARCH_PAGES]:
+        if link not in pages:
+            pages[link] = fetch(link, client, cache)
+        text, _ = pages[link]
+        if text is not None and quote in text:
+            return link
+    return None
+
+
+def _key(item: dict) -> tuple:
+    return item["kind"], item.get("method") or "", item.get("basis") or "", item["rule"]
+
+
+def _passed(item: dict, local_today: dt.date) -> bool:
+    return dt.date.fromisoformat(item.get("endDate") or item["date"]) < local_today
+
+
+def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, in_use: dict | None = None,
+          now: dt.datetime | None = None) -> dict:
+    """Each state's items, every citation re-read. An item that can't be
+    verified this run never stops the others, and never keeps a date the
+    page has stopped stating for a deadline still ahead:
+
+      - its quote is on another page of the cited host (find_moved): the
+        item is verified there, its source updated (`movedFrom`);
+      - the cited page couldn't be read (a bot wall, an outage) or the
+        deadline has passed (states take a passed date off their pages),
+        and `in_use` (the calendar in use, for the same election) holds the
+        item as verified with the same dates: that verification is kept,
+        with this run's read beside it (`recheck`), and the page says when
+        it was last confirmed and why it wasn't now;
+      - otherwise (a deadline still ahead whose page answered without it, or
+        one never verified): left out, and listed in the state's
+        `unconfirmed` with why, so the page names the deadlines it couldn't
+        confirm instead of reading as if there were none. A state left with
+        no deadline at all is `unread`.
+
+    A carried calendar (carry()) is built the same way; only a malformed
+    sources entry stops the build."""
     election = dt.date.fromisoformat(sources["electionDate"])
-    today = dt.date.today().isoformat()
+    now = now or dt.datetime.now(dt.timezone.utc)
+    today = now.date().isoformat()
     pages: dict[str, tuple[str | None, str]] = {}
-    errors: list[str] = []
+    prior = {}
+    if in_use and in_use.get("electionDate") == election.isoformat():
+        for code, entry in (in_use.get("states") or {}).items():
+            for item in entry.get("items") or []:
+                if item.get("verification", {}).get("status") in ("verified", "statute", "republished"):
+                    prior[(code, *_key(item))] = item
     states = {}
     for code, entry in sorted(sources["states"].items()):
         if not entry.get("timeZone"):
             sys.exit(f"{code}: missing timeZone")
         if bool(entry.get("items")) == bool(entry.get("unread")):
             sys.exit(f"{code}: give items, or `unread` (why no official source could be read), not both")
-        items = []
+        local_today = now.astimezone(ZoneInfo(entry["timeZone"])).date()
+        items, unconfirmed = [], []
         for i, raw in enumerate(entry.get("items") or []):
             item = resolve(raw, election, f"{code}[{i}]")
             src = item["source"]
@@ -351,25 +445,44 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
                     text, src = rtext, {"type": "official", **rep}
                     item["source"] = src
             item.pop("republished", None)
+            moved_from = None
+            last = prior.get((code, *_key(item)))
+            same_dates = last is not None and all(last.get(f) == item.get(f) for f in _DATE_FIELDS)
+            passed = _passed(item, local_today)
+            if text is not None and normalise(src["quote"]) not in text and not republished:
+                moved = find_moved(src, client, cache, pages)
+                if moved:
+                    moved_from, src = src["url"], {**src, "url": moved}
+                    item["source"] = src
+                    text, how = pages[moved]
+                    print(f"{code}[{i}] {item['kind']}: the quote moved from {moved_from} to {moved}", file=sys.stderr)
             if text is None or normalise(src["quote"]) not in text:
                 why = how if text is None else "quote not on the page"
-                if not strict:
-                    # A carried item (carry()): the page doesn't say it for
-                    # this election. Left out, and the state says so.
-                    print(f"{code}[{i}] {item['kind']}: not carried ({why}, {src['url']})", file=sys.stderr)
-                    entry = {**entry, "incomplete": True}
+                if same_dates and (text is None or passed):
+                    kept = {**last, "verification": {**last["verification"], "recheck": {
+                        "on": today, "result": why, "passed": passed}}}
+                    print(f"{code}[{i}] {item['kind']}: {why} ({src['url']}); kept as verified on "
+                          f"{last['verification'].get('checkedOn')}", file=sys.stderr)
+                    items.append(kept)
                     continue
-                errors.append(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']})")
+                print(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']}); listed as unconfirmed",
+                      file=sys.stderr)
+                unconfirmed.append({"kind": item["kind"], "method": item.get("method"), "basis": item.get("basis"),
+                                    "source": {"publisher": src.get("publisher"), "url": src["url"]},
+                                    "why": why, "checkedOn": today})
                 continue
             item["verification"] = {
                 "status": "republished" if republished else "verified" if src["type"] == "official" else "statute",
                 "checkedOn": today,
                 **({"republished": republished} if republished else {}),
+                **({"movedFrom": moved_from} if moved_from else {}),
             }
             items.append(item)
-        if not items and not strict and entry.get("items"):
-            entry = {**entry, "unread": "None of its deadlines could be carried to this election."}
+        if not items and entry.get("items"):
+            entry = {**entry, "unread": "None of its deadlines could be confirmed for this election."}
         states[code] = {"timeZone": entry["timeZone"], "items": items}
+        if unconfirmed:
+            states[code]["unconfirmed"] = unconfirmed
         if entry.get("register"):
             cited = {httpx.URL(i["source"]["url"]).host for i in entry.get("items") or []}
             reg, why = check_register(entry["register"], cited, client, cache, today)
@@ -383,16 +496,13 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
             states[code]["unread"] = True
         if entry.get("note"):
             states[code]["note"] = entry["note"]
-        if entry.get("incomplete"):
+        if entry.get("incomplete") or unconfirmed:
             states[code]["incomplete"] = True
     fallback = None
     if sources.get("registerFallback"):
         fallback, why = check_register(sources["registerFallback"], set(), client, cache, today)
         if why:
             print(f"registerFallback: not linked ({why})", file=sys.stderr)
-    if errors:
-        # Every failure at once, so one run names everything to fix.
-        sys.exit("\n".join(errors) + "\nfix each citation or drop the item -- nothing was written")
     return {
         "_source": (
             "Each state's (and D.C.'s) election authority's own pages, or its statute where that "
@@ -400,8 +510,11 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
             "backend/scripts/build_election_calendar.py from scripts/election_calendar_sources.json, "
             "which re-read every cited page and checked its quoted passage is on it "
             "(verification.status: verified = on the authority's page, statute = in the statute's "
-            "official text). An item that could not be verified is never written; a state with "
-            "unread: true has no deadline read from any official source, and lists none."
+            "official text; verification.recheck: this build couldn't re-read it, because the page was "
+            "unreadable or the deadline has passed, and checkedOn is when it was last confirmed). A "
+            "deadline still ahead that could not be verified is never written: it is listed under the "
+            "state's unconfirmed, with why. A state with unread: true has no deadline read from any "
+            "official source, and lists none."
         ),
         "_use": (
             "Read by app/voter_calendar.py. Dates are local to timeZone (a state spanning two "
@@ -428,6 +541,9 @@ def main() -> None:
     ap.add_argument("--election", type=dt.date.fromisoformat,
                     help="build for this general election, carrying each rule from the sources' (see carry())")
     ap.add_argument("--output", type=pathlib.Path, default=OUTPUT)
+    ap.add_argument("--in-use", type=pathlib.Path,
+                    help="the calendar in use: a deadline it verified is kept while its page can't be read or once "
+                         "it has passed (see build())")
     args = ap.parse_args()
     if args.cache:
         args.cache.mkdir(parents=True, exist_ok=True)
@@ -441,14 +557,16 @@ def main() -> None:
             sources, dropped = carry(sources, args.election)
             for code, lost in sorted(dropped.items()):
                 print(f"{code}: not carried: {'; '.join(lost)}", file=sys.stderr)
-        result = build(sources, client, args.cache, strict=args.election is None
-                       or args.election.isoformat() == json.loads(SOURCES.read_text())["electionDate"])
+        in_use = json.loads(args.in_use.read_text()) if args.in_use and args.in_use.exists() else None
+        result = build(sources, client, args.cache, in_use=in_use)
     args.output.write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n")
     counts: dict[str, int] = {}
     for entry in result["states"].values():
         for item in entry["items"]:
-            s = item["verification"]["status"]
+            s = item["verification"]["status"] + (" (kept)" if item["verification"].get("recheck") else "")
             counts[s] = counts.get(s, 0) + 1
+        if entry.get("unconfirmed"):
+            counts["unconfirmed"] = counts.get("unconfirmed", 0) + len(entry["unconfirmed"])
     print(f"Wrote {args.output} ({len(result['states'])} states): {counts}")
 
 

@@ -21,6 +21,7 @@ history. An alert with no condition reports a one-off event and is
 history from the start.
 """
 
+import fnmatch
 import json
 import logging
 import threading
@@ -70,6 +71,10 @@ def send_ops_alert(
     alert reports, open until ``resolve_ops_alert(condition)``; a newer
     alert for it supersedes the older. Returns True if the alert fired.
     """
+    if condition and not raised_by_code(condition):
+        # tests/test_alert_conditions.py should have caught it; until it is
+        # listed, the next start closes this alert as an orphan.
+        logger.error("Ops alert condition %r is not in ops_alerts.CONDITIONS", condition)
     try:
         # A read first, though _record's insert is what decides: a watchdog
         # re-raises a persisting condition every tick, and the read lets it
@@ -195,6 +200,63 @@ def resolve_ops_alert(condition: str) -> int:
     finally:
         if db is not None:
             db.close()
+
+
+# Every condition the code can raise, as fnmatch patterns ("*" where the
+# code fills in a chamber, a state, a file). An open alert whose condition
+# matches none was raised by code since renamed or removed, and nothing
+# will ever resolve it: resolve_orphaned_alerts closes it when the pipeline
+# process starts, which is when new code arrives (2026-10:
+# election-ready-town-ballots stayed open after #1247 dropped its check).
+# tests/test_alert_conditions.py reads every send_ops_alert call's
+# condition from the source and fails on one missing here, or on an entry
+# no code raises any more.
+CONDITIONS = (
+    "agency-sync-*", "ballot-measure-ingest-*", "ballot-measure-late-*", "calibration-drift-*",
+    "chain-cut-again", "contact-email-unset", "data-check-*", "data-refresh-*", "data-stale-*",
+    "district-pvi-no-source", "district-pvi-unadopted", "election-archive-map", "election-date-calendar",
+    "election-filing-dates", "election-filings-raised", "election-map-house-lines", "election-map-refresh",
+    "election-map-training-stale", "election-ready-calendar", "election-ready-district-lean",
+    "election-ready-maps", "election-ready-poll-close", "election-source-crawl", "election-source-crawl-robots",
+    "election-sync-raised", "explore-index-rebuild", "explore-index-relabel", "feedback-token-expiring",
+    "ground-truth-house", "ground-truth-senate", "holdings-failed-*", "justice-list-short",
+    "justice-loyalty-unmeasured", "justice-positions-unread", "lda-down-*", "lda-title-pool-*",
+    "member-failed-*", "nightly-crashed", "nightly-crashed-*", "nightly-skipped-*", "overrun-*",
+    "pipeline-heartbeat-unreadable", "pipeline-service-silent", "president-ptr-empty-index-*",
+    "reference-coverage-*", "results-readiness", "roster-skipped-*", "score-drift-*", "senate-holdings-notes",
+    "signal-overlap-*", "sitting-president-mismatch", "slate-incomplete-*", "source-stale:*",
+    "special-elections-read", "sponsorship-unread-*", "stale-pipeline-*", "step-failed-*",
+    "trend-posts-party-balance", "visits-unconfirmed", "voteview-switcher-*",
+)
+
+
+def raised_by_code(condition: str) -> bool:
+    return any(fnmatch.fnmatchcase(condition, pattern) for pattern in CONDITIONS)
+
+
+def open_conditions() -> set[str]:
+    """The conditions with an open alert. Empty when the history can't be read."""
+    db = None
+    try:
+        db = SessionLocal()
+        rows = db.query(ApiCache.data_json).filter(ApiCache.tier == _HISTORY_TIER).all()
+        return {d["condition"] for d in (json.loads(r[0]) for r in rows) if _is_open(d)}
+    except Exception:
+        logger.exception("Failed to read open ops alerts")
+        return set()
+    finally:
+        if db is not None:
+            db.close()
+
+
+def resolve_orphaned_alerts() -> list[str]:
+    """Close every open alert whose condition no code raises any more
+    (CONDITIONS): nothing else would. Returns the conditions closed."""
+    orphans = sorted(c for c in open_conditions() if not raised_by_code(c))
+    for condition in orphans:
+        logger.info("Ops alert %s closed: no code raises this condition any more", condition)
+        resolve_ops_alert(condition)
+    return orphans
 
 
 def _is_open(data: dict) -> bool:

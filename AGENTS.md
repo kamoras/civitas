@@ -396,7 +396,7 @@ The correct pattern, established by `_district_pvi()` /
    a different scoring dimension) reads the same JSON file or calls the
    same loader — never a second hardcoded copy of the same numbers.
 4. The data refreshes itself. Register the file in `app/data_refresh.py`'s
-   `DATA_FILES`: a daily job (`scheduler._data_refresh`, lease
+   `DATA_FILES`: a job (`scheduler._data_refresh`, hourly from 15:40 to 01:40 UTC so a pass a deploy cut short is taken up the same day, each file tried at most once a day; lease
    `DATA_REFRESH`, outside the nightly chain) runs the generating script
    itself as a low-priority subprocess on the file's cadence (`due`),
    writes the candidate to a scratch file, gates it (`gate`: shape,
@@ -1083,7 +1083,7 @@ Corollaries that follow from the same rule, all enforced in code:
   NULL — **never derived from the title**. The obvious derivation ("yes
   enacts it") inverts on a veto referendum, where approving retains the law
   under challenge.
-- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never an item the script could not verify (it refuses to write one; a state with no readable official source is `unread` and lists no dates). Where to register is the same file's `register` link, fetched by the script and kept only on an official host (one behind a bot wall kept, worded unconfirmed; vote.gov where a state has none). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
+- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never a date the script could not verify. One item that fails never holds back the rest: a passage the state moved is looked for on the cited host's own pages (the cited page's links and the front page's) and verified there; a deadline verified before whose page is now unreadable (a wall, an outage) or which has passed (states take passed dates off their pages) keeps that verification, with when it was last confirmed and why not now shown beside it; any other, a deadline still ahead whose page answered without it, is left out and named on the page as unconfirmed (`unconfirmed`), never kept from memory. A state with no readable official source is `unread` and lists no dates. Where to register is the same file's `register` link, fetched by the script and kept only on an official host (one behind a bot wall kept, worded unconfirmed; vote.gov where a state has none). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
 - Absence must be able to say *which* absence it is. `MeasureCoverage` carries
   `confirmed_none` vs `not_yet_covered` / `ingest_failed`, because an empty
   measures section on a page about a state's ballot reads as "nothing to
@@ -1566,6 +1566,18 @@ for Election) and the chain's liveness (`pipeline_chain`, which counts any
 run's progress write) use the same rule with their own windows. A new long
 step that writes nothing until it ends must heartbeat, or past six hours it
 reads as hung.
+
+An ops alert about a condition stays open until the code that detects it
+resolves it, so a check that is renamed or removed would leave its alert
+open for good (2026-10: `election-ready-town-ballots` after #1247; the
+search calibrations' `data-stale-*` after #1257). Every condition the code
+can raise is listed in `ops_alerts.CONDITIONS`, and the pipeline process
+closes, at start, any open alert whose condition matches none
+(`resolve_orphaned_alerts`); the data refresh closes a `data-*` alert no
+file in `DATA_FILES` can raise any more (`resolve_retired_conditions`).
+`tests/test_alert_conditions.py` reads every `send_ops_alert` call's
+condition from the source and fails on one the list lacks or an entry no
+code raises: a new condition goes in the list.
 
 Outside the chain, the **agency sync** (`fetch/agencies.py`,
 `scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's
