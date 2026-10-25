@@ -157,10 +157,7 @@ export default function DataChapter() {
                 itself, page by page: the pages are copied from the Clerk or eFD each night, kept on
                 this site at the scan&apos;s own resolution, and served from here, so your browser
                 never loads them from a government host. The copy names the date it was made, and
-                the official filing is linked beside it. When a source can&apos;t be read (a bot
-                wall refuses the reader, or the site is down), the page says when it was last read
-                and since when reads have failed, beside the filings already on file, until the next
-                good read.
+                the official filing is linked beside it.
               </Fact>
               <Fact label="Lobbying Disclosure Act registry (lda.gov)">
                 Registered lobbying spending by organizations that appear among donors, and the
