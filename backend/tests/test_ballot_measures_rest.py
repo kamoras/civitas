@@ -94,7 +94,7 @@ class TestNewHampshire:
         pages = {details: (self.fx["details_page"], False)}
 
         async def get_text_or_missing(client, url, label, **kw):
-            assert kw.get("headers") is nh.HEADERS_NO_CONTACT
+            assert "headers" not in kw  # Civitas's own, the default
             return pages.get(url, (None, False))
 
         async def get_bytes(client, url, label, **kw):

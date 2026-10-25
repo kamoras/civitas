@@ -29,6 +29,7 @@ from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
 from app import calibration_drift
+from app import crawler
 from app import data_refresh
 from app import environmental_sampler
 from app.background import WritesHeld, start_writer
@@ -977,7 +978,7 @@ def start_scheduler() -> None:
 
     scheduler.add_job(
         _hourly_action_refresh,
-        CronTrigger(minute="15"),
+        CronTrigger(**crawler.cron("action_refresh")),
         id="action_refresh",
         replace_existing=True,
     )
@@ -986,7 +987,7 @@ def start_scheduler() -> None:
     # :15 action refresh or the :5/:35 watchdog on a 4-core Pi.
     scheduler.add_job(
         _hourly_bill_status_refresh,
-        CronTrigger(minute="45"),
+        CronTrigger(**crawler.cron("bill_status_refresh")),
         id="bill_status_refresh",
         replace_existing=True,
     )
@@ -996,7 +997,7 @@ def start_scheduler() -> None:
     # trigger, so this doesn't need its own enable/disable toggle).
     scheduler.add_job(
         _election_coverage_refresh,
-        CronTrigger(minute="*/15"),
+        CronTrigger(**crawler.cron("election_coverage_refresh")),
         id="election_coverage_refresh",
         replace_existing=True,
     )
@@ -1007,7 +1008,7 @@ def start_scheduler() -> None:
     # lists change by withdrawals and replacements, days apart, not minutes.
     scheduler.add_job(
         _election_ballot_sync,
-        CronTrigger(hour="*/6", minute="50", timezone="UTC"),
+        CronTrigger(**crawler.cron("election_ballot_sync")),
         id="election_ballot_sync",
         replace_existing=True,
     )
@@ -1016,7 +1017,7 @@ def start_scheduler() -> None:
     # results window (checked inside the job, like the season jobs above).
     scheduler.add_job(
         _election_results_sync,
-        CronTrigger(minute="*/5", timezone="UTC"),
+        CronTrigger(**crawler.cron("election_results_sync")),
         id="election_results_sync",
         replace_existing=True,
     )
@@ -1025,7 +1026,7 @@ def start_scheduler() -> None:
     # two weeks before election day, a no-op otherwise (checked inside).
     scheduler.add_job(
         _election_results_readiness,
-        CronTrigger(hour="14", minute="20", timezone="UTC"),
+        CronTrigger(**crawler.cron("election_results_readiness")),
         id="election_results_readiness",
         replace_existing=True,
     )
@@ -1034,7 +1035,7 @@ def start_scheduler() -> None:
     # action refresh and the :45 bill refresh.
     scheduler.add_job(
         _congress_activity_sync,
-        CronTrigger(minute="10,40", timezone="UTC"),
+        CronTrigger(**crawler.cron("congress_activity_sync")),
         id="congress_activity_sync",
         replace_existing=True,
     )
@@ -1046,7 +1047,7 @@ def start_scheduler() -> None:
     # reset to wait on, and a reset under it only shortens one build.
     scheduler.add_job(
         election_map_refresh,
-        CronTrigger(hour="*/3", minute="55", timezone="UTC"),
+        CronTrigger(**crawler.cron("election_map_refresh")),
         id="election_map_refresh",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc),
@@ -1059,7 +1060,7 @@ def start_scheduler() -> None:
     # fills them as the pipeline process comes up rather than at the next :30.
     scheduler.add_job(
         _agency_sync,
-        CronTrigger(minute="30", timezone="UTC"),
+        CronTrigger(**crawler.cron("agency_sync")),
         id="agency_sync",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc),
@@ -1087,7 +1088,7 @@ def start_scheduler() -> None:
     # not due again today (Context.tried_within counts calendar days).
     scheduler.add_job(
         _data_refresh,
-        CronTrigger(hour="15-23,0-1", minute="40", timezone="UTC"),
+        CronTrigger(**crawler.cron("data_refresh")),
         id="data_refresh",
         replace_existing=True,
     )
@@ -1097,7 +1098,7 @@ def start_scheduler() -> None:
     # sync and :45 bills.
     scheduler.add_job(
         _nominations_sync,
-        CronTrigger(hour="14", minute="50", timezone="UTC"),
+        CronTrigger(**crawler.cron("nominations_sync")),
         id="nominations_sync",
         replace_existing=True,
     )

@@ -532,7 +532,7 @@ _KNOWN_STATIC_PATHS = {
     # The About chapters (frontend/src/lib/aboutPages.ts). Listed rather
     # than prefix-collapsed: which chapter people read is the useful part.
     "/about/scores", "/about/presidents-and-justices", "/about/elections",
-    "/about/news", "/about/data", "/about/limitations", "/about/references",
+    "/about/news", "/about/data", "/about/crawler", "/about/limitations", "/about/references",
 }
 # Longest first: "/congress/bills/S.1" is a bill page, "/congress/2026-09-24"
 # a day report.

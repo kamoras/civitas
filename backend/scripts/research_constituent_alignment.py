@@ -65,7 +65,7 @@ import statsmodels.formula.api as smf
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
 from app.pipeline.analyze import score_calculator  # noqa: E402
 from app.pipeline.analyze.party_line_record import measure_key  # noqa: E402
@@ -113,7 +113,7 @@ def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
         if not path.exists():
             print(f"fetching {url}")
             # Harvard Dataverse answers Python's default User-Agent with 403.
-            req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req) as resp:
                 path.write_bytes(resp.read())
         paths[name] = path

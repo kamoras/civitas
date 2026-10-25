@@ -36,7 +36,7 @@ from defusedxml import ElementTree as SafeET
 
 import httpx
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.ops_alerts import check_source_freshness
 from app.time_utils import utcnow
 
@@ -73,7 +73,7 @@ def _fetch_google_trends() -> list[TrendingTopic] | None:
             _GOOGLE_TRENDS_RSS,
             timeout=FETCH_TIMEOUT,
             follow_redirects=True,
-            headers={"User-Agent": BOT_USER_AGENT},
+            headers={"User-Agent": USER_AGENT},
         )
         resp.raise_for_status()
         root = SafeET.fromstring(resp.content)
@@ -191,7 +191,7 @@ def fetch_bluesky_trends() -> list[BlueskyTrend] | None:
             _BSKY_TRENDS_URL,
             params={"limit": BSKY_TRENDS_LIMIT},
             timeout=FETCH_TIMEOUT,
-            headers={"User-Agent": BOT_USER_AGENT},
+            headers={"User-Agent": USER_AGENT},
         )
         resp.raise_for_status()
         raw = resp.json()["trends"]

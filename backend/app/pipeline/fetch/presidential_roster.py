@@ -34,7 +34,7 @@ from datetime import datetime
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.ordinals import ordinal
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.historical_executive_orders import NAME_TO_ID, derived_president_id
@@ -371,7 +371,7 @@ async def _office_holders() -> list[dict] | None:
     resp = await fetch_with_retry_requests(
         _OTHER_LIMITER, "GET", _SPARQL_URL, log_label="Wikidata office holders",
         params={"query": _HOLDERS_QUERY}, headers={"Accept": "application/sparql-results+json",
-                                                   "User-Agent": BOT_USER_AGENT},
+                                                   "User-Agent": USER_AGENT},
     )
     try:
         rows = resp.json()["results"]["bindings"] if resp is not None and resp.status_code == 200 else None

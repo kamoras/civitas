@@ -149,7 +149,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
 from app import census_lines  # noqa: E402
-from app.contact import BOT_USER_AGENT, CONTACT_EMAIL, UNSET_MESSAGE  # noqa: E402  (sl put backend/ on sys.path)
+from app.contact import USER_AGENT, CONTACT_EMAIL, UNSET_MESSAGE  # noqa: E402  (sl put backend/ on sys.path)
 from app.ordinals import ordinal  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
@@ -343,7 +343,7 @@ def fetch(url: str, dest: Path, md5: str | None = None) -> Path:
     if not dest.exists():
         print(f"  downloading {url}", flush=True)
         part = dest.with_name(dest.name + ".part")
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         for attempt in range(4):
             try:
                 with urllib.request.urlopen(req, timeout=300) as resp, open(part, "wb") as fh:
@@ -1138,7 +1138,7 @@ def ca_ssov(path: Path) -> dict[str, list[float]]:
 
 def _ckan(action: str, **params) -> dict:
     url = f"{TX_CKAN}/{action}?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=120) as resp:
         return json.loads(resp.read())["result"]
 

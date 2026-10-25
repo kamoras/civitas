@@ -19,9 +19,12 @@ def _pages():
     return [[tuple(line) for line in page] for page in FIXTURE["pdf_lines"]]
 
 
-def test_headers_keep_civitas_but_drop_the_contact_comment():
-    assert mi.HEADERS["User-Agent"].endswith("Civitas/1.0")
-    assert "(+" not in mi.HEADERS["User-Agent"]
+def test_headers_are_civitas_own():
+    """Michigan's CDN refuses a contact in the User-Agent; Civitas's own is
+    sent anyway (a refusal is alerted, never worked around)."""
+    from app.pipeline.fetch.http_utils import FETCH_HEADERS
+
+    assert mi.HEADERS is FETCH_HEADERS
 
 
 def test_finds_the_pdf_link_with_its_rev_suffix():

@@ -38,7 +38,7 @@ import httpx
 from app.atomic_write import write_text_atomic
 from app.file_cache import Stamp, read_json, read_json_preferring, reload_if_moved, new_reload_lock
 from app.http_client import is_bot_challenge
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS
+from app.pipeline.fetch.http_utils import FETCH_HEADERS
 from app.time_utils import utcnow
 from app.voter_calendar import register_pages
 
@@ -264,7 +264,7 @@ async def _check_url(client: httpx.AsyncClient, url: str, attempts: int = 2) -> 
 
 async def _check_once(client: httpx.AsyncClient, url: str) -> str | None:
     try:
-        # BROWSER_HEADERS: honest identity, complete request, the shape
+        # FETCH_HEADERS: honest identity, complete request, the shape
         # several state WAFs require before they answer anyone (see
         # http_utils). A wall that still refuses is left refusing.
         # `client` is make_async_client's, which completes a chain missing
@@ -272,7 +272,7 @@ async def _check_once(client: httpx.AsyncClient, url: str) -> str | None:
         # other certificate fault (app/http_client.py): Alaska's
         # polling-place page read as dead from 2026-10 for want of that alone.
         response = await client.get(url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
-                                    headers=BROWSER_HEADERS)
+                                    headers=FETCH_HEADERS)
     except Exception:
         return None
     if response.status_code >= 500 and not is_bot_challenge(response):

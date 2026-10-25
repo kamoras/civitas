@@ -23,7 +23,6 @@ Nothing here reads or rewrites ballot content.
 
 import io
 import logging
-import re
 from datetime import date
 from urllib.parse import unquote, urljoin, urlparse
 
@@ -36,7 +35,7 @@ from app.http_client import is_bot_challenge
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
 from app.pipeline.fetch.http_utils import (
-    BROWSER_HEADERS,
+    FETCH_HEADERS,
     fetch_bytes_with_retry,
     fetch_json_with_retry,
     fetch_text_with_retry,
@@ -47,18 +46,6 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
-
-# BROWSER_HEADERS with the User-Agent's trailing "(+<contact email>)" comment
-# dropped (still ending "Civitas/1.0"). Akamai-fronted state sites refuse
-# that bracketed crawler-contact form with a 403 and serve the same
-# request without it: michigan.gov (ballot_measures_mi.py) and nh.gov —
-# www.sos.nh.gov and mm.nh.gov both measured 403 with it, 200 without,
-# 2026-09-28.
-HEADERS_NO_CONTACT = {
-    **BROWSER_HEADERS,
-    "User-Agent": re.sub(r"\s*\(\+[^)]*\)\s*$", "", BROWSER_HEADERS["User-Agent"]),
-}
-
 
 def election_day(year: int) -> date:
     """The statutory November general-election day in `year` (2 U.S.C.
@@ -82,7 +69,7 @@ async def get_text(client: httpx.AsyncClient, url: str, label: str, **kwargs) ->
 
 
 async def get_text_or_missing(
-    client: httpx.AsyncClient, url: str, label: str, *, headers: dict = BROWSER_HEADERS,
+    client: httpx.AsyncClient, url: str, label: str, *, headers: dict = FETCH_HEADERS,
 ) -> tuple[str | None, bool]:
     """(body, missing): body None with missing True is a 404 (the page
     isn't there); with missing False, any other failure."""
@@ -119,7 +106,7 @@ async def get_bytes_unless_missing(
     404 raises NotYetPublished(`awaited`), any other failure is None —
     the bytes counterpart of get_text_unless_missing."""
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
+        client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS,
         expected_statuses=(404,),
     )
     if resp is None:
@@ -140,7 +127,7 @@ async def get_bytes_unless_walled(client: httpx.AsyncClient, url: str, label: st
     requests through, 2026-10-14) is a source that can't be read, not one
     that was read and refused. Any other failure is still None."""
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, bot_challenge_ok=True,
+        client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS, bot_challenge_ok=True,
     )
     if resp is None:
         return None
@@ -153,7 +140,7 @@ async def get_text_unless_walled(client: httpx.AsyncClient, url: str, label: str
     """get_text, except that a bot wall's challenge raises SourceBlocked
     (the text counterpart of get_bytes_unless_walled)."""
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, bot_challenge_ok=True,
+        client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS, bot_challenge_ok=True,
     )
     if resp is None:
         return None
@@ -171,7 +158,7 @@ async def post_text(client: httpx.AsyncClient, url: str, label: str, **request_k
     states (FL, SC) publish their certified list only as the answer to
     their own search form."""
     resp = await fetch_with_retry(
-        client, _rate_limiter, "POST", url, log_label=label, headers=BROWSER_HEADERS,
+        client, _rate_limiter, "POST", url, log_label=label, headers=FETCH_HEADERS,
         **request_kwargs,
     )
     return resp.text if resp is not None else None

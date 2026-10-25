@@ -255,7 +255,7 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import (
-    BROWSER_HEADERS,
+    FETCH_HEADERS,
     fetch_bytes_with_retry,
     fetch_text_with_retry,
     fetch_with_retry,
@@ -905,7 +905,7 @@ async def _request(
     """GET `url`, or POST conf["json_body"] to it as JSON when one is
     configured (a portal's search API) -- with conf["headers"] added to the
     browser's own."""
-    headers = {**BROWSER_HEADERS, **(conf.get("headers") or {})}
+    headers = {**FETCH_HEADERS, **(conf.get("headers") or {})}
     if conf.get("json_body") is None:
         return await fetch_bytes_with_retry(client, _rate_limiter, url, label, headers=headers)
     resp = await fetch_with_retry(
@@ -1039,7 +1039,7 @@ async def _download(
             choose = {k: v for k, v in data.items() if k != button}
             choose["__EVENTTARGET"] = field
             resp = await fetch_with_retry(
-                client, _rate_limiter, "POST", url, data=choose, headers=BROWSER_HEADERS,
+                client, _rate_limiter, "POST", url, data=choose, headers=FETCH_HEADERS,
                 log_label=f"{label} choice",
             )
             if resp is None:
@@ -1050,7 +1050,7 @@ async def _download(
                 return None
             data, post_url = chosen, str(resp.url)
         resp = await fetch_with_retry(
-            client, _rate_limiter, "POST", post_url, data=data, headers=BROWSER_HEADERS,
+            client, _rate_limiter, "POST", post_url, data=data, headers=FETCH_HEADERS,
             log_label=f"{state} candidate list {year}",
         )
         if resp is None:

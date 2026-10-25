@@ -46,7 +46,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as clustered_rows
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     ballot_list_party,
     clean_display_name,
@@ -261,7 +261,7 @@ async def fetch_confirmed_candidates(
     for template, federal_group in groups:
         url = template.replace("{id}", election_id)
         payload = await fetch_bytes_with_retry(
-            client, _rate_limiter, url, f"{state} candidate list {year}", headers=BROWSER_HEADERS,
+            client, _rate_limiter, url, f"{state} candidate list {year}", headers=FETCH_HEADERS,
         )
         if payload is None or payload[:5] != b"%PDF-":
             return None

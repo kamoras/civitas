@@ -48,9 +48,9 @@ import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import CONTACT_NOTE  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (committee jurisdictions{CONTACT_NOTE})"}
+UA = {"User-Agent": USER_AGENT}
 # The House adopts its rules at the start of each Congress and the Rules
 # Committee links the current ones from this page; the PDF's name carries
 # the Congress ("houserules119thupdated.pdf"), so it is found here, never

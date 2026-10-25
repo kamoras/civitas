@@ -37,7 +37,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.models import ActionIssue, ApiCache
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
@@ -185,7 +185,7 @@ def engage_with_news_posts(db: Session) -> None:
     )
 
     with httpx.Client(timeout=DEFAULT_FETCH_TIMEOUT_S, follow_redirects=True,
-                      headers={"User-Agent": BOT_USER_AGENT}) as http:
+                      headers={"User-Agent": USER_AGENT}) as http:
         for outlet_handle in NEWS_OUTLET_HANDLES:
             if reposts_this_run >= MAX_REPOSTS_PER_RUN:
                 break

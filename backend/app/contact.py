@@ -7,14 +7,13 @@ fair-access policy asks every automated client to name a working contact
 email, and a site that wants to report a problem with our traffic needs
 one that is read.
 
-Every User-Agent that names a contact takes it from here: the pipeline's
-fetch modules and the maintenance scripts in backend/scripts both import
-it directly (or BOT_USER_AGENT and its peers, built from it). Not every
-request names one: a few state sites' firewalls refuse the "(+contact)"
-comment, so those requests drop it
-(ballot_measures_state_common.HEADERS_NO_CONTACT and its peers).
+Every request Civitas sends names itself the same way, USER_AGENT below:
+the product token, the page that says what the crawler is and does
+(/about/crawler on SITE_URL), and this address. The pipeline's fetch
+modules and the maintenance scripts in backend/scripts both import it; no
+request is sent under a browser's name.
 
-Unset (or not an address), the User-Agents name Civitas with no contact,
+Unset (or not an address), the User-Agent names Civitas and its page with no contact,
 and a source whose policy requires one refuses to be fetched
 (require_contact, ContactUnset) rather than be sent a request without it.
 
@@ -25,6 +24,8 @@ installed, and nothing here is analysis code.
 
 import logging
 import os
+
+from app.site_url import SITE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -51,21 +52,19 @@ def read_contact_email(raw: str | None) -> str:
 
 CONTACT_EMAIL = read_contact_email(os.environ.get(ENV_VAR))
 
-# The contact as a User-Agent comment, or nothing when none is set: " (+a@b)"
-# after a product token, "; contact: a@b" inside a comment that has a
-# purpose of its own.
-CONTACT_COMMENT = f" (+{CONTACT_EMAIL})" if CONTACT_EMAIL else ""
-CONTACT_NOTE = f"; contact: {CONTACT_EMAIL}" if CONTACT_EMAIL else ""
+# The page that says what the crawler is, what it reads and how to reach
+# us (frontend/src/app/about/crawler): named in every request, so a site's
+# logs lead straight to it.
+CRAWLER_PAGE = f"{SITE_URL}/about/crawler"
 
-# The User-Agent for requests that name Civitas outright rather than send
-# BROWSER_HEADERS' full browser shape — the "compatible; bot; +contact"
-# form crawlers use, so a site's logs show who it is and how to reach us.
-BOT_USER_AGENT = f"Mozilla/5.0 (compatible; Civitas/1.0{'; +' + CONTACT_EMAIL if CONTACT_EMAIL else ''})"
+# The one User-Agent every request carries, the "+URL" form crawlers use:
+# "Civitas/1.0 (+<SITE_URL>/about/crawler; <CONTACT_EMAIL>)".
+USER_AGENT = f"Civitas/1.0 (+{CRAWLER_PAGE}{'; ' + CONTACT_EMAIL if CONTACT_EMAIL else ''})"
 
-# Civitas fetching its own pages (the Bluesky link-card reader, the
-# healthchecks): named as itself in the logs. It runs no page script, so it
-# is never counted as a visit or an issue view (api/visits.py).
-SELF_FETCH_USER_AGENT = f"Civitas-Bot/1.0{CONTACT_COMMENT}"
+# The same string under its old name, for justice_pipeline.py alone: renaming
+# the import there would move the analysis-code fingerprint (AGENTS.md §2)
+# and clear the learning store for a change that classifies nothing.
+BOT_USER_AGENT = USER_AGENT
 
 UNSET_MESSAGE = (
     f"{ENV_VAR} is not set (or is not an email address): requests go out naming Civitas with no "

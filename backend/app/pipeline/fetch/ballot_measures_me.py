@@ -80,6 +80,8 @@ from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
+# www.maine.gov refuses a User-Agent that isn't a browser's (see
+# state_candidates_me._LANDING_URL); the read fails while it does.
 UPCOMING_URL = "https://www.maine.gov/sos/elections-voting/upcoming-elections"
 NEWS_URL = "https://www.maine.gov/sos/about-us/news"
 NEWS_PAGES = 3

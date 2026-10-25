@@ -103,7 +103,7 @@ from app.acceptance import held_out_beats_in_use  # noqa: E402
 from app.atomic_write import runtime_data_path  # noqa: E402
 from app.file_cache import read_json_preferring  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
 from app.forecast import training_polls as tp  # noqa: E402
 from app.http_client import make_async_client  # noqa: E402
@@ -152,7 +152,7 @@ def download(url: str) -> bytes:
     """The body at `url`, retried with backoff (http_utils.fetch_with_retry);
     stops the run once the retries are spent, never returning an empty body."""
     async def get() -> bytes | None:
-        async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+        async with make_async_client(headers={"User-Agent": USER_AGENT}) as client:
             resp = await fetch_with_retry(client, _LIMITER, "GET", url, timeout=DOWNLOAD_TIMEOUT_S)
             return None if resp is None else resp.content
     body = asyncio.run(get())

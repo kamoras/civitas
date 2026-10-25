@@ -88,6 +88,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
+from app.contact import USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 # Kept here rather than in pipeline/fetch/http_utils.py so this module has no
@@ -245,6 +247,11 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("verify", TLS_CONTEXT)
+        # Every request names Civitas (app/contact.py), not httpx's default
+        # "python-httpx/x"; a caller's own headers still win.
+        headers = httpx.Headers(kwargs.get("headers"))
+        headers.setdefault("User-Agent", USER_AGENT)
+        kwargs["headers"] = headers
         self._completes_chains = kwargs["verify"] is TLS_CONTEXT
         super().__init__(**kwargs)
 

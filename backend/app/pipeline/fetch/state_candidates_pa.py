@@ -61,7 +61,7 @@ import logging
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     clean_display_name, federal_record, normalize_party, parse_office,
@@ -72,7 +72,7 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://www.electionreturns.pa.gov/api/ElectionReturn"
-_HEADERS = BROWSER_JSON_HEADERS
+_HEADERS = FETCH_JSON_HEADERS
 _rate_limiter = RateLimiter(rps=0.5)
 
 # The election TYPE and OFFICE codes this reads, rather than any wording.

@@ -98,7 +98,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 
 MEMBERS_URL = "https://voteview.com/static/data/out/members/{chamber}{congress}_members.csv"
 VOTES_URL = "https://voteview.com/static/data/out/votes/{chamber}{congress}_votes.csv"
@@ -121,7 +121,7 @@ def _csv(url: str, name: str, cache: pathlib.Path | None) -> list[dict]:
     if cache is not None and (cache / name).exists():
         text = (cache / name).read_text()
     else:
-        request = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as resp:
             text = resp.read().decode()
         if cache is not None:

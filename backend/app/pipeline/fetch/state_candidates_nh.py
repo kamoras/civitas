@@ -7,12 +7,10 @@ any part of a URL from a template.
 Bare-header requests get an Akamai "Access Denied" (the same shape
 already seen for OH/MO/TN/NY/GA/MN); a complete, standards-compliant
 header set reaches every hop and every file cleanly (no Referer needed,
-despite an early research hunch that it might be) — EXCEPT this state's
-WAF specifically rejects BROWSER_HEADERS' own usual self-identifying
-User-Agent contact suffix, live-verified 403 on that exact string alone
-with every other real signal unchanged. See `_HEADERS` below for the
-one-field override this needed and why it's not the same thing as
-hiding identity.
+despite an early research hunch that it might be). Its WAF refuses a
+User-Agent carrying a contact (measured 2026-09-10 and 2026-10-25); this
+module sent a browser's until 2026-10-25 and now sends Civitas's own, so
+while the refusal stands the read fails and is alerted (AGENTS.md §7).
 
 THREE-hop discovery, all plain GETs:
 1. `/elections` (stable, no year) — its own "{year} Election Results"
@@ -122,7 +120,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     STATEWIDE_OFFICE_LABELS,
     clean_display_name,
@@ -140,21 +138,7 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 _ROOT_URL = "https://www.sos.nh.gov/elections"
 
-# Identical to BROWSER_HEADERS in every real respect (Accept, Accept-
-# Language, the Sec-Fetch-* set, Upgrade-Insecure-Requests) EXCEPT the
-# User-Agent drops this codebase's usual self-identifying contact suffix
-# ("Civitas/1.0 (+<contact email>)") -- live-verified 2026-09-10 that NH's
-# WAF specifically rejects that suffix (403, every other state's exact
-# same header shape unaffected) and accepts an otherwise-identical,
-# genuinely standard browser UA cleanly. Nothing here is forged or
-# impersonated: same real Accept/Sec-Fetch signals, same robots.txt
-# (checked live -- allows every path this module reads), no JS
-# challenge defeated, no session/identity faked -- just the one optional
-# courtesy string this one state's filter happens to flag, omitted.
-_HEADERS = {
-    **BROWSER_HEADERS,
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-}
+_HEADERS = FETCH_HEADERS
 
 _LINK_RE = re.compile(r'<a[^>]*href="([^"]+)"[^>]*>([^<]*)</a>', re.IGNORECASE)
 _PARTY_SUFFIX_RE = re.compile(r",\s*([dr])\s*$", re.IGNORECASE)

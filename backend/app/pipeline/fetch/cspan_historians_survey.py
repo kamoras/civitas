@@ -51,7 +51,7 @@ import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.historical_executive_orders import name_key, resolve_president_id
@@ -69,12 +69,9 @@ FIRST_EDITION = 2021
 def edition_url(edition: int) -> str:
     return f"https://www.c-span.org/presidentsurvey{edition}/?page=overall"
 
-# C-SPAN's WAF blocks requests with no browser-like User-Agent (confirmed
-# 2026-07: a plain httpx/default-UA request 403s, "Mozilla/5.0 (compatible;
-# Civitas/1.0)" worked). BOT_USER_AGENT is that string with the contact
-# added; C-SPAN refused both from the network it was re-checked on
-# (2026-09-30), so the contact's effect there is unverified.
-_HEADERS = {"User-Agent": BOT_USER_AGENT}
+# C-SPAN's WAF blocks httpx's default User-Agent (confirmed 2026-07);
+# Civitas's own was served on 2026-10-25.
+_HEADERS = {"User-Agent": USER_AGENT}
 
 _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "cspan-historians-survey"

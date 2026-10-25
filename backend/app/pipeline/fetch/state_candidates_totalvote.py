@@ -114,7 +114,7 @@ from lxml import html as lxml_html
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.election_phase import election_today
 from app.pipeline.fetch import http_utils
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     clean_display_name,
@@ -475,7 +475,7 @@ async def _results_page(client: httpx.AsyncClient, state: str, url: str, label: 
     """A results page's HTML; None when the host sends it to another site
     (it serves no election there). A failed read raises FeedUnreadable."""
     resp = await http_utils.fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, follow_redirects=False,
+        client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS, follow_redirects=False,
     )
     if resp is None:
         raise FeedUnreadable(f"{state} results page {url} could not be read")
@@ -630,7 +630,7 @@ async def _scan_general_eid(
     for eid in ids:
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}&eid={eid}"
         resp = await http_utils.fetch_with_retry(
-            client, _rate_limiter, "GET", url, log_label=f"{state} election {eid}", headers=BROWSER_HEADERS,
+            client, _rate_limiter, "GET", url, log_label=f"{state} election {eid}", headers=FETCH_HEADERS,
             follow_redirects=False,
         )
         if resp is None:

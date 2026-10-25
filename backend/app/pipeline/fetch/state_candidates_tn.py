@@ -13,11 +13,11 @@ rows, which state_candidates_tabular's row-per-candidate format has no
 way to express; unpivoting-and-summing is the whole reason this is its
 own module rather than a tabular config entry.
 
-sos.tn.gov itself sits behind Cloudflare and answers a bot challenge to
-a bare request — but the file host (sos-prod.tnsosgovfiles.com) does
-not, so the results page is read with BROWSER_HEADERS (the same "answer
-the challenge honestly" approach that already unblocked several other
-states) and the file itself needs no special handling at all. Discovery
+sos.tn.gov answers a User-Agent that isn't a browser's with a 403,
+Civitas's own included (measured 2026-10-25; the file host,
+sos-prod.tnsosgovfiles.com, does not). It was read under a browser's
+User-Agent until then; while the refusal stands, the results page can't be
+read and the read is alerted as failed (AGENTS.md §7). Discovery
 reuses state_candidates_tabular's landing_page mode as-is: the results
 page lists every past election's files, dated in the filename itself
 ("20260806AllbyPrecinct.xlsx"), so the current cycle's file is found by
@@ -47,7 +47,7 @@ import re
 import httpx
 
 from app.pipeline.fetch.state_candidates_common import runoff_threshold
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import (
     MAX_DOWNLOAD_BYTES, _discover_urls, _withheld, _xlsx_rows,
@@ -148,7 +148,7 @@ async def fetch_confirmed_candidates(
 
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", usable[0]["url"], timeout=120.0,
-        log_label=f"TN precinct results {year}", headers=BROWSER_HEADERS,
+        log_label=f"TN precinct results {year}", headers=FETCH_HEADERS,
     )
     if resp is None:
         return None

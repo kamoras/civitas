@@ -62,7 +62,7 @@ from app import census_lines, precision_rule, scoring_revisions, site_search
 from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.database import SessionLocal
 from app.district_lines import table_for_lines
 from app.election_calendar import last_certified_general
@@ -961,7 +961,7 @@ def _district_lean_stale(ctx: Context) -> object:
         return UNCHECKED
     _record_try(ctx.name, "release check")
     vest_year, medsl_year = min(years) + 4, max(years) + 4
-    headers = {"User-Agent": BOT_USER_AGENT}
+    headers = {"User-Agent": USER_AGENT}
     try:
         resp = httpx.get("https://dataverse.harvard.edu/api/search", params={
             "q": f'"{vest_year} Precinct-Level Election Results"', "type": "dataset", "per_page": 20,
@@ -1324,7 +1324,7 @@ def _agency_crosswalk_gate(new: dict, old: dict) -> list[str]:
 
 def _get_text(url: str) -> str | None:
     try:
-        resp = httpx.get(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+        resp = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=True)
         resp.raise_for_status()
         return resp.text
     except Exception:
@@ -1334,7 +1334,7 @@ def _get_text(url: str) -> str | None:
 
 def _url_exists(url: str) -> bool | None:
     try:
-        resp = httpx.head(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+        resp = httpx.head(url, headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=True)
     except Exception:
         logger.info("Data refresh: %s unreachable", url, exc_info=True)
         return None

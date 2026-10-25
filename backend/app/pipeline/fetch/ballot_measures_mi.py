@@ -13,14 +13,12 @@ November ballot questions"). The shared discover_pdf_url can't do this:
 its link pattern requires an href ending in ".pdf", and it sends no
 request headers.
 
-Headers: michigan.gov's CDN (Akamai) refuses the codebase's standard
-BROWSER_HEADERS with a 403, and measured 2026-09-28 that the refusal is
-keyed on the "(+<contact email>)" comment in the User-Agent — the same
-header set with that comment removed gets 200, as does the same
-User-Agent still ending in "Civitas/1.0". So this module sends
-BROWSER_HEADERS with the User-Agent's trailing comment dropped: still
-identifying as Civitas, just not in the bracketed crawler-contact form
-that rule blocks.
+Headers: michigan.gov's CDN (Akamai) answers Civitas's User-Agent with a
+challenge (403), keyed on the contact in its comment (measured 2026-09-28
+and again 2026-10-25: a bare "Civitas/1.0" is served, as is a browser's).
+Until 2026-10-25 this module dropped the comment; it now sends Civitas's own
+User-Agent, and while the refusal stands the read fails and is alerted
+(AGENTS.md §7), never sent under another name.
 
 The document is one page per proposal, each certified on its own date
 (verified on both 2026 proposals):
@@ -82,7 +80,7 @@ from lxml import html as lxml_html
 
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked, NotYetPublished, join_lines
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
@@ -91,11 +89,8 @@ logger = logging.getLogger(__name__)
 LANDING_URL = "https://www.michigan.gov/sos/elections"
 TITLE_AUTHORITY = "Michigan Bureau of Elections"
 
-# See module docstring: the CDN rejects the "(+contact)" UA comment.
-HEADERS = {
-    **BROWSER_HEADERS,
-    "User-Agent": re.sub(r"\s*\(\+[^)]*\)\s*$", "", BROWSER_HEADERS["User-Agent"]),
-}
+# Civitas's own (see the module docstring).
+HEADERS = FETCH_HEADERS
 
 _rate_limiter = RateLimiter(rps=1.0)
 

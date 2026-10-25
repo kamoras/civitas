@@ -57,7 +57,7 @@ import re
 
 import httpx
 
-from app.contact import CONTACT_EMAIL
+from app.contact import USER_AGENT
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
@@ -77,11 +77,10 @@ FEDERAL_OFFICE_TYPE = "FD"
 # district. County ("CW"/"CR") offices are never read.
 STATE_OFFICE_TYPES = frozenset({"SW", "SR"})
 
-# Civix's API 403s a request with no browser-like User-Agent at all
-# (verified live) — an honest, identifying UA (same convention
-# sec_tickers.py uses for the SEC's own documented UA request) works
-# fine; no need to spoof a real browser's string.
-_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}".rstrip()}
+# Civix's API 403s a request with no User-Agent, and (measured 2026-10-25)
+# one carrying an address, Civitas's own included; a contact email alone
+# was served. While it refuses, the read fails and is alerted (AGENTS.md §7).
+_HEADERS = {"User-Agent": USER_AGENT}
 
 # Two real requests per sync run (elections list, then candidates) — a
 # light, polite pace is enough; this isn't FEC's thousands-of-calls scale.

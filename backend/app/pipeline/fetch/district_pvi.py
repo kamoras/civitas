@@ -86,7 +86,7 @@ from datetime import date, timedelta
 
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.census_lines import apportionment, census_year
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
 from app.pipeline.fetch.congress import congress_first_year
@@ -107,7 +107,7 @@ logger = logging.getLogger(__name__)
 API = "https://en.wikipedia.org/w/api.php"
 # Names Civitas and how to reach us, as Wikimedia's User-Agent policy asks
 # (app.contact).
-HEADERS = {"User-Agent": BOT_USER_AGENT}
+HEADERS = {"User-Agent": USER_AGENT}
 _PVI_PATH = "/data/district_pvi.json"
 SOURCES_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "district_pvi_sources.json"
 BUNDLED_PATH = SOURCES_PATH.parent / "district_pvi.json"

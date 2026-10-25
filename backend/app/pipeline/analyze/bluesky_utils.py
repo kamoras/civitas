@@ -7,7 +7,7 @@ from html import unescape
 
 import httpx
 
-from app.contact import BOT_USER_AGENT, SELF_FETCH_USER_AGENT
+from app.contact import USER_AGENT
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -186,10 +186,10 @@ def og_card(html: str) -> dict[str, str]:
 
 def fetch_og_card(url: str) -> dict[str, str] | None:
     """`url`'s link card (og_card), or None when the page can't be read.
-    Sent as SELF_FETCH_USER_AGENT: most of these are Civitas's own pages,
+    Sent as USER_AGENT: most of these are Civitas's own pages,
     and the logs should say it was the app reading itself."""
     try:
-        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": SELF_FETCH_USER_AGENT})
+        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
     except Exception:
         logger.debug("Link card fetch failed for %s", url)
@@ -212,7 +212,7 @@ def build_link_card(client, url: str):
     if card["image"]:
         try:
             img_resp = httpx.get(
-                card["image"], timeout=10, follow_redirects=True, headers={"User-Agent": BOT_USER_AGENT},
+                card["image"], timeout=10, follow_redirects=True, headers={"User-Agent": USER_AGENT},
             )
             img_resp.raise_for_status()
             blob = client.upload_blob(img_resp.content)
