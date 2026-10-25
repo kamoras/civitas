@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.api.response_helpers import JSONResponse as APIJSONResponse
 from sqlalchemy.engine import make_url
 
-from app import contact, net_stats
+from app import contact, net_stats, web_bot_auth
 from app.api.cache_headers import ETagCacheMiddleware
 from app.api.public import PublicApiPreflight
 from app.api.public_mcp import PATH as MCP_PATH, McpEndpoint
@@ -499,6 +499,17 @@ app.add_middleware(
 app.add_middleware(PublicApiPreflight)
 
 app.include_router(api_router)
+
+
+@app.get(web_bot_auth.DIRECTORY_PATH, include_in_schema=False)
+def web_bot_auth_directory() -> Response:
+    """The public key Civitas signs its requests with (app/web_bot_auth.py),
+    with the draft's possession proof; 404 on an instance with no key."""
+    signed = web_bot_auth.directory_response()
+    if signed is None:
+        return Response(status_code=404)
+    body, headers = signed
+    return Response(body, media_type=web_bot_auth.DIRECTORY_MEDIA_TYPE, headers=headers)
 
 # The public API as an MCP server (api/public_mcp.py). A raw ASGI route, not
 # an APIRoute: the SDK speaks the transport itself.

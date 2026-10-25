@@ -28,15 +28,12 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+from app import web_bot_auth
 from app.config import settings
 from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, USER_AGENT
 from app.photos import PHOTO_SOURCE_HOSTS
 from app.site_url import SITE_DOMAIN
 
-try:  # Web Bot Auth signing (#1291); absent until it merges.
-    from app import web_bot_auth
-except ImportError:  # pragma: no cover - removed once #1291 is in
-    web_bot_auth = None
 
 APP = Path(__file__).resolve().parent
 DATA = APP / "data"
@@ -297,7 +294,7 @@ def hosts() -> list[dict]:
 
 
 def _signing() -> dict:
-    configured = web_bot_auth is not None and getattr(web_bot_auth, "KEY", None) is not None
+    configured = web_bot_auth.KEY is not None
     return {
         "configured": configured,
         "directory": (

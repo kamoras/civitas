@@ -100,7 +100,7 @@ def test_the_endpoint_states_the_user_agent_and_signing():
     assert body["hostCount"] == len(body["hosts"]) > 100
     signing = body["signing"]
     assert signing["configured"] is (signing["directory"] is not None)
-    if crawler.web_bot_auth is None:
+    if crawler.web_bot_auth.KEY is None:
         assert signing == {"configured": False, "directory": None}
 
 

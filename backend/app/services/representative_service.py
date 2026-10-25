@@ -53,7 +53,6 @@ from app.services.senator_service import (
     _compute_initials,
     _fixup_donor_type,
 )
-from app.services.disclosure_sources import source_status
 
 
 def _rep_eager_options() -> list:
@@ -815,5 +814,4 @@ def get_rep_stock_trades(
         per_page=per_page,
         total_pages=total_pages,
         late_count=late_count,
-        source_status=source_status(db, "house", "trades"),
     )

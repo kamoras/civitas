@@ -129,6 +129,7 @@ from app.services.bill_service import bill_title_lists, names_phrase, short_titl
 from app.services.explore_keys import keys_for_ids, public_key
 from app.time_utils import comment_period_today, eastern_date, utcnow
 from app.timeline_entries import without_repeat_leads
+from app.web_bot_auth import signed_headers
 
 _US_EAST = ZoneInfo("America/New_York")
 
@@ -1554,9 +1555,9 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     if "news.google.com/rss/articles/" not in url:
         return url
     try:
-        resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers={
+        resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
             "User-Agent": USER_AGENT,
-        })
+        }))
         final = str(resp.url)
         if "google.com" not in final:
             logger.debug("Resolved Google News URL → %s", final[:100])
@@ -1564,9 +1565,9 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     except Exception:
         logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers={
+        resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
             "User-Agent": USER_AGENT,
-        })
+        }))
         final = str(resp.url)
         if "google.com" not in final:
             logger.debug("Resolved Google News URL (GET) → %s", final[:100])

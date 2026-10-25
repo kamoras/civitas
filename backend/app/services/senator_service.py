@@ -56,7 +56,6 @@ from app.schemas import (
     VoteCountsSchema,
     VotingRecordSchema,
 )
-from app.services.disclosure_sources import source_status
 
 from app.state_names import STATE_NAMES  # noqa: E402  (re-exported: callers import it from here)
 
@@ -662,5 +661,4 @@ def get_senator_stock_trades(
         per_page=per_page,
         total_pages=total_pages,
         late_count=late_count,
-        source_status=source_status(db, "senate", "trades"),
     )

@@ -9,6 +9,7 @@ import httpx
 
 from app.contact import USER_AGENT
 from app.config import settings
+from app.web_bot_auth import signed_headers
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +190,8 @@ def fetch_og_card(url: str) -> dict[str, str] | None:
     Sent as USER_AGENT: most of these are Civitas's own pages,
     and the logs should say it was the app reading itself."""
     try:
-        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": USER_AGENT})
+        resp = httpx.get(url, timeout=10, follow_redirects=True,
+                         headers=signed_headers(url, {"User-Agent": USER_AGENT}))
         resp.raise_for_status()
     except Exception:
         logger.debug("Link card fetch failed for %s", url)
@@ -212,7 +214,8 @@ def build_link_card(client, url: str):
     if card["image"]:
         try:
             img_resp = httpx.get(
-                card["image"], timeout=10, follow_redirects=True, headers={"User-Agent": USER_AGENT},
+                card["image"], timeout=10, follow_redirects=True,
+                headers=signed_headers(card["image"], {"User-Agent": USER_AGENT}),
             )
             img_resp.raise_for_status()
             blob = client.upload_blob(img_resp.content)
