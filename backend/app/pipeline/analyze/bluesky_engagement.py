@@ -40,6 +40,7 @@ from app.config import settings
 from app.contact import BOT_USER_AGENT
 from app.models import ActionIssue, ApiCache
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.web_bot_auth import resign
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +186,7 @@ def engage_with_news_posts(db: Session) -> None:
     )
 
     with httpx.Client(timeout=DEFAULT_FETCH_TIMEOUT_S, follow_redirects=True,
-                      headers={"User-Agent": BOT_USER_AGENT}) as http:
+                      headers={"User-Agent": BOT_USER_AGENT}, event_hooks={"request": [resign]}) as http:
         for outlet_handle in NEWS_OUTLET_HANDLES:
             if reposts_this_run >= MAX_REPOSTS_PER_RUN:
                 break

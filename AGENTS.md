@@ -2650,6 +2650,7 @@ See `.env.example` for all options. Key variables:
 | `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `SITE_URL` | No | The site's public address. The domain is typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); read `broadcast.SITE_URL` / `settings.SITE_DOMAIN` or `SITE_URL` / `SITE_DOMAIN` from `lib/site.ts`, never a literal |
 | `REAL_IP_FROM` | No | The proxy nginx trusts to name the visitor (`nginx/real-ip.sh`; default loopback only). Required behind a reverse proxy; production's `.env` sets `192.168.0.101`, the Pi's LAN address its host nginx connects from |
+| `WEB_BOT_AUTH_KEY` | No | The instance's Ed25519 signing key (Web Bot Auth, `app/web_bot_auth.py`); unset, requests go out unsigned and the key directory answers 404 |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
@@ -2814,6 +2815,20 @@ the pending list).
   checks its signature, and adds it to `TLS_CONTEXT`, whose partial chains
   are off so the chain must still end at a certifi root. Never
   `verify=False`, and never a root taken from the network.
+- **Requests are signed as Civitas** (Web Bot Auth, 2026-10,
+  `app/web_bot_auth.py`). With `WEB_BOT_AUTH_KEY` in `.env` (made once by
+  `scripts/generate_web_bot_auth_key.py`, never committed:
+  `tests/test_web_bot_auth.py` fails on a committed private key), every
+  https request carries an Ed25519 signature over its host
+  (draft-ietf-webbotauth-httpsig-protocol on RFC 9421) whose public key the
+  backend serves, signed, at `/.well-known/http-message-signatures-directory`.
+  `make_async_client` signs by a request hook (each redirect hop for its own
+  host); a module-level `httpx.get`/`urllib` call to a source passes its
+  headers through `signed_headers(url, …)`, a sync `httpx.Client` takes
+  `resign` as a request hook, and a Playwright page calls
+  `sign_browser_page`. A new fetch path does the same. It identifies us so a
+  bot manager can allow us; it is never a way past a wall (§7). The
+  owner's applications to Cloudflare and Akamai: `docs/research/web-bot-auth.md`.
 - **Distrusted roots** (2026-10). A root whose keys are compromised is
   removed from every trust store in the images we build, not only from
   certifi (which drops it upstream; keep the pin current). First case:

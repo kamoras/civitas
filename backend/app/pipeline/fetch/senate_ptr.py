@@ -54,6 +54,7 @@ from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
 from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.rate_limiter import RateLimiter
+from app.web_bot_auth import sign_browser_page
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +283,7 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
                 browser = await p.chromium.launch(headless=True, channel=CHROMIUM_CHANNEL)
                 try:
                     page = await browser.new_page()
+                    await sign_browser_page(page)  # identified as Civitas, verifiably (web_bot_auth)
                     page.set_default_timeout(_ACTION_TIMEOUT_MS)
                     return await _scrape_via_page(page, since_date, report_type, filer_type)
                 finally:
