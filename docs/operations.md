@@ -91,6 +91,70 @@ never pruned from storage. Resolved, replaced and one-off alerts stay listed
 for seven days (the slowest regular jobs run weekly, so every job's latest
 outcome stays in view), at most ten.
 
+## Signed requests (Web Bot Auth)
+
+A User-Agent is a claim anyone can copy; a signature is a proof. With
+`WEB_BOT_AUTH_KEY` set, every https request the backend sends carries
+`Signature`, `Signature-Input` and `Signature-Agent` headers
+(draft-ietf-webbotauth-httpsig-protocol, on RFC 9421 HTTP Message
+Signatures): an Ed25519 signature over the request's host, valid a minute,
+whose public key this site serves at
+`/.well-known/http-message-signatures-directory`
+(`backend/app/web_bot_auth.py`). Cloudflare and Akamai check it at their
+edge, so a site behind either can tell Civitas's fetcher from anything
+copying its User-Agent and choose to allow it. It identifies us; it gets
+us past nothing a site refuses, and a site that still says no is still a
+wall (AGENTS.md §7).
+
+What is signed: every request through `make_async_client` (every pipeline
+fetcher, each redirect hop signed for its own host), the plain
+`httpx.get`/`urllib` source fetches in `app/` (`signed_headers`), and the
+Playwright browser that reads Senate eFD (`sign_browser_page`). Not signed:
+plain http (a signature in clear text could be replayed for its minute),
+requests to our own services (llama-server, the frontend), webhooks and the
+Bluesky API, and the maintenance scripts under `backend/scripts`, which read
+open-data hosts (Census, FEC, MEDSL) outside bot management.
+
+**Setting it up (once per instance).** On the host, in the deploy checkout:
+
+```bash
+IMAGE=$(docker service inspect civitas_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+docker run --rm --entrypoint python --user "$(id -u):$(id -g)" -v "$PWD/.env:/env" "$IMAGE" \
+  scripts/generate_web_bot_auth_key.py --env-file /env
+```
+
+The next deploy applies it: `docker stack deploy` resolves `.env` into both
+backend services' specs, so the key reaches them when `check-and-deploy.sh`
+next ships a commit (a `docker service update --force` would restart them on
+the old spec, without it). Run it before the commit that ships this feature
+deploys, and that deploy turns signing on.
+
+The script appends the key to `.env` (never printed, never committed:
+`tests/test_web_bot_auth.py` fails on a committed private key) and prints the
+public JWK. Then check the directory and a signed request:
+
+```bash
+curl -si https://civitas-research.org/.well-known/http-message-signatures-directory
+#  200, Content-Type: application/http-message-signatures-directory+json,
+#  Signature-Input: binding=("@authority";req "content-digest");...
+```
+
+Cloudflare's test endpoint `https://crawltest.com/cdn-cgi/web-bot-auth`
+answers 400 to a malformed signature, 401 to a well-formed one from a key it
+doesn't know, and 200 once the bot is verified.
+
+**Rotating.** Publish-then-retire is what the draft asks for, but one key is
+served at a time here: remove the line from `.env`, run the script again,
+redeploy, and tell Cloudflare and Akamai (both match on the key directory
+URL, which stays the same; Cloudflare's dashboard says it will "work with
+you to supply or rotate a key"). Rotate at once if the key may have leaked.
+
+**Getting recognised.** A valid signature from an unknown key changes
+nothing at a bot manager: each needs the bot listed first. The
+applications (Cloudflare Verified Bots, Akamai's bot directory) and the
+ISP's reverse DNS are the owner's steps, written out in
+`docs/research/web-bot-auth.md`.
+
 ## Docker Swarm layout
 
 The project runs on a single-node Docker Swarm (`docker swarm init` is a
@@ -226,6 +290,7 @@ See `.env.example` for all options. Key variables:
 | `SITE_URL` | No | The site's public address (default `https://civitas-research.org`): links, feeds, cards, canonicals, `robots.txt`. Typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); the frontend gets it at build as `NEXT_PUBLIC_SITE_URL` |
 | `REAL_IP_FROM` / `REAL_IP_HEADER` | No | The proxy in front of nginx allowed to name the visitor (`nginx/real-ip.sh`; default loopback only, header `X-Real-IP`). Required behind a reverse proxy: production sets the Pi's LAN address |
 | `CONTACT_EMAIL` | Yes | Your instance's contact address, named in the User-Agent of every request the pipeline and scripts send (`backend/app/contact.py`). Unset or malformed, requests name Civitas with no address, the SEC (whose fair-access policy requires a contact) is not fetched and raises an ops alert, and the pipeline logs a warning at start |
+| `WEB_BOT_AUTH_KEY` | No | The instance's Ed25519 key (base64url seed) for signed requests (Web Bot Auth, above). Made once by `backend/scripts/generate_web_bot_auth_key.py`; never commit it. Unset: requests go out unsigned and the key directory answers 404 |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |
 | `LLAMA_MODELS_DIR` | No | Host directory bind-mounted into llama-server at `/models` (default: `./llama-models`) |

@@ -966,6 +966,28 @@ export default function DataChapter() {
             </P>
           </Box>
           <Box
+            id="signed-requests"
+            title="How our fetcher proves who it is"
+            dek="Every request this server sends to a source is signed with a key only Civitas holds, so a site can check it really is Civitas. It gets us past nothing a site refuses."
+            more="the signature, and the key"
+          >
+            <P>
+              Anyone can copy a name in a request. So each request this server sends to a source is
+              also signed (Web Bot Auth, a draft internet standard built on HTTP Message Signatures)
+              with a private key that never leaves this machine. The matching public key is
+              published at{" "}
+              <a
+                href="/.well-known/http-message-signatures-directory"
+                className="text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                /.well-known/http-message-signatures-directory
+              </a>
+              , where bot-management services such as Cloudflare and Akamai check it. That lets a
+              site recognise Civitas and choose to let it in. A site that still says no is
+              respected: the signature identifies us, it is not a way around anyone&apos;s rules.
+            </P>
+          </Box>
+          <Box
             id="self-hosting"
             title="Run your own copy"
             dek="The code is open source, and everything above can be rebuilt on another machine from the same public sources."
