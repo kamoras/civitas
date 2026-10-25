@@ -181,6 +181,7 @@ def _item(item: dict, now: datetime, today: date, zone: ZoneInfo) -> dict:
             sentence = (f"{label} {verb} {when}{basis}" if status == OPEN
                         else f"{label} closed {when}")
     src = item["source"]
+    verification = {**item["verification"], "detail": _recheck_detail(item)}
     return {
         "kind": kind,
         "method": item.get("method"),
@@ -201,9 +202,27 @@ def _item(item: dict, now: datetime, today: date, zone: ZoneInfo) -> dict:
         "closesOn": closes_on.isoformat(),
         "_closes": closes,
         "source": {"publisher": src.get("publisher"), "url": src["url"], "type": src["type"]},
-        "verification": item["verification"],
+        "verification": verification,
         "republishedBy": (item["verification"].get("republished") or {}).get("publisher"),
     }
+
+
+def _recheck_detail(item: dict) -> str | None:
+    """Said beside a deadline the last build couldn't re-read (the build
+    keeps the verification it had, scripts/build_election_calendar.py; its
+    checkedOn, shown with the source, is when it was last confirmed): why
+    it wasn't confirmed again, and when that was tried."""
+    recheck = item["verification"].get("recheck")
+    if not recheck:
+        return None
+    where = item["source"].get("publisher") or "the source"
+    on = short_date(date.fromisoformat(recheck["on"]))
+    result = recheck.get("result") or ""
+    if recheck.get("passed") and "quote" in result:
+        return f"No longer on {where}'s page after it passed (rechecked {on})."
+    if "bot wall" in result:
+        return f"{where}'s site blocked our recheck on {on}."
+    return f"{where}'s page couldn't be read when rechecked on {on}."
 
 
 def _with_countdown(i: dict) -> str:
@@ -311,7 +330,20 @@ def _note(entry: dict, state: str) -> str | None:
     election and some deadlines could not be confirmed for it — that some
     are missing, so a missing deadline never reads as there being none."""
     parts = [entry.get("note")] if entry.get("note") else []
-    if entry.get("incomplete"):
+    unconfirmed = entry.get("unconfirmed") or []
+    if unconfirmed:
+        # A deadline still ahead whose page answered without it: no date
+        # from memory (AGENTS.md §7), and named, so it never reads as there
+        # being none.
+        name = STATE_NAMES.get(state.upper(), state)
+        labels = list(dict.fromkeys(_label(u) for u in unconfirmed))
+        on = short_date(date.fromisoformat(max(u["checkedOn"] for u in unconfirmed)))
+        what = labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
+        parts.append(
+            f"{what}: not listed, because we couldn't confirm {'it' if len(labels) == 1 else 'them'} on "
+            f"{name}'s own pages on {on}. Check with your county election office."
+        )
+    elif entry.get("incomplete"):
         parts.append(
             f"Not every one of {STATE_NAMES.get(state.upper(), state)}'s deadlines is confirmed for this election yet; "
             "one not listed here may still apply, so check with your county election office."

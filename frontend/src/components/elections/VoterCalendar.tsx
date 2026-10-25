@@ -64,6 +64,9 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
           checked(d)
         )}
       </p>
+      {d.verification.detail && (
+        <p className="mt-0.5 text-small text-ink-lo">{d.verification.detail}</p>
+      )}
     </li>
   );
 }
