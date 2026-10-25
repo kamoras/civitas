@@ -532,6 +532,13 @@ def test_the_house_rules_are_found_for_the_newest_congress_the_page_links():
     assert congress == 120 and url.endswith("houserules120th.pdf")
     with pytest.raises(SystemExit):
         module.house_rules_url("<p>no links</p>")
+    # The Senate's rules: the newest Senate document the Rules Committee's
+    # page links on GovInfo (its own download is walled, 2026-10-24).
+    page = ('"url":"https://www.govinfo.gov/content/pkg/CDOC-113sdoc18/pdf/CDOC-113sdoc18.pdf#page=3"'
+            '"url":"https://www.govinfo.gov/content/pkg/CDOC-117sdoc9/pdf/CDOC-117sdoc9.pdf#page=23"')
+    assert module.senate_rules_url(page) == "https://www.govinfo.gov/content/pkg/CDOC-117sdoc9/pdf/CDOC-117sdoc9.pdf"
+    with pytest.raises(SystemExit):
+        module.senate_rules_url("<p>no links</p>")
 
 
 def test_the_population_source_says_which_census_it_reports():
