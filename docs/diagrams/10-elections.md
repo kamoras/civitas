@@ -410,7 +410,7 @@ own oldest poll, 21 days), every range is the structural line's alone,
 labelled fundamentals only. The training polls are refreshed and gated by
 `app/data_refresh.py`; a refused file or an outage keeps the last
 accepted copy and alerts. Poll-derived output is CC BY-SA 4.0, "Wikipedia
-contributors". README "The 2026 Senate and House map" has the numbers.
+contributors". [elections.md](../elections.md#the-senate-and-house-map-usual-vote-and-poll-ranges-pre-election) has the numbers.
 
 ## Election night: the live count
 

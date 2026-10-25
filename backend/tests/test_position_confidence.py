@@ -422,11 +422,12 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
     assert f"until the new one is full ({switch} votes)" in entry
-    # AGENTS.md and README quote the era curve's paired margin and the best's
+    # AGENTS.md and the methodology docs quote the era curve's paired margin and the best's
     # own standard error, which the shipped rule judges by.
     root = src.parents[1]
     agents = " ".join((root / "AGENTS.md").read_text().split())
-    readme = " ".join((root / "README.md").read_text().split())
+    methodology = root / "docs" / "methodology"
+    readme = " ".join(" ".join((methodology / name).read_text() for name in ("scoring.md", "classification.md")).split())
     forward = data["forward_test"]
     era = forward["era"]
     last = era["last_three"]
@@ -446,14 +447,14 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
     assert f"({full} votes or more, a convention)" in readme
-    # "A curve per chamber predicts no better" (AGENTS.md, README, the changelog).
+    # "A curve per chamber predicts no better" (AGENTS.md, docs/methodology/scoring.md, the changelog).
     assert data["forward_test"]["chamber"]["above"] >= -data["forward_test"]["chamber"]["standard_error"]
     split = f"since the {ordinal(data['era_split'])} Congress"
     assert split in agents and split in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
     # AGENTS.md and the changelog describe one curve over every Congress; a rerun choosing
-    # another structure must rewrite them (and README and AGENTS.md), so
+    # another structure must rewrite them (and docs/methodology and AGENTS.md), so
     # this fails until it does.
     assert data["structure"] == "pooled", "rewrite the prose that describes one curve"
     first = 1789 + 2 * (_script().FIRST_CONGRESS - 1)

@@ -549,8 +549,8 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     cached bill titles): removing this tier changes the outcome for 1.5%
     of bills, always by rescuing a genuinely directional bill ("STOP CCP
     Act", "End Veterans Overdose Act") that the embedding alone scored as
-    neutral — never the reverse. Kept for that reason; see README
-    "Classification Strategy" for how this fits the project's broader
+    neutral — never the reverse. Kept for that reason; see
+    docs/methodology/classification.md for how this fits the project's broader
     embeddings-first, disclosed-exceptions approach.
 
     Returns:

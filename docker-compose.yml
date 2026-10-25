@@ -40,7 +40,7 @@ services:
       - "127.0.0.1:8070:8070"
     volumes:
       # Bind mount, not a named volume -- the model is a single static
-      # file the operator provides (see README's LLM Backend Options),
+      # file the operator provides (see docs/operations.md, LLM backend options),
       # not app-managed state.
       - ${LLAMA_MODELS_DIR:-./llama-models}:/models:ro
     command:
