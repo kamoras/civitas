@@ -47,7 +47,6 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_p
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.error_utils import SourceWalled
 from app.http_client import is_bot_challenge
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -113,7 +112,7 @@ def _extract_csrf_token(html_text: str) -> str | None:
     return match.group(1) if match else None
 
 
-class EfdRefused(SourceWalled):
+class EfdRefused(RuntimeError):
     """eFD's edge refused this client outright (a bot wall's answer, not an
     outage): nothing is read past it (AGENTS.md §7). Raised rather than
     returned as None, so the failed step says which it is."""

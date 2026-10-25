@@ -6,7 +6,6 @@ import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
-import SourceNote from "./SourceNote";
 import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
@@ -166,9 +165,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   // No upfront count is embedded on the politician payload (unlike lobbying
   // matches) — trades are fetched separately to keep that payload lean, so
   // the section only renders once we know there's something to show.
-  // A source whose reads are failing still says so: no trades on file is
-  // then not a record of none disclosed.
-  if (!loading && (!data || data.total === 0) && !error && !data?.sourceStatus?.note) return null;
+  if (!loading && (!data || data.total === 0) && !error) return null;
 
   // Nothing until the first response: most members disclose no trades, and
   // a loading panel that then vanishes shifts the whole scorecard below it.
@@ -188,15 +185,10 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
     <CollapsibleSection
       title={filer === "president" ? "Stock & crypto trades" : "Stock trades"}
       titleColor="text-signal-amber"
-      summary={
-        data.total === 0
-          ? "None on file"
-          : `${data.total} trade${data.total !== 1 ? "s" : ""}${data.lateCount > 0 ? ` · ${data.lateCount} late` : ""}`
-      }
+      summary={`${data.total} trade${data.total !== 1 ? "s" : ""}${data.lateCount > 0 ? ` · ${data.lateCount} late` : ""}`}
       source={SOURCE_LABEL[filer]}
     >
       <div className="space-y-3 mt-4">
-        <SourceNote status={data.sourceStatus} />
         <p className="text-small text-ink-min">
           <MetricTooltip text={filer === "president" ? ABOUT_DATA.president : ABOUT_DATA.congress}>
             About this data

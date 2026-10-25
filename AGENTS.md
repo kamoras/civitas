@@ -2405,20 +2405,6 @@ not used), and computes disclosure timeliness. Every stored trade's industry
 is recomputed each night (`_reclassify_stored_trades`); the SEC being
 unreachable raises rather than reading as "no industry". Best-effort per phase: one source being
 down does not discard the others' rows.
-Each source's reads are told apart from its data
-(`services/disclosure_sources.py`, 2026-10): every trades and holdings
-response, and the profile's trades and holdings boxes, carry
-`sourceStatus` (`lastRead`, `failingSince`, `kind`: "wall" or "outage"),
-read from the stock-trades run rows' own step outcomes (a failed step
-records `failureKind`; a fetcher that recognises its source's bot wall
-raises an `error_utils.SourceWalled` subclass, as Senate eFD's
-`EfdRefused` does). While the latest read has
-failed it adds `note`, a fixed template ("Senate disclosures last read
-<date>. The Senate's disclosure site has refused automated reads since
-<date>; ..."), which the box takes as its line and the drawer shows above
-the list; an empty record then reads "No trades on file", never "No trades
-disclosed". The first good read clears it. Only the sitting president's
-page speaks for OGE's reads.
 
 No profit or gain figure is derived for any filer, and none can be: every one
 of these forms reports an amount *bracket* per transaction with no cost basis

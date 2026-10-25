@@ -308,20 +308,6 @@ class StockTradeSchema(CamelModel):
         return self
 
 
-class SourceStatusSchema(CamelModel):
-    """When a disclosure source was last read, and since when its reads
-    have failed (services/disclosure_sources.py)."""
-    # ISO timestamps, UTC.
-    last_read: str | None = None
-    # Null while the latest read succeeded.
-    failing_since: str | None = None
-    # "wall": the source's bot wall refused the read; "outage": it failed
-    # some other way. Null while the latest read succeeded.
-    kind: Literal["wall", "outage"] | None = None
-    # The line the page shows beside the stored data while reads fail.
-    note: str | None = None
-
-
 class PaginatedStockTradesSchema(CamelModel):
     trades: list[StockTradeSchema]
     total: int
@@ -329,7 +315,6 @@ class PaginatedStockTradesSchema(CamelModel):
     per_page: int
     total_pages: int
     late_count: int
-    source_status: SourceStatusSchema | None = None
 
 
 class HoldingSchema(CamelModel):
@@ -422,9 +407,6 @@ class HoldingsSchema(CamelModel):
     # (a newly seated member, or before the first ingest run) — every other
     # field is then at its default.
     available: bool = True
-    # When the source was last read and whether its reads now fail: the
-    # report below may be older than the newest filed.
-    source_status: SourceStatusSchema | None = None
     # "2025 annual report", "new-filer report as of 2026-03-24" — what the
     # holdings describe, for the page to say in words.
     report_label: str = ""
