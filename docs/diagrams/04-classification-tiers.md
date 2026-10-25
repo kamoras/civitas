@@ -75,8 +75,14 @@ definition in code.
 
 Two further structural lookups decode already-known facts rather than classify
 anything: the FEC entity-type-code map (`CCM` → `CandidateAffiliated`, decoding
-an enum FEC itself assigned) and a Congress-number → majority-party table used
-for effectiveness baselines.
+an enum FEC itself assigned) and each chamber's majority party for the
+effectiveness baselines. The sitting Congress's majority is counted from the
+roster every run (`score_calculator.derive_chamber_majority`, called by
+`live_references.live_les_reference` and carried on the LES reference; a Senate
+tie goes to the sitting president's party, `live_references.sitting_president_party`).
+Only bills from earlier Congresses read the historical record in
+`_SENATE_MAJORITY` / `_HOUSE_MAJORITY` (`score_calculator._bill_majority`),
+which is also the fallback when the roster can't settle it (a House tie).
 
 ## Retrieval-augmented classification
 
