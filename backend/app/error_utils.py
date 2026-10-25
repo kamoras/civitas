@@ -76,6 +76,26 @@ def record_exception(run, exc: BaseException, where: str | None = None) -> str:
     return detail.split("\n", 1)[0]
 
 
+class SourceWalled(RuntimeError):
+    """A source's bot wall refused this client: the site saying no, not an
+    outage (AGENTS.md §7). A fetcher that recognises its source's wall
+    raises a subclass, so the failed step records it as a wall
+    (failure_kind) and the page can say which absence it is."""
+
+
+def failure_kind(exc: BaseException) -> str:
+    """"wall" when ``exc``, or anything it was raised from or while
+    handling, is a SourceWalled; else "outage" (the read failed, for
+    whatever reason the source or the reader had)."""
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, SourceWalled):
+            return "wall"
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return "outage"
+
+
 _FRAME_RE = re.compile(r'^\s*File "([^"]+)", line (\d+), in (.+)$')
 _TRACEBACK_HEAD = "Traceback (most recent call last):"
 # Longest line an alert quotes from a child process's output.

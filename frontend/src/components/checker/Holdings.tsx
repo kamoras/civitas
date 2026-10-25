@@ -8,6 +8,7 @@ import { chartMark } from "@/lib/chartColors";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
+import SourceNote from "./SourceNote";
 import ScannedFiling from "./ScannedFiling";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -555,7 +556,7 @@ export default function Holdings({
   // Hidden until there is a report to show — the same rule StockTrades
   // follows. A report that lists nothing still renders (below), since
   // "disclosed no assets" is information.
-  if (!loading && !error && (!data || !data.available)) return null;
+  if (!loading && !error && (!data || !data.available) && !data?.sourceStatus?.note) return null;
 
   // Nothing until the first response: most members have no report, and a
   // loading panel that then vanishes shifts the whole scorecard below it.
@@ -570,6 +571,10 @@ export default function Holdings({
   }
 
   if (!data) return null;
+
+  // No report read, and reads failing: the note alone, so the absence reads
+  // as a failed read rather than as nothing filed.
+  if (!data.available) return <SourceNote status={data.sourceStatus} className="my-4" />;
 
   const reportLabel = data.reportLabel || "latest annual report";
   const when = asOfPhrase(data.asOfDate);
@@ -664,6 +669,7 @@ export default function Holdings({
 
   const notes = (
     <>
+      <SourceNote status={data.sourceStatus} className="mt-2" />
       {data.laterFilingUrl && (
         <p className="text-body text-ink-lo mt-2">
           Also filed, on or after this report&apos;s filing date: the{" "}
