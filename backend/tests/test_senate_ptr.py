@@ -127,12 +127,16 @@ class _FakePage:
     only needs to override what it cares about.
     """
 
-    def __init__(self, locators: dict | None = None):
+    def __init__(self, locators: dict | None = None, title: str = "eFD: Home"):
         self._locators = locators or {}
         self._response_cb = None
+        self._title = title
 
     async def goto(self, url, wait_until=None):
         pass
+
+    async def title(self):
+        return self._title
 
     def locator(self, selector):
         return self._locators.get(("locator", selector), _FakeLocator())
@@ -210,6 +214,13 @@ class TestScrapeViaPage:
         await senate_ptr._scrape_via_page(page, "")
 
         assert agree_clicks == [1]
+
+    @pytest.mark.asyncio
+    async def test_terms_refused_by_akamai_is_a_wall_not_a_changed_page(self):
+        page = _FakePage({("locator", "#agree_statement"): _FakeLocator(count=1)}, title="Access Denied")
+
+        with pytest.raises(senate_ptr.EfdRefused, match="bot wall, not an outage"):
+            await senate_ptr._scrape_via_page(page, "")
 
     @pytest.mark.asyncio
     async def test_no_search_response_is_an_outage_not_no_filings(self, monkeypatch):

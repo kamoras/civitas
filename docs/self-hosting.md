@@ -432,7 +432,7 @@ trial), with no trigger:
 | Site search index | Every 10 minutes | The header search and `/search` |
 | Agency sync | Tried hourly, reads weekly | Federal agencies and their budgets |
 | Nominations | Daily 14:50 | Presidential nominations; the first backfill of a Congress took about **eight days** (2,285 citations in the 119th, measured) |
-| Data refresh | Daily 15:40 | Regenerates the bundled data files on their own cadences |
+| Data refresh | Hourly 15:40 to 01:40 UTC (each file at most once a day) | Regenerates the bundled data files on their own cadences |
 | Election ballot sync, coverage, results | Every 6 hours, every 15 minutes, every 5 minutes near an election | Ballots, race coverage, election-night counts |
 | Election map | Every 3 hours before an election | The Senate and House map |
 
