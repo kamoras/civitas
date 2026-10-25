@@ -110,3 +110,87 @@ def test_the_shared_client_names_civitas_unless_told_otherwise():
     assert make_async_client().headers["User-Agent"] == contact.USER_AGENT
     assert make_async_client(headers={"user-agent": "x"}).headers["User-Agent"] == "x"
     assert make_async_client(headers={"Accept": "a/b"}).headers["User-Agent"] == contact.USER_AGENT
+
+
+@pytest.mark.asyncio
+async def test_requests_fetches_name_civitas(monkeypatch):
+    """fetch_with_retry_requests (UCSB, NARA, OGE) sends Civitas's name, not
+    requests' "python-requests/x"; a caller's other headers are kept."""
+    from types import SimpleNamespace
+
+    from app.pipeline.fetch import http_utils
+    from app.pipeline.rate_limiter import RateLimiter
+
+    sent = []
+
+    def fake(method, url, **kw):
+        sent.append(kw["headers"])
+        return SimpleNamespace(status_code=200)
+
+    monkeypatch.setattr(http_utils.requests, "request", fake)
+    limiter = RateLimiter(1000, name="test-crawler-ua")
+    await http_utils.fetch_with_retry_requests(limiter, "GET", "https://a.example/")
+    await http_utils.fetch_with_retry_requests(limiter, "GET", "https://a.example/", headers={"Accept": "x"})
+    assert sent[0] == {"User-Agent": contact.USER_AGENT}
+    assert sent[1] == {"User-Agent": contact.USER_AGENT, "Accept": "x"}
+
+
+# Calls that send a request without Civitas's User-Agent, each for a reason:
+# (file, call). Ollama's API is an in-stack service on this machine, never a
+# source, and its module is fingerprinted (AGENTS.md §2); FTP has no headers.
+_NO_USER_AGENT = {
+    ("app/pipeline/analyze/ollama_client.py", "urllib.request.Request"),
+    ("app/pipeline/fetch/state_candidates_canvass_xml.py", "urlopen"),
+}
+_SENDERS = {
+    "httpx.get", "httpx.post", "httpx.head", "httpx.put", "httpx.patch", "httpx.delete",
+    "httpx.request", "httpx.stream", "httpx.Client", "httpx.AsyncClient",
+    "urllib.request.Request", "requests.get", "requests.post", "requests.head",
+    "requests.request", "requests.Session",
+}
+
+
+def _carries_user_agent(call: ast.Call) -> bool:
+    """A headers= argument naming a User-Agent: a dict literal with the key,
+    or a name holding headers (FETCH_HEADERS, _HEADERS), which review covers."""
+    for kw in call.keywords:
+        if kw.arg == "headers":
+            if isinstance(kw.value, ast.Dict):
+                return any(isinstance(k, ast.Constant) and str(k.value).lower() == "user-agent"
+                           for k in kw.value.keys)
+            return True
+    return False
+
+
+def test_no_request_leaves_without_civitas_s_name():
+    """Every request the app sends carries Civitas's User-Agent: the shared
+    httpx client adds it by default (above), and every other way to send one
+    (module-level httpx calls, a sync httpx client, urllib, requests) passes
+    it. A raw httpx.AsyncClient is refused: make_async_client is the one
+    async constructor."""
+    offenders = []
+    for path in sorted(APP.rglob("*.py")):
+        rel = path.relative_to(APP.parent).as_posix()
+        if rel in ("app/http_client.py", "app/pipeline/fetch/http_utils.py"):
+            continue  # the constructor and the requests wrapper, tested above
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            name = ast.unparse(node.func)
+            if name in ("urlopen", "urllib.request.urlopen"):
+                arg = node.args[0] if node.args else None
+                # urlopen(Request(...)) is checked at the Request.
+                if not (isinstance(arg, ast.Name) and arg.id == "req") and (rel, name) not in _NO_USER_AGENT:
+                    offenders.append(f"{rel}:{node.lineno} {name}")
+            elif name in _SENDERS and (rel, name) not in _NO_USER_AGENT:
+                if name == "httpx.AsyncClient":
+                    offenders.append(f"{rel}:{node.lineno} raw httpx.AsyncClient")
+                elif not _carries_user_agent(node):
+                    offenders.append(f"{rel}:{node.lineno} {name}")
+    assert offenders == []
+
+
+def test_the_efd_browser_names_civitas():
+    src = (APP / "pipeline" / "fetch" / "senate_ptr.py").read_text()
+    assert "new_page(user_agent=USER_AGENT)" in src
+    assert "new_page()" not in src and "new_context()" not in src

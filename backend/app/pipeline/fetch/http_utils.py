@@ -362,6 +362,9 @@ async def fetch_with_retry_requests(
     this instead of fetch_with_retry.
     """
     label = log_label or url
+    # Civitas's own name, never requests' "python-requests/x"; a caller's
+    # own User-Agent still wins.
+    request_kwargs["headers"] = {"User-Agent": USER_AGENT, **(request_kwargs.get("headers") or {})}
     for attempt in range(1, retries + 1):
         try:
             await rate_limiter.acquire()
