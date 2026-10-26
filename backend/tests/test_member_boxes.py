@@ -25,25 +25,79 @@ def test_committees_fold_to_one_line_with_the_posts_held():
     assert mb.committees_box([])["line"] == "No committee seats on file"
 
 
-def test_bills_box_counts_the_furthest_stage_as_the_finding_does():
-    dim = {"finding": "Of 89 bills sponsored this Congress, 2 passed the Senate; none has become law.",
-           "facts": {"bills": 89, "billsByStage": [76, 4, 7, 2, 0]}}
-    box = mb.bills_box(dim, "senate")
-    assert box["headline"] == "2 of 89 passed the Senate"
-    assert box["figure"] == {"type": "stat", "value": 2, "text": "2 of 89", "caption": "passed the Senate"}
-    assert box["dek"] == dim["finding"]
-    law = mb.bills_box({"facts": {"bills": 10, "billsByStage": [5, 1, 1, 2, 1]}}, "house")
-    assert law["headline"] == "1 of 10 became law"
-    assert mb.bills_box({"facts": {"bills": 0, "billsByStage": [0] * 5}}, "house")["figure"] is None
+def _bill(bill_id, bill_type, stage, introduced, latest, title):
+    return {"billId": bill_id, "billType": bill_type, "stage": stage, "introducedDate": introduced,
+            "latestActionDate": latest, "title": title}
 
 
-def test_votes_and_money_boxes():
-    votes = mb.votes_box({"finding": "f", "facts": {"partyVotes": 493, "breaks": 0}})
-    assert votes["headline"] == "0 of 493 party-line votes against the party"
-    assert mb.votes_box({"facts": {"partyVotes": 12, "breaks": None}})["headline"] == "12 party-line votes on record"
-    money = mb.money_box({"totalContributions": 13_000_000}, 2022, {"finding": "Gifts of $200 or less ..."})
+def test_bills_box_names_the_bill_furthest_along_not_the_strips_count():
+    """How many bills got how far is the peer strip's and the stage chart's;
+    the box names the bill, so no "N of M" restates them."""
+    bills = [
+        _bill("S.1", "S", "REFERRED", "2025-01-03", "2025-01-03", "A referred bill"),
+        _bill("S.7", "S", "PASSED_CHAMBER", "2025-02-01", "2025-06-01", "Older Act"),
+        _bill("S.9", "S", "PASSED_CHAMBER", "2025-03-01", "2025-09-10", "Clean Water Act."),
+        _bill("SRES.4", "SRES", "ENACTED", "2025-01-05", "2025-01-06", "A resolution, not a bill"),
+    ]
+    box = mb.bills_box(bills, "senate")
+    assert box["headline"] == "S. 9 passed the Senate"
+    assert box["dek"] == "Clean Water Act. Latest action 2025-09-10."
+    assert box["figure"] is None and " of " not in box["headline"]
+    law = mb.bills_box([_bill("HR.5", "HR", "ENACTED", "2025-01-03", "2025-08-01", "Roads Act")], "house")
+    assert law["headline"] == "H.R. 5 became law"
+    quiet = mb.bills_box([bills[0], _bill("S.3", "S", "REFERRED", "2025-04-01", "2025-04-01", "Newer")], "senate")
+    assert quiet["headline"] == "Newest bill: S. 3"
+    assert quiet["dek"] == "Newer. Introduced 2025-04-01."
+    assert mb.bills_box([bills[3]], "house")["headline"] == "No bills sponsored this Congress"
+
+
+def _break(date, nomination=False, bill_id=None):
+    return {"vote": "Yea", "rollCall": {"date": date, "billId": bill_id,
+                                        "nominationVote": {"kind": "confirm"} if nomination else None}}
+
+
+def test_votes_box_tells_what_the_breaks_were_on_not_how_many():
+    """The count against the seat is the peer strip's; the box leads with
+    the breaks themselves."""
+    listed = [_break("2026-06-23", nomination=True), _break("2025-02-04", nomination=True),
+              _break("2026-01-30", bill_id="HR.7148"), _break("2025-10-09")]
+    box = mb.votes_box({"finding": "Breaks ... 3 times ...",
+                        "facts": {"partyVotes": 499, "breaks": 4, "breakVotes": listed}})
+    assert box["headline"] == "2 breaks were on nominations"
+    assert box["dek"] == "1 on a bill or resolution, 1 on another question. Newest 2026-06-23."
+    assert "499" not in box["headline"] + box["dek"] and "times" not in box["dek"]
+    # All of one kind: the kind's count would be the strip's count again.
+    same = [_break("2026-07-15", bill_id="HR.8595"), _break("2026-05-01", bill_id="HR.1")]
+    same[1]["rollCall"]["amendment"] = "H.Amdt. 9"
+    mixed = mb.votes_box({"facts": {"partyVotes": 322, "breaks": 2, "breakVotes": same}})
+    assert mixed["headline"] == "1 break was on an amendment"
+    assert mixed["dek"] == "1 on a bill or resolution. Newest 2026-07-15."
+    one_kind = mb.votes_box({"facts": {"partyVotes": 322, "breaks": 2, "breakVotes": same[:1] * 2}})
+    assert (one_kind["headline"], one_kind["figure"]) == ("Every break was on bills and resolutions", None)
+    one = mb.votes_box({"facts": {"partyVotes": 10, "breaks": 1, "breakVotes": [_break("2025-05-01")]}})
+    assert (one["headline"], one["dek"]) == ("The break was on another question", "Newest 2025-05-01.")
+    none = mb.votes_box({"facts": {"partyVotes": 493, "breaks": 0, "breakVotes": []}})
+    assert none["headline"] == "No votes against the party to list" and none["figure"] is None
+    flank = mb.votes_box({"facts": {"partyVotes": 493, "breaks": 0, "breakVotes": [],
+                                    "flankBreakVotes": [_break("2025-05-01")]}})
+    assert flank["headline"] == "1 vote against the party from its flank, not counted"
+    assert mb.votes_box({"facts": {"partyVotes": 12, "breaks": 3}})["headline"] == (
+        "Votes against the party, as recorded")
+    assert mb.votes_box({"facts": {"partyVotes": 0}})["headline"] == "No party-line votes on record yet"
+
+
+def test_money_box_names_the_largest_donor_not_the_strips_shares():
+    funding = {"totalContributions": 13_000_000, "topDonors": [
+        {"name": "Doe for Senate", "total": 90_000.0, "type": "CandidateAffiliated"},
+        {"name": "DSCC", "total": 51_200.0, "type": "Party/Ideological"}]}
+    money = mb.money_box(funding, 2022)
     assert (money["kicker"], money["headline"]) == ("Money · 2022 election", "$13.0M in contributions")
-    assert mb.money_box({"totalContributions": 5}, None, None)["kicker"] == "Money · most recent completed election"
+    assert money["dek"] == "Largest donor: DSCC, $51,200."
+    employer = mb.money_box({"totalContributions": 9, "topDonors": [
+        {"name": "Google", "total": 28_232.0, "type": "Org/Employees"}]}, 2024)
+    assert employer["dek"] == "Largest donor: Google employees, $28,232."
+    bare = mb.money_box({"totalContributions": 5}, None)
+    assert bare["kicker"] == "Money · most recent completed election" and bare["dek"] is None
 
 
 def test_positions_count_the_areas_leaning_with_the_members_party():

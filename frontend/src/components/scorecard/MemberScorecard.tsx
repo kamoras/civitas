@@ -204,7 +204,6 @@ export default function MemberScorecard({
             <VotesBox
               memberId={member.id}
               chamber={chamber}
-              name={member.name}
               seat={seat}
               breaks={member.votingRecord.votedAgainstPartyCount}
               box={boxes?.votes}

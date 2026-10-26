@@ -93,8 +93,9 @@ export default function BillsBox({
         label: "the bills furthest along",
         children: (
           <div className="flex flex-col gap-4">
-            {facts?.bills != null && dimension?.finding ? (
-              // The finding states the bills; the stage counts are charted.
+            {facts?.bills != null && (box || dimension?.finding) ? (
+              // The stage counts are charted and the share past committee is
+              // the peer strip's (or, from an older backend, the finding's).
               facts.resolutions > 0 && (
                 <p className="text-small text-ink-lo">
                   Besides these,{" "}

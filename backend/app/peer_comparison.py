@@ -264,7 +264,9 @@ def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> 
 _FACT = {
     "smallGifts": "Donors who gave $200 or less gave {shown} of the money.",
     "pacMoney": "PACs gave {shown} of the money.",
-    "breaks": "Broke with the party on {shown} party-line votes.",
+    # The rate beside the count: the strip's tick is the seat's average
+    # rate, so the member's own rate is stated in the same unit.
+    "breaks": "Broke with the party on {shown} party-line votes ({rate}).",
     "billsMoved": "{shown} bills got past committee.",
 }
 _MORE = {"smallGifts": "had a larger share", "pacMoney": "took a larger share",
@@ -326,7 +328,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
     pct = percentile(value, values)
     spread = statistics.pstdev(values) if len(values) > 1 else 0
     gap = (value - expected) / spread if spread and expected is not None else None
-    fact = _FACT[measure.key].format(shown=row["shown"])
+    fact = _FACT[measure.key].format(shown=row["shown"], rate=axis_figure(measure.unit, value))
     if measure.key == "billsMoved":
         fact = fact[0].upper() + fact[1:]
     n_side, verb = (more, _MORE[measure.key]) if pct <= 50 else (less, _LESS[measure.key])

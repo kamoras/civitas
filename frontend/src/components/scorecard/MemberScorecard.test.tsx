@@ -680,13 +680,13 @@ describe("MemberScorecard", () => {
       },
       fundingElectionYear: 2024,
       money: line("Money · 2024 election", "$1.2M", "in contributions", "Money line."),
-      votes: line(
-        "Votes · this Congress",
-        "6 of 76",
-        "party-line votes against the party",
-        "Votes line."
-      ),
-      bills: line("Bills · this Congress", "4 of 65", "passed the House", "Bills line."),
+      votes: line("Votes · this Congress", "4", "breaks were on nominations", "Votes line."),
+      bills: {
+        kicker: "Bills · this Congress",
+        headline: "H.R. 12 passed the House",
+        dek: "Bills line.",
+        figure: null,
+      },
       president: null,
       approval: null,
       holdings: null,
@@ -724,8 +724,15 @@ describe("MemberScorecard", () => {
     expect(within(money).getByText("$1.2M")).toBeInTheDocument();
     expect(within(money).getByText("Money line.")).toBeInTheDocument();
     expect(
-      within(document.getElementById("legislative-effectiveness")!).getByText("passed the House")
+      within(document.getElementById("legislative-effectiveness")!).getByText(
+        "H.R. 12 passed the House"
+      )
     ).toBeInTheDocument();
+    // Each fact once: the rates and shares are the peer strips', so the
+    // boxes don't restate them (no seat-norm scale, no share sentences).
+    expect(screen.queryByText(/seat norm/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Voted against most Republicans/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/came from PACs/)).not.toBeInTheDocument();
     // No box for what the backend says isn't on record.
     expect(document.getElementById("with-the-president")).toBeNull();
     expect(document.getElementById("approval")).toBeNull();
