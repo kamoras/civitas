@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app import disclosure_scans
+from app.error_utils import ExpectedSourceFailure, SourceUnavailable, exception_detail, failure_host
 from app.models import FinancialDisclosure, Representative, Senator
 from app.pipeline import holdings_pipeline
 from app.pipeline.fetch import scan_pages
@@ -128,6 +129,22 @@ class TestIngestStep:
         with patch.object(scan_pages, "fetch_house_scan", fetch), pytest.raises(RuntimeError):
             await holdings_pipeline.ingest_scan_pages(db_session, None)
         assert disclosure_scans.read_manifest("9116162")["failed_at"]
+
+    async def test_a_source_that_served_nothing_fails_as_the_source(self, db_session, scanned_rep):
+        # Every failure the source's: the step's failure is an expected one,
+        # one line on the run row with no traceback, counted by host.
+        url = "https://disclosures-clerk.house.gov/2025/9116162.pdf"
+        fetch = AsyncMock(side_effect=scan_pages.ScanSourceUnavailable("House Clerk did not serve it", url))
+        with patch.object(scan_pages, "fetch_house_scan", fetch), pytest.raises(SourceUnavailable) as raised:
+            await holdings_pipeline.ingest_scan_pages(db_session, None)
+        assert failure_host(raised.value) == "disclosures-clerk.house.gov"
+        assert "Traceback" not in exception_detail(raised.value)
+
+    async def test_a_render_failure_among_them_keeps_the_traceback(self, db_session, scanned_rep):
+        fetch = AsyncMock(return_value=("pdf", [b"%PDF-1.4 not a pdf"]))
+        with patch.object(scan_pages, "fetch_house_scan", fetch), pytest.raises(RuntimeError) as raised:
+            await holdings_pipeline.ingest_scan_pages(db_session, None)
+        assert not isinstance(raised.value, ExpectedSourceFailure)
 
     async def test_a_senate_paper_filing_is_read_through_the_session(self, db_session):
         db_session.add(Senator(id="S1", name="Tess Bradwell", state="WI", party="D", is_current=True))

@@ -34,6 +34,7 @@ from datetime import date, datetime, timezone
 
 import httpx
 
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.fetch.state_candidate_sources import configured_states, source_for_state
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ class StateCount:
     unplaced: list[ContestCount] = field(default_factory=list)
 
 
-class UntrustedCount(Exception):
+class UntrustedCount(ExpectedSourceFailure, Exception):
     """The source answered, but not with this election's production count:
     a test or preview feed, or a response describing a different election
     than the one asked for. Every vendor here publishes test data on its
@@ -110,8 +111,10 @@ class UntrustedCount(Exception):
     and TV stations have aired such feeds as real results. Nothing from it
     is stored."""
 
+    failure_kind = "untrusted"
 
-class FeedUnreadable(Exception):
+
+class FeedUnreadable(ExpectedSourceFailure, Exception):
     """A request the read needs failed (a timeout, a 5xx, a 404, a bot
     wall) or answered something that could not be parsed. The feed could
     not be checked, which is not the same as it listing no election that

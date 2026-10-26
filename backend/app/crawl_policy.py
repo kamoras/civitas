@@ -51,6 +51,7 @@ import httpx
 
 from app import crawler
 from app.atomic_write import runtime_data_path, write_text_atomic
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.fetch import robots
 from app.site_url import SITE_DOMAIN
 
@@ -66,9 +67,11 @@ ROBOTS_RETRY_S = 3600.0
 STATE_FILE = "host_refusals.json"
 
 
-class HostRefusing(httpx.TransportError):
+class HostRefusing(ExpectedSourceFailure, httpx.TransportError):
     """No request was sent: the host is refusing Civitas, or its pace would
     make the request wait too long."""
+
+    failure_kind = "refused"
 
     def __init__(self, host: str, reason: str, until: float | None = None):
         self.host, self.reason, self.until = host, reason, until

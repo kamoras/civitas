@@ -2474,6 +2474,24 @@ class PipelineRateLimitStat(Base):
     )
 
 
+class SourceFailureCount(Base):
+    """Expected source failures, as daily counters: a step that failed
+    because its source refused Civitas or could not be read
+    (error_utils.ExpectedSourceFailure: a bot wall, a host's refusal, an
+    outage, a feed that isn't this election's count). One counter per
+    (UTC day, run kind, step, host, kind), never per request: the run row
+    and the alert carry the one-line reason, and this says how often and
+    where. A crash is not counted here; its traceback is on the run row."""
+    __tablename__ = "source_failure_counts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    run_kind: Mapped[str] = mapped_column(String(64), primary_key=True)  # the run table's name
+    step: Mapped[str] = mapped_column(String(64), primary_key=True)  # "" when the run named none
+    host: Mapped[str] = mapped_column(String(128), primary_key=True)  # "unknown" when nothing names it
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)  # walled | refused | unavailable | untrusted
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class MemberIdAlias(Base):
     """A member id that was renamed (app/member_ids.py), and the id it
     became: posts and search engines still hold URLs under the old one, so

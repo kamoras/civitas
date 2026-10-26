@@ -23,10 +23,13 @@ run's error, and the failure alerts carry the summary line. It is admin-only:
 `error_message`, which the public `/api/pipeline/status` returns, stays a
 fixed sentence. Until 2026-10-15 the row held only that sentence, and a
 Senate run that failed in donor classification lost its cause when four
-deploys replaced the container's log the same day.
+deploys replaced the container's log the same day. A source that refused or
+couldn't be read (`error_utils.ExpectedSourceFailure`: a bot wall, an outage)
+is kept as its one line with no traceback, and counted per day, run, step,
+host and kind for the Pipelines tab's "Expected source failures" chart.
 
 Every alert (`ops_alerts.send_ops_alert`) is logged at ERROR, kept (the last
-fifty) for the admin Overview's **Ops alerts** panel, and pushed to ntfy when
+fifty) for the admin's **Alerts** tab (Overview shows how many are open), and pushed to ntfy when
 `ALERT_NTFY_URL` is set. The panel only arrived on 2026-09-29: the dashboard
 API had served the alerts since July with nothing showing them, so without
 ntfy an alert reached only logs that rotate within the day. An alert about a

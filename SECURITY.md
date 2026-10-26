@@ -17,7 +17,7 @@ Two private channels, either is fine:
 
 - [GitHub's security advisory form](https://github.com/kamoras/civitas/security/advisories/new)
   — preferred, and where the issue tracker's own "Security vulnerability" link points
-- Email **mack.ryanm@gmail.com** with subject line `[CIVITAS SECURITY]`
+- Email **hello@civitas-research.org** with subject line `[CIVITAS SECURITY]`
 
 Include:
 - Description of the vulnerability and affected component

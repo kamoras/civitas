@@ -31,7 +31,7 @@ from lxml import html as lxml_html
 
 from app import disclosure_scans
 from app.atomic_write import write_text_atomic
-from app.error_utils import output_summary
+from app.error_utils import ExpectedSourceFailure, output_summary
 from app.pipeline.fetch.house_ptr import download_pdf
 from app.pipeline.fetch.senate_fd import SessionLapsed, _redirects_to_terms, is_terms_page
 from app.pipeline.fetch.senate_ptr import _request_with_retry
@@ -50,10 +50,19 @@ class ScanUnavailable(Exception):
     """The filing's pages couldn't be fetched or rendered this run."""
 
 
+class ScanSourceUnavailable(ExpectedSourceFailure, ScanUnavailable):
+    """The source didn't serve the filing's pages: an outage, not a fault
+    in fetching or rendering them."""
+
+    def __init__(self, message: str, url: str):
+        super().__init__(message)
+        self.host = urlparse(url).hostname or ""
+
+
 async def fetch_house_scan(client: httpx.AsyncClient, pdf_url: str) -> tuple[str, list[bytes]]:
     body = await download_pdf(client, pdf_url)
     if body is None:
-        raise ScanUnavailable(f"House Clerk did not serve {pdf_url}")
+        raise ScanSourceUnavailable(f"House Clerk did not serve {pdf_url}", pdf_url)
     return "pdf", [body]
 
 
@@ -69,11 +78,11 @@ async def fetch_senate_scan(client: httpx.AsyncClient, report_url: str) -> tuple
     re-accepts and retries), ScanUnavailable for anything else that fails."""
     resp = await _request_with_retry(client, "GET", report_url, follow_redirects=False)
     if resp is None:
-        raise ScanUnavailable(f"Senate eFD did not answer for {report_url}")
+        raise ScanSourceUnavailable(f"Senate eFD did not answer for {report_url}", report_url)
     if _redirects_to_terms(resp) or (resp.status_code == 200 and is_terms_page(resp.text)):
         raise SessionLapsed(f"HTTP {resp.status_code} for {report_url}")
     if resp.status_code != 200:
-        raise ScanUnavailable(f"Senate eFD answered HTTP {resp.status_code} for {report_url}")
+        raise ScanSourceUnavailable(f"Senate eFD answered HTTP {resp.status_code} for {report_url}", report_url)
     urls = senate_image_urls(resp.text)
     if not urls:
         raise ScanUnavailable(f"no page images on {report_url}")
@@ -81,7 +90,7 @@ async def fetch_senate_scan(client: httpx.AsyncClient, report_url: str) -> tuple
     for url in urls:
         image = await _request_with_retry(client, "GET", url)
         if image is None or image.status_code != 200 or not image.content.startswith(_IMAGE_MAGIC):
-            raise ScanUnavailable(f"page image {url} did not load")
+            raise ScanSourceUnavailable(f"page image {url} did not load", url)
         images.append(image.content)
     return "images", images
 
