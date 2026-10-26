@@ -32,12 +32,15 @@ proved, to the fields that still generate prose.
 import json
 import logging
 import pathlib
+import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from datetime import datetime, timedelta
 from typing import Callable
 
 import numpy as np
 
+from app import calibration_drift
 from app.database import SessionLocal
 from app.pipeline.analyze.post_composer import compose, headline_source
 from app.pipeline import vector_store
@@ -226,13 +229,17 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
 # twice: replayed on 2026-10-11..15, a two-story briefing's two lines about
 # its second story made a two-claim issue. distinct_claims drops a claim
 # whose similarity-model cosine with an earlier one reaches a threshold the
-# Action Center refits once a UTC day from its own published issues
-# (action_center.refit_cuts: the lowest cosine no pair of lines from issues
-# days apart that share a distinctive entity reaches), stored in api_cache;
-# app/data/claim_restatement_calibration.json, the same fit on a production
-# snapshot (scripts/calibrate_action_cuts.py), until the first refit. A
-# false call drops a real second fact and with it, often, the issue, so the
-# cut is precision-first.
+# Action Center refits once a UTC day from its own issues and feed articles
+# (action_center.fit_restatement_cut: above a high quantile of the pairs
+# the data calls two facts, adopted only under precision_rule.accept
+# against the cut in use, held out on blocks of days), stored in
+# api_cache; app/data/claim_restatement_calibration.json, the same fit on a
+# production snapshot (scripts/calibrate_action_cuts.py), until the first
+# refit. A false call drops a real second fact and with it, often, the
+# issue, so the cut is precision-first. That leaves some rewordings of one
+# fact below it (measured 2026-10-25 on the replayed clusters: one fact in
+# two outlets' words at 0.62 to 0.86, two facts at 0.51 to 0.84), which the
+# two-claim gate still counts twice.
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
 RESTATEMENT_CALIBRATION_PATH = _DATA_DIR / "claim_restatement_calibration.json"
 _RESTATEMENT_TIER, _RESTATEMENT_KEY = "action-cuts", "restatement"
@@ -262,6 +269,35 @@ def restatement_calibration() -> dict:
     return value
 
 
+# Words two lines must share in a row to be one sentence quoted twice: the
+# restatement fit's one-fact label (action_center.restatement_pairs). Not
+# a rule distinct_claims applies: headlines share five-word templates
+# ("watch live: Trump rallies in", "as White House press secretary")
+# across different facts.
+SAME_SENTENCE_RUN = 5
+_RUN_WORD_RE = re.compile(r"[a-z0-9']+")
+# A figure a line states: digits, with a unit word or sign it carries. A
+# four-digit year is a date, not a figure.
+_FIGURE_RE = re.compile(r"(?<![\w.])\$?\d[\d,.]*(?:\s?(?:million|billion|trillion|percent|%))?", re.IGNORECASE)
+_YEAR_RE = re.compile(r"(?:1[7-9]|20)\d\d")
+
+
+def shared_run(a: str, b: str) -> int:
+    """The longest run of words two lines share, verbatim."""
+    x, y = _RUN_WORD_RE.findall(a.lower()), _RUN_WORD_RE.findall(b.lower())
+    return SequenceMatcher(None, x, y, autojunk=False).find_longest_match(0, len(x), 0, len(y)).size
+
+
+def stated_figures(text: str) -> frozenset[str]:
+    """The figures a line states ("$18 million", "250,000"), years left out."""
+    out = set()
+    for m in _FIGURE_RE.finditer(text or ""):
+        figure = m.group(0).rstrip(".,").lower().replace("$", "").replace(",", "")
+        if not _YEAR_RE.fullmatch(figure):
+            out.add(figure)
+    return frozenset(out)
+
+
 def distinct_claims(claims: list[Claim]) -> list[Claim]:
     """CLAIMS without those that restate an earlier one, in order, so the
     first (best-sourced) wording of each fact is the one kept.
@@ -280,6 +316,8 @@ def distinct_claims(claims: list[Claim]) -> list[Claim]:
     for i in range(len(claims)):
         if all(float(vectors[i] @ vectors[j]) < threshold for j in kept):
             kept.append(i)
+    # The gate's pass, for the drift check: a claim dropped as a restatement.
+    calibration_drift.observe("restatement", [float(i not in kept) for i in range(len(claims))], 0.5)
     if len(kept) != len(claims):
         logger.info("Dropped %d claim(s) restating an earlier one", len(claims) - len(kept))
     return [claims[i] for i in kept]

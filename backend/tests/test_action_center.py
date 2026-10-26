@@ -1,6 +1,7 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
 import json
+import math
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -275,6 +276,19 @@ class TestClusterArticlesModel:
         assert runs[0] == runs[1]
 
 
+class _Borrowed:
+    """The test's session where code opens `with SessionLocal() as s`."""
+
+    def __init__(self, session):
+        self.session = session
+
+    def __enter__(self):
+        return self.session
+
+    def __exit__(self, *exc):
+        return False
+
+
 class TestStatedDays:
     """The days an article's own text dates what it reports to."""
 
@@ -289,6 +303,26 @@ class TestStatedDays:
 
     def test_nothing_without_a_date_to_read_against(self):
         assert ac.stated_days("Monday", None) == frozenset()
+
+    def test_a_start_date_and_a_photo_credit_date_nothing(self):
+        """2026-10-16: NPR's whole description of a press secretary's exit
+        on Friday was 'her first official day was on Monday', which made it
+        and the other outlets' accounts of the exit two occasions."""
+        friday = date(2028, 3, 3)
+        assert ac.stated_days("Example Person's first official day was on Monday.", friday) == frozenset()
+        assert ac.stated_days("Her first day on the job was Monday.", friday) == frozenset()
+        assert ac.stated_days("The board met. (Photo credit: Jane Doe/Getty, Monday)", friday) == frozenset()
+        assert ac.stated_days("The board's first vote is Monday at noon.", friday) == {date(2028, 2, 28)}
+
+    def test_only_the_headline_and_first_sentence_date_the_event(self):
+        """A day named later in a description is usually another occasion's:
+        the background, the reaction, what comes next."""
+        text = ac.occasion_text("Agency acts", "The agency acted Friday. A hearing was held Monday. More on Sept. 3.")
+        assert ac.stated_days(text, date(2028, 3, 3)) == {date(2028, 3, 3)}
+        # An abbreviation's period is not the end of the sentence.
+        text = ac.occasion_text("Senator acts", "Sen. Example spoke Monday. Then on Friday, more.")
+        assert ac.stated_days(text, date(2028, 3, 3)) == {date(2028, 2, 28)}
+        assert ac.occasion_text("Headline", None) == "Headline. "
 
     def test_days_disagree_only_when_both_state_days_far_apart(self):
         mon, tue, fri = date(2028, 2, 28), date(2028, 2, 29), date(2028, 3, 3)
@@ -314,48 +348,150 @@ class TestStatedDayVeto:
         same = [[1.0, 0.0, 0.0]] * 3
         monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array(same + [[-1.0, 0.0, 0.0]] * 0))
         monkeypatch.setattr(ac, "_center_titles", lambda e, m: e)
+        seen = []
+        monkeypatch.setattr(ac.calibration_drift, "observe", lambda gate, scores, t: seen.append((gate, scores, t)))
         groups = sorted(sorted(a.url for a in c) for c in ac._cluster_articles([(a, None) for a in arts]))
         assert not any({"u0", "u1"} <= set(g) for g in groups)
+        # The drift check counts each article joined to another.
+        sizes = {a.url: len(g) for g in groups for a in arts if a.url in g}
+        assert seen == [("cluster", [sizes["u0"], sizes["u1"], sizes["u2"]], 2)]
 
 
 class TestCutRefit:
     """Both cuts are refit from the stored data, never hand labels."""
 
-    def test_the_cluster_fit_is_the_lowest_cut_no_day_disagreeing_pair_reaches(self, monkeypatch):
+    @staticmethod
+    def _day_articles(monkeypatch, n=2 * ac.MIN_HARD_NEGATIVES):
+        """Articles about one actor alternately dated Monday and Friday, on
+        random embeddings; returns them with each two-event pair's score."""
         published = datetime(2028, 3, 3, 12)  # a Friday
-        articles = [(f"Senator Example story {i}", f"It happened {day}.", published)
-                    for i, day in enumerate(["Monday", "Friday"] * (ac.MIN_HARD_NEGATIVES // 2 + 1))]
-        rng = np.random.default_rng(0)
-        monkeypatch.setattr(ac, "_embed_texts", lambda texts: rng.standard_normal((len(texts), 8)))
+        days = ["Monday", "Friday"] * (n // 2)
+        articles = [(f"Senator Example story {i}", f"It happened {day}.", published, f"u{i}")
+                    for i, day in enumerate(days)]
+        vectors = np.random.default_rng(0).standard_normal((len(articles), 64))
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: vectors)
         monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
-        scores = []
-        real = ac._center_titles
+        centred = ac._center_titles(vectors, vectors.mean(axis=0))
+        negatives = [float(centred[i] @ centred[j]) for i in range(len(days)) for j in range(i + 1, len(days))
+                     if days[i] != days[j]]
+        return articles, negatives
 
-        def centre(e, m):
-            out = real(e, m)
-            scores.append(float(out[0] @ out[1]))
-            return out
-        monkeypatch.setattr(ac, "_center_titles", centre)
+    def test_the_cluster_fit_sits_above_a_quantile_of_the_two_event_pairs(self, monkeypatch):
+        monkeypatch.setattr(ac, "CLUSTER_NEGATIVE_QUANTILE", 1.0)
+        articles, negatives = self._day_articles(monkeypatch)
         fitted = ac.fit_cluster_cut(articles)
-        assert fitted["fitted"] > max(scores) and fitted["fitted"] - max(scores) <= 0.01 + 1e-9
+        assert fitted["fitted"] > max(negatives) and fitted["fitted"] - max(negatives) <= 0.01 + 1e-9
         assert fitted["threshold"] == round(fitted["fitted"] + ac.CUT_MARGIN, 2)
+        assert fitted["negatives"] == len(negatives) and fitted["negatives_reaching"] == 0
+        # Same-day pairs about the same actor are the one-event side.
+        assert fitted["positives"] == 2 * (len(articles) // 2) * (len(articles) // 2 - 1) // 2
+        monkeypatch.setattr(ac, "CLUSTER_NEGATIVE_QUANTILE", 0.99)
+        top = float(np.quantile(negatives, 0.99, method="higher"))
+        assert ac.fit_cluster_cut(articles)["fitted"] == round(math.floor(top * 100 + 1) / 100, 2)
+
+    def test_one_mislabelled_pair_does_not_hold_the_cluster_cut(self, monkeypatch):
+        """2026-10-17: one pair the stated-day label got wrong (a start date
+        read as the event's day) put the cut at 0.87, where complete linkage
+        joined nothing. Above the 99th percentile, one pair is noise."""
+        articles, negatives = self._day_articles(monkeypatch, n=40)  # 400 two-event pairs
+        vectors = ac._embed_texts([])
+        vectors[1] = vectors[0] + 1e-3  # a Monday and a Friday article alike
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: vectors)
+        fitted = ac.fit_cluster_cut(articles)
+        assert fitted["negatives_reaching"] == 1 and fitted["threshold"] < 0.9
+
+    def test_two_sources_of_one_issue_are_one_event(self, monkeypatch):
+        """u0 (Monday) and u1 (Friday) are a two-event pair by their days,
+        unless one issue published both: then they are one."""
+        articles, _ = self._day_articles(monkeypatch)
+        base = ac.fit_cluster_cut(articles)
+        sourced = ac.fit_cluster_cut(articles, issue_sources=[["u0", "u1"], ["u9"]])
+        assert sourced["positives"] == base["positives"] + 1
+        assert sourced["negatives"] == base["negatives"] - 1
+
+    @staticmethod
+    def _spread_articles(monkeypatch, alike: bool):
+        """Ten articles a day for eight days, half dated their own day and
+        half three days earlier; with `alike`, articles dated the same day
+        read alike (one event) and the rest apart."""
+        start = datetime(2028, 3, 1, 12)
+        articles, stated = [], []
+        for k in range(80):
+            published = start + timedelta(days=k // 10)
+            day = published - timedelta(days=3 * (k % 2))
+            articles.append((f"Senator Example story {k}", f"It happened {day:%A}.", published, f"u{k}"))
+            stated.append(day.toordinal())
+        rng = np.random.default_rng(1)
+        vectors = rng.standard_normal((80, 64)) * (0.3 if alike else 1.0)
+        if alike:
+            vectors += np.eye(64)[[d % 64 for d in stated]] * 3
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: vectors)
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        return articles
+
+    def test_a_cluster_refit_is_held_out_against_the_cut_in_use(self, monkeypatch):
+        articles = self._spread_articles(monkeypatch, alike=True)
+        stuck = ac.fit_cluster_cut(articles, in_use=0.99)
+        held = stuck["held_out"]
+        assert stuck["in_use"] == 0.99 and held["in_use"]["passed"] == 0
+        assert held["candidate"]["passed"] > 0 and held["candidate"]["precision"] > 0.95
+        assert stuck["kept"] is None  # the cut in use joined nothing held out: the refit is adopted
+
+    def test_a_cluster_refit_that_would_lower_held_out_precision_is_not_adopted(self, monkeypatch):
+        """Nothing reads alike: the refit's few joins are noise, and a cut in
+        use that joins every pair has the better precision bound (about a
+        third of the pairs are one event), so the cut in use stays."""
+        articles = self._spread_articles(monkeypatch, alike=False)
+        loose = ac.fit_cluster_cut(articles, in_use=-1.0)
+        assert loose["kept"] and "would" in loose["kept"]
 
     def test_the_cluster_fit_needs_enough_pairs(self):
         assert ac.fit_cluster_cut([("a", "Monday", datetime(2028, 3, 3))]) is None
 
-    def test_the_restatement_fit_reads_separate_stories_published_together(self, monkeypatch):
-        issues = [(i, "2028-03-01", [f"Senator Example acted {i}."]) for i in range(12)]
-        issues.append((99, "2028-03-20", ["Senator Example acted later."]))  # weeks apart: not read
-        seen = []
-        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
-        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: seen.append(list(texts)) or np.eye(len(texts)))
-        fitted = ac.fit_restatement_cut(issues)
-        assert fitted["negatives"] == 66  # 12 choose 2, all same-day separate issues
-        assert fitted["fitted"] == 0.01 and fitted["threshold"] == round(0.01 + ac.CUT_MARGIN, 2)
+    @staticmethod
+    def _issue_row(day, lines, monitor):
+        from types import SimpleNamespace
+        return SimpleNamespace(date=day, title=lines[0], summary=lines[0], facts=json.dumps(lines[1:]),
+                               source_urls="[]", related_monitor_slugs=json.dumps([monitor]), related_bill_ids="[]")
 
-    def test_one_sentence_quoted_in_two_issues_is_not_a_negative(self):
-        assert ac._shared_run("The board approved the plan on Monday morning.",
-                              "Officials said the board approved the plan on Monday.") >= ac.SAME_SENTENCE_RUN
+    def test_restatement_labels_come_from_what_the_lines_state(self):
+        """One fact: one sentence quoted twice, or the same figure about the
+        same actor. Two facts: two stories the data separates, or two
+        figures in one issue that share none."""
+        from datetime import date as d
+
+        lines = [
+            ("i0", d(2028, 3, 1), "The board approved the plan on Monday morning."),
+            ("i1", d(2028, 3, 1), "Officials said the board approved the plan on Monday."),   # quoted twice
+            ("i0", d(2028, 3, 1), "Senator Quillfeather raised $18 million."),
+            ("i1", d(2028, 3, 1), "Quillfeather's campaign took in $18 million."),            # one figure
+            ("i2", d(2028, 3, 1), "The agency spent $10 million on ads."),
+            ("i2", d(2028, 3, 1), "Nearly $22 million has been spent."),                       # two figures
+            ("i3", d(2028, 3, 2), "Senator Quillfeather spoke at a rally."),
+            ("i9", d(2028, 3, 9), "The board approved the plan on Monday morning, again."),   # a week on
+        ]
+        labelled = {(lines[i][2][:12], lines[j][2][:12]): one
+                    for i, j, one in ac.restatement_pairs(lines, {("i0", "i3")})}
+        assert labelled[("The board ap", "Officials sa")] is True
+        assert labelled[("Senator Quil", "Quillfeather")] is True
+        assert labelled[("The agency s", "Nearly $22 m")] is False
+        assert labelled[("The board ap", "Senator Quil")] is False  # i0 and i3: two stories
+        assert not any("again" in a or "again" in b for a, b in labelled)
+
+    def test_the_restatement_fit_is_held_out_against_the_cut_in_use(self, monkeypatch):
+        """Issues in different monitors on different days are two stories;
+        their lines are the two-fact pairs the cut is fitted above."""
+        issues = [self._issue_row(f"2028-03-0{1 + i % 2}", [f"Example acted {i}."], f"m{i}")
+                  for i in range(12)]
+        issues += [self._issue_row(f"2028-03-0{1 + i % 2}", [f"Rep. Other said {i}{i}0 jobs went.",
+                                                             f"Others put it at {i}{i}0 jobs."], f"x{i}")
+                   for i in range(4)]
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: np.eye(len(texts)))
+        fitted = ac.fit_restatement_cut(issues, in_use=0.99)
+        assert fitted["negatives"] >= ac.MIN_HARD_NEGATIVES and fitted["positives"] == 4
+        assert fitted["threshold"] == round(fitted["fitted"] + ac.CUT_MARGIN, 2)
+        assert fitted["in_use"] == 0.99 and "kept" in fitted
 
     def test_the_bundled_cuts_say_where_they_came_from(self):
         from app.pipeline.analyze import claims
@@ -372,8 +508,8 @@ class TestCutRefit:
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(claims, "_restatement_calibration_cache", None)
         fits = []
-        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: fits.append(1) or {"threshold": 0.66})
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: {"threshold": 0.81})
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: fits.append(1) or {"threshold": 0.66, "kept": None})
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: {"threshold": 0.81, "kept": None})
         db_session.add(Senator(id="pending-one", name="Pending One", state="ZZ", party="I"))
         db_session.flush()  # the refresh's own pending work
         freeze_utcnow(datetime(2028, 3, 1, 9))
@@ -389,13 +525,52 @@ class TestCutRefit:
 
     def test_a_short_fit_keeps_the_stored_cut(self, db_session, freeze_utcnow, monkeypatch):
         monkeypatch.setattr(ac, "_cuts_cache", {})
-        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "api_cache_get", lambda *a, **k: None)
         freeze_utcnow(datetime(2028, 3, 1, 9))
         ac.refit_cuts(db_session)
         bundled = json.loads(ac._CLUSTER_CALIBRATION_PATH.read_text())["threshold"]
         assert ac.cluster_calibration()["threshold"] == bundled
+
+    def test_the_first_refresh_after_a_restart_replaces_a_stuck_cluster_cut(self, db_session, freeze_utcnow,
+                                                                           monkeypatch):
+        """The refit is held out against the cut in use, read from the store,
+        and runs on the process's first refresh of the day: a process started
+        after a deploy measures the stored 0.87 that joined nothing and
+        replaces it at once. A refit not adopted leaves the cut in use and
+        records why."""
+        from app.pipeline.analyze import claims
+        from app.pipeline.cache import api_cache_get, api_cache_set
+
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(claims, "_restatement_calibration_cache", None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
+        monkeypatch.setattr(ac, "fit_near_identical_cut", lambda *a, **k: None)
+        monkeypatch.setattr(ac, "SessionLocal", lambda: _Borrowed(db_session))
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        api_cache_set(db_session, "action-cuts", "cluster", {"threshold": 0.87}, normal_ttl_hours=24 * 400)
+        db_session.add(ActionIssue(date="2028-02-28", rank=1, title="t", summary="s", facts="[]", actions="[]",
+                                   source_urls='["u1", "u2"]', source_names="[]", policy_areas="[]",
+                                   related_bill_ids="[]", related_explore_ids="[]", related_senators="[]",
+                                   related_monitor_slugs="[]", concerned_count=0, not_priority_count=0,
+                                   created_at=datetime(2028, 2, 28)))
+        db_session.flush()
+        seen = {}
+
+        def fit(articles, issue_sources=(), in_use=None):
+            seen.update(in_use=in_use, sources=list(issue_sources))
+            return {"threshold": 0.72, "kept": None if in_use == 0.87 else "held-out recall would drop"}
+
+        monkeypatch.setattr(ac, "fit_cluster_cut", fit)
+        ac.refit_cuts(db_session)
+        assert seen["in_use"] == 0.87 and seen["sources"] == [["u1", "u2"]]
+        assert ac.cluster_calibration()["threshold"] == 0.72
+        assert api_cache_get(db_session, "action-cuts", "cluster", max_age_hours=24)["threshold"] == 0.72
+        freeze_utcnow(datetime(2028, 3, 2, 9))
+        ac.refit_cuts(db_session)  # measured against 0.72 now, and not adopted
+        assert seen["in_use"] == 0.72 and ac.cluster_calibration()["threshold"] == 0.72
+        assert api_cache_get(db_session, "action-cuts", "cluster-refit", max_age_hours=24)["kept"]
 
 
 class TestNearIdenticalCut:
@@ -463,8 +638,8 @@ class TestNearIdenticalCut:
         from app.pipeline.cache import api_cache_get
 
         monkeypatch.setattr(ac, "_cuts_cache", {})
-        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         seen = {}
 
         def fit(rows, articles=(), in_use=None):
@@ -482,8 +657,8 @@ class TestNearIdenticalCut:
 
     def test_a_refit_is_used_at_once(self, db_session, freeze_utcnow, monkeypatch):
         monkeypatch.setattr(ac, "_cuts_cache", {})
-        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "fit_near_identical_cut", lambda rows, articles=(), in_use=None: {"threshold": 0.83})
         freeze_utcnow(datetime(2028, 3, 1, 9))
         ac.refit_cuts(db_session)
