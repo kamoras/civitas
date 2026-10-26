@@ -620,7 +620,7 @@ docker compose logs --since 1h backend
 ```
 
 Container logs rotate at 30 MB each (about a day), so an overnight problem is
-easier to find on the admin Overview's **Ops alerts** panel, or on your
+easier to find on the admin's **Alerts** tab (Overview shows how many are open), or on your
 phone with ntfy, than in the logs.
 
 ### Common failures

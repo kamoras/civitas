@@ -17,8 +17,8 @@ import json
 import logging
 from typing import Any
 
-from app.error_utils import exception_summary
-from app.models import ScoreSnapshot
+from app.error_utils import count_source_failure, exception_summary
+from app.models import HousePipelineRun, PipelineRun, ScoreSnapshot
 from app.score_keeping import hold_record
 from app.time_utils import utcnow
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
@@ -159,15 +159,29 @@ def alert_member_failures(
         logger.exception("Member-failure alert failed (non-fatal)")
 
 
+# The run table each chamber's members are scored in: the run kind a
+# member's source failure is counted under.
+_MEMBER_RUN_KINDS = {
+    "senator": PipelineRun.__tablename__,
+    "representative": HousePipelineRun.__tablename__,
+}
+
+
 def record_member_holds(db: Any, model: Any, entity_type: str, failures: list[tuple[str, BaseException]]) -> None:
     """Mark each member the run could not score as holding an earlier run's
     score (``score_held``): the run of the member's latest snapshot, and the
     source the run could not read when the exception names one. The
     profile, leaderboard and compare page say so beside the score; the next
-    run that scores the member clears it (upsert). Never raises."""
+    run that scores the member clears it (upsert). Never raises.
+
+    A member who failed because a source refused or couldn't be read
+    (ExpectedSourceFailure) is also counted, as a step "member" of the
+    chamber's run, beside the steps record_exception counts."""
     try:
         today = utcnow().date().isoformat()
+        run_kind = _MEMBER_RUN_KINDS.get(entity_type, entity_type)
         for member_id, exc in failures:
+            count_source_failure(db, run_kind, "member", exc)
             row = db.get(model, member_id)
             if row is None:  # never stored: no score is shown, so none is held
                 continue
