@@ -979,7 +979,7 @@ async def _retry_after_lapse(client: httpx.AsyncClient, call: Callable[[], Await
         return await call()
     except SessionLapsed:
         logger.info("Senate eFD session lapsed — re-accepting terms")
-    if await senate_accept_terms(client) is None:
+    if await senate_accept_terms(client, renew=True) is None:
         raise _TermsRefused
     return await call()
 

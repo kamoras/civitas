@@ -56,8 +56,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-import httpx
 
+from app.http_client import source_request
 from app import census_lines, precision_rule, scoring_revisions, site_search
 from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
@@ -964,13 +964,13 @@ def _district_lean_stale(ctx: Context) -> object:
     vest_year, medsl_year = min(years) + 4, max(years) + 4
     headers = {"User-Agent": USER_AGENT}
     try:
-        resp = httpx.get("https://dataverse.harvard.edu/api/search", params={
+        resp = source_request("GET", "https://dataverse.harvard.edu/api/search", params={
             "q": f'"{vest_year} Precinct-Level Election Results"', "type": "dataset", "per_page": 20,
         }, headers=signed_headers("https://dataverse.harvard.edu/", headers), timeout=30)
         resp.raise_for_status()
         vest = [i for i in resp.json().get("data", {}).get("items", [])
                 if i.get("name") == f"{vest_year} Precinct-Level Election Results"]
-        repo = httpx.get(f"https://api.github.com/repos/MEDSL/{medsl_year}-elections-official",
+        repo = source_request("GET", f"https://api.github.com/repos/MEDSL/{medsl_year}-elections-official",
                          headers=signed_headers("https://api.github.com/", headers), timeout=30)
     except Exception:
         logger.info("district lean release check: Dataverse or GitHub unreadable", exc_info=True)
@@ -1325,7 +1325,7 @@ def _agency_crosswalk_gate(new: dict, old: dict) -> list[str]:
 
 def _get_text(url: str) -> str | None:
     try:
-        resp = httpx.get(url, headers=signed_headers(url, {"User-Agent": USER_AGENT}), timeout=60, follow_redirects=True)
+        resp = source_request("GET", url, headers=signed_headers(url, {"User-Agent": USER_AGENT}), timeout=60, follow_redirects=True)
         resp.raise_for_status()
         return resp.text
     except Exception:
@@ -1335,7 +1335,7 @@ def _get_text(url: str) -> str | None:
 
 def _url_exists(url: str) -> bool | None:
     try:
-        resp = httpx.head(url, headers=signed_headers(url, {"User-Agent": USER_AGENT}), timeout=60, follow_redirects=True)
+        resp = source_request("HEAD", url, headers=signed_headers(url, {"User-Agent": USER_AGENT}), timeout=60, follow_redirects=True)
     except Exception:
         logger.info("Data refresh: %s unreachable", url, exc_info=True)
         return None

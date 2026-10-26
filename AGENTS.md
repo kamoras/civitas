@@ -1146,6 +1146,25 @@ Corollaries that follow from the same rule, all enforced in code:
   a new fetch module is listed by its URL constants and its RateLimiter,
   and a new scheduled job that reads from outside takes its trigger from
   `crawler.SCHEDULE`.
+  **And every request keeps the same manners** (`app/crawl_policy.py`,
+  2026-10-25), applied where requests leave: `make_async_client`'s `send`,
+  and `http_client.source_request` / `source_gate` for a blocking read
+  (module-level httpx, urllib, requests). One request at a time per host,
+  starts at least a second apart (a reader's faster published limit, or the
+  host's Crawl-delay, sets it otherwise); the host's robots.txt read first,
+  for its Crawl-delay only: it sets pacing and never blocks a read (owner
+  decision, 2026-10-25; the weekly state source crawl, which discovers pages
+  by following links, still skips what robots.txt disallows); a challenge or a
+  429 backs the whole host off (30 minutes, doubling to a week, one probe
+  when it ends), kept on the data volume (`host_refusals.json`) so every
+  job and process keeps to it; a Retry-After is honoured; a 401/403 is not
+  retried within a fetch. A refused request raises `HostRefusing` (an
+  `httpx.TransportError`) without sending: read it as the failed fetch it
+  is. A new blocking fetch goes through `source_request`, never a bare
+  `httpx.get`. eFD is asked once a night (`senate_ptr.accept_terms` keeps
+  one session per client, and `raise_if_refusing` starts no request and no
+  browser while its backoff holds). Feeds read on a schedule shorter than
+  they change use `http_client.conditional_get` (ETag / Last-Modified).
   A wall is not a dead link, though. A voting step's link (the state
   page's "Your vote, step by step", one official link per task,
   `ballot_lookup.vote_steps`) the nightly link check is refused on

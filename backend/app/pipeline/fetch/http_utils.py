@@ -35,7 +35,8 @@ import requests
 
 from app.contact import USER_AGENT
 from app.error_utils import redact_sensitive_params
-from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge
+from app.crawl_policy import HostRefusing
+from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge, observe_answer, source_gate
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,14 @@ async def fetch_with_retry(
                 logger.debug("%s: %s — HTTP %d (no retry)", label, url, resp.status_code)
                 return None
 
+            if resp.status_code in (401, 403):
+                # A refusal is not transient within seconds: asking again
+                # at once is only more requests to a host that said no
+                # (www.senate.gov's 403s were asked three times each,
+                # every half hour, until 2026-10-25).
+                logger.error("%s refused (no retry): %s — HTTP %d", label, url, resp.status_code)
+                return None
+
             if resp.status_code >= 400:
                 if not retry_on_4xx and 400 <= resp.status_code < 500:
                     logger.error("%s client error (no retry): %s — HTTP %d", label, url, resp.status_code)
@@ -219,6 +228,12 @@ async def fetch_with_retry(
                 )
 
             return resp
+        except HostRefusing as e:
+            # Nothing was sent (app/crawl_policy.py): the host is refusing
+            # Civitas, or its pace is too slow to wait
+            # for. Asking again now would be refused the same way.
+            logger.warning("%s: %s", label, e)
+            return None
         except Exception as e:
             if attempt == retries:
                 # The exception's own message can embed the request URL,
@@ -335,6 +350,15 @@ async def fetch_bytes_with_retry(
     return resp.content if resp is not None else None
 
 
+def _gated_request(method: str, url: str, timeout: float, kwargs: dict) -> "requests.Response":
+    """requests.request with the source's manners (http_client.source_gate)."""
+    with source_gate(url, method):
+        resp = requests.request(method, url, timeout=timeout, **kwargs)
+    observe_answer(getattr(resp, "url", None) or url, resp.status_code,
+                   getattr(resp, "headers", None), (getattr(resp, "content", None) or b"")[:4096])
+    return resp
+
+
 async def fetch_with_retry_requests(
     rate_limiter: RateLimiter,
     method: str,
@@ -377,11 +401,8 @@ async def fetch_with_retry_requests(
             # is stopped for 12 hours", which is the failure being fixed;
             # requests' timeout is a real per-socket-operation timeout and
             # does fire, so the thread is not leaked indefinitely.
-            resp = await bounded(
-                asyncio.to_thread(requests.request, method, url, timeout=timeout, **request_kwargs),
-                timeout,
-                label=label,
-            )
+            resp = await bounded(asyncio.to_thread(_gated_request, method, url, timeout, request_kwargs),
+                                 timeout, label=label)
 
             if resp.status_code == 429:
                 wait = backoff_s * attempt
@@ -389,10 +410,17 @@ async def fetch_with_retry_requests(
                 await asyncio.sleep(wait)
                 continue
 
+            if resp.status_code in (401, 403):
+                logger.error("%s refused (no retry): %s — HTTP %d", label, url, resp.status_code)
+                return None
+
             if resp.status_code >= 400:
                 raise requests.HTTPError(f"HTTP {resp.status_code}", response=resp)
 
             return resp
+        except HostRefusing as e:
+            logger.warning("%s: %s", label, e)
+            return None
         except Exception as e:
             if attempt == retries:
                 # The type too: a timeout's message is often empty, which
