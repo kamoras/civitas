@@ -1175,7 +1175,7 @@ async def run_holdings_phases(
                 "before failing are kept (each member is committed as it's done); every "
                 "other member's stored holdings stay as they were and will age until a "
                 "run succeeds; the next nightly run tries again. "
-                + (f"Cause: {exception_summary(e)}." if expected
+                + (f"Cause: {exception_summary(e).rstrip('.')}." if expected
                    else "The cause and its traceback are on the run row (admin, Pipelines)."),
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
                 condition=f"holdings-failed-{step}",
