@@ -73,13 +73,14 @@ GATES = {
     "roll_call_links": ("roll_call_link_calibration.json", "stories linked to a related vote in Congress"),
     "near_identical": ("action_thresholds.json", "issue pairs joined as one story by their titles alone"),
     "cluster": ("cluster_pair_calibration.json", "feed articles clustered with another report of their event"),
+    "restatement": ("claim_restatement_calibration.json", "claims dropped as restating an earlier one"),
 }
 
 # Gates whose fit in use is the Action Center's daily refit, stored in
 # api_cache (tier CUTS_TIER, under the gate's key: action_center.refit_cuts),
 # with the bundled file as the fallback before the first refit.
 CUTS_TIER = "action-cuts"
-STORED_CUTS = {"near_identical": "near_identical", "cluster": "cluster"}
+STORED_CUTS = {"near_identical": "near_identical", "cluster": "cluster", "restatement": "restatement"}
 
 
 # A self-refitting gate's file: what defines its calibration in use is its
@@ -89,6 +90,7 @@ PARAMETERS = {
     "member_photo": ("margin", "depiction_ceiling"),
     "near_identical": ("threshold",),
     "cluster": ("threshold",),
+    "restatement": ("threshold",),
 }
 
 # Gates that refit themselves from data-supplied labels, by the data_refresh
@@ -99,6 +101,7 @@ REFITTING = {
     "member_photo": "member_photo_calibration.json",
     "near_identical": None,
     "cluster": None,
+    "restatement": None,
 }
 REFIT_GRACE_DAYS = 3
 

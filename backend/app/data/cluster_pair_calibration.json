@@ -4,9 +4,9 @@
   "articles": 696,
   "fitted": 0.62,
   "margin": 0.1,
-  "negatives": 538,
+  "negatives": 544,
   "negatives_reaching": 4,
-  "positives": 448,
+  "positives": 454,
   "positives_joined": 15,
   "quantile": 0.99,
   "threshold": 0.72

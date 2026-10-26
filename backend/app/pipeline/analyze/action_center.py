@@ -26,7 +26,6 @@ import re
 import textwrap
 import threading
 from collections import Counter
-from difflib import SequenceMatcher
 from functools import lru_cache
 import time
 from collections.abc import Callable, Sequence
@@ -294,6 +293,15 @@ CUT_FOLDS = 4
 # a held-out check, never fitted to) merge one judged different-event pair
 # and 17 judged same-event ones; 0.995 gave 0.85 and kept the cut stuck.
 CLUSTER_NEGATIVE_QUANTILE = 0.99
+# The share of two-fact pairs the restatement cut is fitted above. On the
+# three weeks of issues and four of articles to 2026-10-25 (331 two-fact
+# pairs, 36 one-fact) the rule held out against the cut in use (0.96) is
+# refused at 0.99 (0.83: held-out precision bound 0.631 against 0.735) and
+# at the maximum (0.94: 0.727), and adopted at 0.995 (0.87: 20 of 21 calls
+# one fact, bound 0.762, recall 0.556 against 0.333). The top two-fact pairs
+# are one official's two remarks on two days (0.835) and an answer to a
+# rule (0.76): different facts that score like restatements.
+RESTATEMENT_NEGATIVE_QUANTILE = 0.995
 # How far back each fit reads: about four weeks of national-feed articles
 # (feed_articles), and three weeks of published issues.
 CLUSTER_REFIT_DAYS = 28
@@ -316,16 +324,12 @@ CLUSTER_DESCRIPTION_CHARS = 200
 # where they put restatement (0.75): a choice, made so the change of labels
 # loosens neither, reported beside the fit in every refit and never fitted.
 CUT_MARGIN = 0.10
-# Words two claim lines must share in a row to be one sentence quoted
-# twice (left out of the restatement fit's negatives).
-SAME_SENTENCE_RUN = 5
 
 _CUTS_TIER = calibration_drift.CUTS_TIER
 _CUTS_TTL_HOURS = 24 * 400
 _CLUSTER_CALIBRATION_PATH = _DATA_DIR / "cluster_pair_calibration.json"
 _cuts_cache: dict = {}
 
-_WORD_RE = re.compile(r"[a-z0-9']+")
 _WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _WEEKDAY_RE = re.compile(r"\b(" + "|".join(_WEEKDAYS) + r")\b", re.IGNORECASE)
 _MONTH_ABBREVIATIONS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
@@ -486,37 +490,91 @@ def fit_cluster_cut(articles: Sequence[tuple], issue_sources: Sequence[Sequence[
     return out
 
 
-def _shared_run(a: str, b: str) -> int:
-    """The longest run of words two lines share, verbatim."""
-    x, y = _WORD_RE.findall(a.lower()), _WORD_RE.findall(b.lower())
-    return SequenceMatcher(None, x, y, autojunk=False).find_longest_match(0, len(x), 0, len(y)).size
+def restatement_pairs(lines: Sequence[tuple], two_stories: set = frozenset()) -> list[tuple[int, int, bool]]:
+    """(i, j, one fact) for the pairs of (group, date, line) claim lines
+    within a day of each other that the data decides. A group is one issue
+    or one feed article; `two_stories` holds the pairs of groups the data
+    says are two stories.
 
-
-def fit_restatement_cut(issues: Sequence[tuple[int, str, list[str]]]) -> dict | None:
-    """The restatement cut for (issue id, date, lines) issues: the lowest
-    cosine no pair of lines from two different issues published within a
-    day of each other that share a distinctive entity reaches, plus
-    CUT_MARGIN. The pipeline published them as two stories, so they are two
-    facts; a pair sharing SAME_SENTENCE_RUN words verbatim is left out (one
-    sentence quoted twice is one fact however the issues split)."""
-    lines = [(iid, date.fromisoformat(d[:10]), line)
-             for iid, d, ls in issues for line in ls if line and line.strip()]
-    if len(lines) < 2:
-        return None
+    One fact: the two quote one sentence (claims.SAME_SENTENCE_RUN words in
+    a row), or state the same figure and share a distinctive entity. Two
+    facts: lines of two stories, or two lines of one issue stating figures
+    with none in common ("$10 million spent" and "nearly $22 million
+    spent"). Any other pair is left out."""
     signatures = [_issue_signature(line, []) for _, _, line in lines]
+    figures = [claim_layer.stated_figures(line) for _, _, line in lines]
     df: Counter = Counter()
     for s in signatures:
         df.update(s)
-    pairs = [(i, j) for i, j in itertools.combinations(range(len(lines)), 2)
-             if lines[i][0] != lines[j][0] and abs((lines[i][1] - lines[j][1]).days) <= 1
-             and _shares_distinctive_entity(signatures[i], signatures[j], df, len(lines))
-             and _shared_run(lines[i][2], lines[j][2]) < SAME_SENTENCE_RUN]
-    if len(pairs) < MIN_HARD_NEGATIVES:
+    order = sorted(range(len(lines)), key=lambda n: lines[n][1])
+    out = []
+    for a, i in enumerate(order):
+        for j in order[a + 1:]:
+            (gi, di, li), (gj, dj, lj) = lines[i], lines[j]
+            if (dj - di).days > 1:
+                break
+            if li.strip().lower() == lj.strip().lower():
+                continue
+            if claim_layer.shared_run(li, lj) >= claim_layer.SAME_SENTENCE_RUN or (
+                    figures[i] & figures[j] and _shares_distinctive_entity(signatures[i], signatures[j], df, len(lines))):
+                out.append((i, j, True))
+            elif (gi, gj) in two_stories or (gj, gi) in two_stories:
+                out.append((i, j, False))
+            elif gi == gj and figures[i] and figures[j]:
+                out.append((i, j, False))
+    return out
+
+
+def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use: float | None = None) -> dict | None:
+    """The restatement cut, from published issues (rows with date, summary,
+    facts and what near_identical_pairs reads) and (title, description,
+    published) feed articles, whose headlines are claims as an outlet
+    worded them: the lowest cosine above RESTATEMENT_NEGATIVE_QUANTILE of
+    the two-fact pairs restatement_pairs labels, plus CUT_MARGIN. Two
+    stories are two issues near_identical_pairs calls two, and two articles
+    about one actor dated days apart (stated_day_negatives); until
+    2026-10-25 any two issues published within a day were, which counted
+    the same exit and the same diesel deal, published as separate issues
+    while clustering joined nothing, as two facts at 0.86 and held the cut
+    at 0.96. None with fewer than MIN_HARD_NEGATIVES two-fact pairs.
+
+    With `in_use`, the rule is held out on blocks of days against the cut in
+    use (_held_out_against, a pair at or above the cut called one fact):
+    `kept` says why the cut in use stays, or is None when the refit is
+    adopted."""
+    lines = []
+    for n, row in enumerate(issues):
+        try:
+            facts = json.loads(row.facts or "[]")
+        except ValueError:
+            facts = []
+        for line in [row.summary or "", *facts]:
+            if line and line.strip():
+                lines.append((("issue", n), date.fromisoformat(str(row.date)[:10]), line))
+    lines += [(("article", n), a[2].date(), a[0]) for n, a in enumerate(articles) if a[0]]
+    if len(lines) < 2:
+        return None
+    two_stories = {(("issue", i), ("issue", j)) for i, j, same in near_identical_pairs(issues) if not same}
+    two_stories |= {(("article", i), ("article", j)) for i, j in stated_day_negatives(articles)}
+    pairs = restatement_pairs(lines, two_stories)
+    same = np.array([one for _, _, one in pairs], bool)
+    if (~same).sum() < MIN_HARD_NEGATIVES:
         return None
     vectors = _embed_texts_sim([line for _, _, line in lines])
-    fitted = _zero_merge_cut([float(vectors[i] @ vectors[j]) for i, j in pairs])
-    return {"threshold": round(min(fitted + CUT_MARGIN, 0.99), 2), "fitted": fitted, "margin": CUT_MARGIN,
-            "negatives": len(pairs), "lines": len(lines)}
+    scores = np.array([float(vectors[i] @ vectors[j]) for i, j, _ in pairs])
+    days = np.array([max(lines[i][1], lines[j][1]).toordinal() for i, j, _ in pairs])
+
+    def cut(negatives: np.ndarray) -> float:
+        return round(min(_zero_merge_cut(negatives, RESTATEMENT_NEGATIVE_QUANTILE) + CUT_MARGIN, 0.99), 2)
+
+    threshold = cut(scores[~same])
+    out = {"threshold": threshold, "fitted": _zero_merge_cut(scores[~same], RESTATEMENT_NEGATIVE_QUANTILE),
+           "margin": CUT_MARGIN, "quantile": RESTATEMENT_NEGATIVE_QUANTILE, "negatives": int((~same).sum()),
+           "negatives_reaching": int((scores[~same] >= threshold).sum()), "positives": int(same.sum()),
+           "positives_joined": int((scores[same] >= threshold).sum()), "lines": len(lines)}
+    if in_use is not None:
+        out.update(_held_out_against(scores, same, days, in_use, cut))
+    return out
 
 
 def _json_set(raw) -> set:
@@ -643,13 +701,7 @@ def refit_cuts(db: Session) -> None:
         ActionIssue.source_type.is_(None),
         ActionIssue.date >= (since - timedelta(days=REMATCH_WINDOW_DAYS)).date().isoformat())]
     issue_since = (utcnow() - timedelta(days=RESTATEMENT_REFIT_DAYS)).date().isoformat()
-    issues = []
-    for row in db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since):
-        try:
-            facts = json.loads(row.facts or "[]")
-        except ValueError:
-            facts = []
-        issues.append((row.id, row.date, [row.summary or "", *facts]))
+    issues = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since).all()
     # The near-identical fit reads every stored issue and kept article: its
     # same-story pairs are rare in any few weeks (9 in the three weeks to
     # 2026-10-22), and it is held out on blocks of days.
@@ -657,7 +709,8 @@ def refit_cuts(db: Session) -> None:
     near_articles = [(r.title, r.description, r.published or r.seen_at)
                      for r in db.query(FeedArticle).filter(FeedArticle.kept.is_(True))]
     fits = {"cluster": fit_cluster_cut(articles, issue_sources, in_use=float(cluster_calibration()["threshold"])),
-            "restatement": fit_restatement_cut(issues),
+            "restatement": fit_restatement_cut(
+                issues, [a[:3] for a in articles], in_use=float(claim_layer.restatement_calibration()["threshold"])),
             "near_identical": fit_near_identical_cut(near_rows, near_articles, in_use=near_identical_cut())}
     for key, fitted in fits.items():
         if fitted is None:
@@ -682,7 +735,7 @@ def refit_cuts(db: Session) -> None:
             logger.warning("Cut refit (%s) not stored; used in this process only", key, exc_info=True)
         _cuts_cache[key] = (fitted, utcnow())
         logger.info("Cut refit (%s): %s", key, fitted)
-    if fits["restatement"] is not None:
+    if fits["restatement"] is not None and not fits["restatement"].get("kept"):
         claim_layer.set_restatement_calibration(fits["restatement"])
 
 
@@ -720,6 +773,19 @@ def cluster_calibration() -> dict:
 # fewer issues attempted per run means only the strongest candidates by
 # the ranking get a shot, at the direct cost of quantity. The outlet counts
 # of the clusters tried and dropped are logged (cluster_rank_outlets_*).
+#
+# Counted in NEW topics since 2026-10-25. An update to a story already
+# published (a cluster _find_matching_issue matches) used to fill a slot
+# too, so once clusters joined again the day's top published stories
+# re-matched every hour, filled both slots, and no new story was tried:
+# replayed over 2026-10-17..25 at the 0.72 clustering cut, 2.05 new issues a
+# day (19 distinct clusters tried), against 4.04 (49 tried) counting only
+# new topics, with every try still drawn from CANDIDATE_POOL, so a run asks
+# the model no more often than before. Each passes the same gates; the
+# share from two or more outlets fell from 0.44 to 0.26, their number rose
+# from 0.90 to 1.05 a day. Leaving updates out of the pool too
+# gave 6.67 a day but tried 122 clusters a day, mostly single-outlet ones,
+# and was not adopted.
 MAX_ISSUES = 2
 
 # How many ranked clusters a run may TRY to fill MAX_ISSUES slots. Separate
@@ -5638,6 +5704,7 @@ def _run_refresh(db: Session) -> int:
     _new_issues: list[ActionIssue] = []   # newly inserted rows (no ID yet)
 
     issues_created = 0
+    new_topics = 0
     stories_built = 0
     # (title, embedding) pairs for post-LLM dedup within a single run
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
@@ -6133,10 +6200,12 @@ def _run_refresh(db: Session) -> int:
                 stories_built += 1
 
         issues_created += 1
+        new_topics += match is None
         published_clusters.append(cluster_index)
         # Stop before asking for another candidate: the generator counts
-        # each one it yields as tried.
-        if issues_created >= MAX_ISSUES:
+        # each one it yields as tried. Only new topics fill MAX_ISSUES
+        # (comment above it); an update still used one of the pool's tries.
+        if new_topics >= MAX_ISSUES:
             break
 
     # Flush to assign IDs to newly inserted rows, then mark them as touched.

@@ -230,7 +230,7 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
+| 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (refit daily from the issues and feed articles, `claim_restatement_*.json`, `action_center.fit_restatement_cut`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against bills labelled by their Congress.gov committee referrals and texts no committee handles, refit daily, blended with tier-2 jurisdiction prototypes: `app/committee_routing.py`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
@@ -751,7 +751,9 @@ recorded with why (`precision_rule.compare`). Today that is the
 near-identical cut (issue pairs plus feed articles the text dates days
 apart, `action_center.fit_near_identical_cut`), the clustering cut (feed
 article pairs: one issue's sources or one stated day against stated days
-apart, `action_center.fit_cluster_cut`), the related-vote threshold
+apart, `action_center.fit_cluster_cut`), the claim restatement cut (one
+sentence quoted twice or one figure stated twice against two stories'
+lines, `action_center.fit_restatement_cut`), the related-vote threshold
 (`roll_call_links.refit`, on `RollCallLinkLabel`) and committee routing (bills'
 committee referrals and texts no committee handles,
 `scripts/calibrate_committee_routing.py`, run daily by `data_refresh` and
@@ -1746,7 +1748,9 @@ fit was the maximum of those pairs, adopted unchecked: one mislabelled pair
 was its own cluster, and single articles rarely reach two verified claims,
 so new issues stopped. A cluster that fails the claims gates is passed over
 for the rest of the day, `_failed_today`, so the candidate pool reaches
-lower ranks), incorporates trending topics from Google Trends and Bluesky,
+lower ranks; only new topics fill `MAX_ISSUES`, since an update to a story
+already published taking a slot let the day's top stories fill both every
+hour), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and

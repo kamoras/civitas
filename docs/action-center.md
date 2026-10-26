@@ -75,7 +75,12 @@ Every hour at :15
        │         civic-document corpus, trending (each key breaks only the
        │         ties left by the ones before; docs/research/action-center-ranking.md)
        │         Try ranked clusters in order (up to CANDIDATE_POOL = 6)
-       │         until MAX_ISSUES = 2 publish — a cluster that fails a gate
+       │         until MAX_ISSUES = 2 NEW topics publish (an update to a
+       │         story already published uses a try, not a slot; until
+       │         2026-10-25 it took a slot, and the day's top stories
+       │         re-matched every hour and filled both). A cluster that
+       │         failed the claims gates is passed over for the rest of
+       │         the day. A cluster that fails a gate
        │         falls through to the next instead of ending the run. A
        │         cluster is skipped as a duplicate only of one that
        │         PUBLISHED this run: on 2026-10-08 a two-story live blog
@@ -143,10 +148,16 @@ Every hour at :15
        │         statement), is refused: the first is the speaker's account
        │         published as fact. Two claims that restate one fact count
        │         once (claims.distinct_claims: similarity-model cosine >=
-       │         a cut refit daily as the lowest no pair of lines from two
-       │         issues published together reaches, plus 0.10: 0.79 on
-       │         2026-10-16), so a headline and its own lede can't pass
-       │         the two-claim gate as two facts.
+       │         a cut refit daily above the 99.5th percentile of pairs the
+       │         data calls two facts, two stories' lines and two articles
+       │         about one actor dated days apart, plus 0.10, adopted only
+       │         under precision_rule.accept against one sentence quoted
+       │         twice and one figure stated twice: 0.87 on 2026-10-25).
+       │         Precision-first, it misses some rewordings: on the
+       │         replayed clusters of 2026-10-17..25 one fact in two
+       │         outlets' words scored 0.62 to 0.86 and two facts 0.51 to
+       │         0.84, so no cut separates them and a reworded fact can
+       │         still count twice at the two-claim gate.
        │         Title = the top article's real headline, never a
        │         livestream or video page's: an article whose headline
        │         kicker (the label before its first ": ") scores past the

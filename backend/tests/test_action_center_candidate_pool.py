@@ -230,6 +230,25 @@ def test_a_live_blog_listing_several_stories_never_titles_an_issue(db_session, r
     assert not live & set(asked)
 
 
+def test_an_update_to_a_published_story_does_not_fill_a_new_topic_slot(db_session, refresh, monkeypatch):
+    """Only new topics count against MAX_ISSUES: cluster 3 re-matches a
+    story already published, so 5 and 6 still publish, all inside the
+    candidate pool (2026-10-22..24 replayed: the top stories' updates filled
+    both slots every hour and no new story was tried)."""
+    existing = ActionIssue(date="2026-10-24", rank=1, title="Story 3 earlier", summary="s", facts="[]",
+                           actions="[]", source_urls="[]", source_names="[]", policy_areas="[]",
+                           related_bill_ids="[]", related_explore_ids="[]", related_senators="[]",
+                           related_monitor_slugs="[]", concerned_count=0, not_priority_count=0,
+                           created_at=action_center.utcnow())
+    db_session.add(existing)
+    db_session.flush()
+    monkeypatch.setattr(action_center, "_find_matching_issue",
+                        lambda title, *a, **k: existing if title.startswith("Story 3") else None)
+    assert action_center._run_refresh(db_session) == 3
+    titles = sorted(i.title for i in db_session.query(ActionIssue).all())
+    assert titles == ["Story 3 headline 0", "Story 5 headline 0", "Story 6 headline 0"]
+
+
 def test_a_cluster_that_failed_the_claims_gates_today_is_passed_over(db_session, refresh, monkeypatch):
     """The locate calls are cached by day, rank and source, so a cluster that
     failed keeps failing: on 2026-10-24 and 25 the same six filled the pool

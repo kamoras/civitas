@@ -448,19 +448,50 @@ class TestCutRefit:
     def test_the_cluster_fit_needs_enough_pairs(self):
         assert ac.fit_cluster_cut([("a", "Monday", datetime(2028, 3, 3))]) is None
 
-    def test_the_restatement_fit_reads_separate_stories_published_together(self, monkeypatch):
-        issues = [(i, "2028-03-01", [f"Senator Example acted {i}."]) for i in range(12)]
-        issues.append((99, "2028-03-20", ["Senator Example acted later."]))  # weeks apart: not read
-        seen = []
-        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
-        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: seen.append(list(texts)) or np.eye(len(texts)))
-        fitted = ac.fit_restatement_cut(issues)
-        assert fitted["negatives"] == 66  # 12 choose 2, all same-day separate issues
-        assert fitted["fitted"] == 0.01 and fitted["threshold"] == round(0.01 + ac.CUT_MARGIN, 2)
+    @staticmethod
+    def _issue_row(day, lines, monitor):
+        from types import SimpleNamespace
+        return SimpleNamespace(date=day, title=lines[0], summary=lines[0], facts=json.dumps(lines[1:]),
+                               source_urls="[]", related_monitor_slugs=json.dumps([monitor]), related_bill_ids="[]")
 
-    def test_one_sentence_quoted_in_two_issues_is_not_a_negative(self):
-        assert ac._shared_run("The board approved the plan on Monday morning.",
-                              "Officials said the board approved the plan on Monday.") >= ac.SAME_SENTENCE_RUN
+    def test_restatement_labels_come_from_what_the_lines_state(self):
+        """One fact: one sentence quoted twice, or the same figure about the
+        same actor. Two facts: two stories the data separates, or two
+        figures in one issue that share none."""
+        from datetime import date as d
+
+        lines = [
+            ("i0", d(2028, 3, 1), "The board approved the plan on Monday morning."),
+            ("i1", d(2028, 3, 1), "Officials said the board approved the plan on Monday."),   # quoted twice
+            ("i0", d(2028, 3, 1), "Senator Quillfeather raised $18 million."),
+            ("i1", d(2028, 3, 1), "Quillfeather's campaign took in $18 million."),            # one figure
+            ("i2", d(2028, 3, 1), "The agency spent $10 million on ads."),
+            ("i2", d(2028, 3, 1), "Nearly $22 million has been spent."),                       # two figures
+            ("i3", d(2028, 3, 2), "Senator Quillfeather spoke at a rally."),
+            ("i9", d(2028, 3, 9), "The board approved the plan on Monday morning, again."),   # a week on
+        ]
+        labelled = {(lines[i][2][:12], lines[j][2][:12]): one
+                    for i, j, one in ac.restatement_pairs(lines, {("i0", "i3")})}
+        assert labelled[("The board ap", "Officials sa")] is True
+        assert labelled[("Senator Quil", "Quillfeather")] is True
+        assert labelled[("The agency s", "Nearly $22 m")] is False
+        assert labelled[("The board ap", "Senator Quil")] is False  # i0 and i3: two stories
+        assert not any("again" in a or "again" in b for a, b in labelled)
+
+    def test_the_restatement_fit_is_held_out_against_the_cut_in_use(self, monkeypatch):
+        """Issues in different monitors on different days are two stories;
+        their lines are the two-fact pairs the cut is fitted above."""
+        issues = [self._issue_row(f"2028-03-0{1 + i % 2}", [f"Example acted {i}."], f"m{i}")
+                  for i in range(12)]
+        issues += [self._issue_row(f"2028-03-0{1 + i % 2}", [f"Rep. Other said {i}{i}0 jobs went.",
+                                                             f"Others put it at {i}{i}0 jobs."], f"x{i}")
+                   for i in range(4)]
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: np.eye(len(texts)))
+        fitted = ac.fit_restatement_cut(issues, in_use=0.99)
+        assert fitted["negatives"] >= ac.MIN_HARD_NEGATIVES and fitted["positives"] == 4
+        assert fitted["threshold"] == round(fitted["fitted"] + ac.CUT_MARGIN, 2)
+        assert fitted["in_use"] == 0.99 and "kept" in fitted
 
     def test_the_bundled_cuts_say_where_they_came_from(self):
         from app.pipeline.analyze import claims
@@ -478,7 +509,7 @@ class TestCutRefit:
         monkeypatch.setattr(claims, "_restatement_calibration_cache", None)
         fits = []
         monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: fits.append(1) or {"threshold": 0.66, "kept": None})
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: {"threshold": 0.81})
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: {"threshold": 0.81, "kept": None})
         db_session.add(Senator(id="pending-one", name="Pending One", state="ZZ", party="I"))
         db_session.flush()  # the refresh's own pending work
         freeze_utcnow(datetime(2028, 3, 1, 9))
@@ -495,7 +526,7 @@ class TestCutRefit:
     def test_a_short_fit_keeps_the_stored_cut(self, db_session, freeze_utcnow, monkeypatch):
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "api_cache_get", lambda *a, **k: None)
         freeze_utcnow(datetime(2028, 3, 1, 9))
         ac.refit_cuts(db_session)
@@ -514,7 +545,7 @@ class TestCutRefit:
 
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(claims, "_restatement_calibration_cache", None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "fit_near_identical_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "SessionLocal", lambda: _Borrowed(db_session))
         freeze_utcnow(datetime(2028, 3, 1, 9))
@@ -608,7 +639,7 @@ class TestNearIdenticalCut:
 
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         seen = {}
 
         def fit(rows, articles=(), in_use=None):
@@ -627,7 +658,7 @@ class TestNearIdenticalCut:
     def test_a_refit_is_used_at_once(self, db_session, freeze_utcnow, monkeypatch):
         monkeypatch.setattr(ac, "_cuts_cache", {})
         monkeypatch.setattr(ac, "fit_cluster_cut", lambda *a, **k: None)
-        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda *a, **k: None)
         monkeypatch.setattr(ac, "fit_near_identical_cut", lambda rows, articles=(), in_use=None: {"threshold": 0.83})
         freeze_utcnow(datetime(2028, 3, 1, 9))
         ac.refit_cuts(db_session)
