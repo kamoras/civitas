@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.database import SessionLocal
-from app.error_utils import exception_summary
+from app.error_utils import ExpectedSourceFailure, exception_summary
 from app.forecast.build import check_training_staleness as check_election_map_training_staleness
 from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
@@ -240,14 +240,19 @@ def reporter(run_name: str):
             # The cause's head line (where, type, message, the frame it
             # raised in); the traceback is on the run row, which outlives
             # the container's log.
+            # A source that refused or couldn't be read (ExpectedSourceFailure)
+            # is a failure the cause explains, not a crash, and has no
+            # traceback on the run row.
+            crash = outcome.status == CRASHED and not isinstance(outcome.error, ExpectedSourceFailure)
             if outcome.status == CRASHED:
                 why = exception_summary(outcome.error)
             else:
                 detail = (outcome.result or {}).get("error") or (outcome.result or {}).get("reason")
                 why = f"it ended {outcome.status} ({detail or 'see its run row'})"
             send_ops_alert(
-                f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
-                f"{why}. The traceback is on the run row (admin, Pipelines). {link.label} data stays as "
+                f"{run_name} {link.label} run {'crashed' if crash else 'failed'}",
+                f"{why.rstrip('.')}.{' The traceback is on the run row (admin, Pipelines).' if crash else ''} "
+                f"{link.label} data stays as "
                 "the last run left it until the next nightly run. The rest of its chain still runs.",
                 dedupe_key=f"crashed-{tag}",
                 condition=crashed,

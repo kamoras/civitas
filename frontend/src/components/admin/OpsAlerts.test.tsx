@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
-import { OpsAlerts } from "./OverviewDashboard";
+import { OpsAlerts } from "./OpsAlerts";
 
 const open = {
   subject: "Justice loyalty not measured",
