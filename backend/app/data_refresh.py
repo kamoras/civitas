@@ -76,6 +76,7 @@ from app.pipeline.analyze import commemorative, score_version
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
+from app.web_bot_auth import signed_headers
 
 logger = logging.getLogger(__name__)
 
@@ -965,12 +966,12 @@ def _district_lean_stale(ctx: Context) -> object:
     try:
         resp = httpx.get("https://dataverse.harvard.edu/api/search", params={
             "q": f'"{vest_year} Precinct-Level Election Results"', "type": "dataset", "per_page": 20,
-        }, headers=headers, timeout=30)
+        }, headers=signed_headers("https://dataverse.harvard.edu/", headers), timeout=30)
         resp.raise_for_status()
         vest = [i for i in resp.json().get("data", {}).get("items", [])
                 if i.get("name") == f"{vest_year} Precinct-Level Election Results"]
         repo = httpx.get(f"https://api.github.com/repos/MEDSL/{medsl_year}-elections-official",
-                         headers=headers, timeout=30)
+                         headers=signed_headers("https://api.github.com/", headers), timeout=30)
     except Exception:
         logger.info("district lean release check: Dataverse or GitHub unreadable", exc_info=True)
         return UNCHECKED
@@ -1324,7 +1325,7 @@ def _agency_crosswalk_gate(new: dict, old: dict) -> list[str]:
 
 def _get_text(url: str) -> str | None:
     try:
-        resp = httpx.get(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+        resp = httpx.get(url, headers=signed_headers(url, {"User-Agent": BOT_USER_AGENT}), timeout=60, follow_redirects=True)
         resp.raise_for_status()
         return resp.text
     except Exception:
@@ -1334,7 +1335,7 @@ def _get_text(url: str) -> str | None:
 
 def _url_exists(url: str) -> bool | None:
     try:
-        resp = httpx.head(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+        resp = httpx.head(url, headers=signed_headers(url, {"User-Agent": BOT_USER_AGENT}), timeout=60, follow_redirects=True)
     except Exception:
         logger.info("Data refresh: %s unreachable", url, exc_info=True)
         return None

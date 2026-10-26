@@ -204,34 +204,27 @@ def approval_box(approval: dict | None, party: str, state_name: str, district: i
 def holdings_box(holdings) -> dict | None:
     """The newest annual report's holdings (holdings_service), or None
     when no report has been read for the member."""
-    status = getattr(holdings, "source_status", None)
-    note = status.note if status else None
     if holdings is None or not holdings.available:
-        # No report read, and reads failing: say so rather than nothing.
-        return {"kicker": "Holdings", "headline": "No report on file", "dek": note, "figure": None} if note else None
+        return None
     kicker = f"Holdings · {holdings.report_label}" if holdings.report_label else "Holdings"
     filed = f"Filed {holdings.filed_date}." if holdings.filed_date else None
     if not holdings.parsed:
-        return {"kicker": kicker, "headline": "Report on file could not be read", "dek": note or filed, "figure": None}
+        return {"kicker": kicker, "headline": "Report on file could not be read", "dek": filed, "figure": None}
     n = holdings.holdings_count
     unvalued = (f"{_plural(holdings.unvalued_count, 'asset')} with no stated value, not charted."
                 if holdings.unvalued_count else None)
     return {"kicker": kicker,
             "headline": f"{holdings.total_shown} disclosed across {_plural(n, 'asset')}",
-            # While reads fail, the line says so: a newer report may be filed.
-            "dek": note or " ".join(x for x in (filed, unvalued) if x) or None,
+            "dek": " ".join(x for x in (filed, unvalued) if x) or None,
             "figure": _stat(holdings.total_low, holdings.total_shown, f"disclosed across {_plural(n, 'asset')}")}
 
 
-def trades_box(total: int, late: int, branch: str, note: str | None = None) -> dict:
-    """`note` is the source's while its reads fail (disclosure_sources):
-    it takes the line, and an empty record reads as nothing on file rather
-    than nothing disclosed, since new reports can't be read."""
+def trades_box(total: int, late: int, branch: str) -> dict:
     chamber = "Senate" if branch == "senate" else "House"
-    dek = note or f"Periodic transaction reports filed with the {chamber}."
+    dek = f"Periodic transaction reports filed with the {chamber}."
     if not total:
-        return {"kicker": "Stock trades · STOCK Act reports",
-                "headline": "No trades on file" if note else "No trades disclosed", "dek": dek, "figure": None}
+        return {"kicker": "Stock trades · STOCK Act reports", "headline": "No trades disclosed", "dek": dek,
+                "figure": None}
     text = f"{total:,}"
     caption = f"{'trade' if total == 1 else 'trades'} disclosed, {late:,} late"
     return {"kicker": "Stock trades · STOCK Act reports", "headline": f"{text} {caption}", "dek": dek,
@@ -260,12 +253,12 @@ def record_box(record: dict) -> dict:
 
 
 def boxes(db: Session, branch: str, entity, identity: dict, scorecard: dict | None, breakdown: dict | None,
-          holdings, trades: tuple[int, int, str | None], record: dict, on_ballot: dict | None,
+          holdings, trades: tuple[int, int], record: dict, on_ballot: dict | None,
           seat_race: dict | None) -> dict:
     """Every box on a senator's or representative's profile. `scorecard` is
     the profile's scorecard as served (camelCase), `breakdown` the score
     breakdown (with findings), `holdings` holdings_service's schema,
-    `trades` (disclosed, late, the source's note while its reads fail)."""
+    `trades` (disclosed, late)."""
     scorecard = scorecard or {}
     breakdown = breakdown or {}
     party = getattr(entity, "caucus_party", None) or entity.party
@@ -282,7 +275,7 @@ def boxes(db: Session, branch: str, entity, identity: dict, scorecard: dict | No
         "approval": approval_box(scorecard.get("constituentApproval"), party, identity.get("stateName") or "",
                                  district),
         "holdings": holdings_box(holdings),
-        "trades": trades_box(trades[0], trades[1], branch, trades[2]),
+        "trades": trades_box(*trades, branch),
         "positions": positions_box(scorecard.get("partisanDepth"), party),
         "record": record_box(record),
     }

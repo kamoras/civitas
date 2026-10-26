@@ -80,7 +80,6 @@ from app.schemas import (
     StockTradeSchema,
 )
 from app.services.pagination import paginate_bounds
-from app.services.disclosure_sources import source_status
 
 logger = logging.getLogger(__name__)
 
@@ -308,13 +307,6 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
     return entries
 
 
-def _is_sitting(db: Session, president: President) -> bool:
-    """Only the sitting president's disclosures are read (stock_pipeline,
-    holdings_pipeline), so only their page says how the reads are going."""
-    sitting = current_president(db)
-    return sitting is not None and sitting.id == president.id
-
-
 def get_president_trades(
     db: Session,
     president_id: str,
@@ -381,5 +373,4 @@ def get_president_trades(
         per_page=per_page,
         total_pages=total_pages,
         late_count=late_count,
-        source_status=source_status(db, "president", "trades") if _is_sitting(db, president) else None,
     )

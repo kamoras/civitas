@@ -157,10 +157,7 @@ export default function DataChapter() {
                 itself, page by page: the pages are copied from the Clerk or eFD each night, kept on
                 this site at the scan&apos;s own resolution, and served from here, so your browser
                 never loads them from a government host. The copy names the date it was made, and
-                the official filing is linked beside it. When a source can&apos;t be read (a bot
-                wall refuses the reader, or the site is down), the page says when it was last read
-                and since when reads have failed, beside the filings already on file, until the next
-                good read.
+                the official filing is linked beside it.
               </Fact>
               <Fact label="Lobbying Disclosure Act registry (lda.gov)">
                 Registered lobbying spending by organizations that appear among donors, and the
@@ -963,6 +960,28 @@ export default function DataChapter() {
               Civitas&apos;s nightly update of the Senate pages, not anything the Senate did), says
               when, and counts how many of the five completed. Until a failed run completes again,
               its pages show its last completed run.
+            </P>
+          </Box>
+          <Box
+            id="signed-requests"
+            title="How our fetcher proves who it is"
+            dek="Every request this server sends to a source is signed with a key only Civitas holds, so a site can check it really is Civitas. It gets us past nothing a site refuses."
+            more="the signature, and the key"
+          >
+            <P>
+              Anyone can copy a name in a request. So each request this server sends to a source is
+              also signed (Web Bot Auth, a draft internet standard built on HTTP Message Signatures)
+              with a private key that never leaves this machine. The matching public key is
+              published at{" "}
+              <a
+                href="/.well-known/http-message-signatures-directory"
+                className="text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                /.well-known/http-message-signatures-directory
+              </a>
+              , where bot-management services such as Cloudflare and Akamai check it. That lets a
+              site recognise Civitas and choose to let it in. A site that still says no is
+              respected: the signature identifies us, it is not a way around anyone&apos;s rules.
             </P>
           </Box>
           <Box

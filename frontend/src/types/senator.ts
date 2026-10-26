@@ -196,16 +196,6 @@ export interface StockTrade {
   beforeTermStart?: boolean;
 }
 
-/** When a disclosure source was last read and since when its reads have
- *  failed (services/disclosure_sources.py). `note` is the line to show
- *  beside the stored data, present only while reads fail. */
-export interface SourceStatus {
-  lastRead: string | null;
-  failingSince: string | null;
-  kind: "wall" | "outage" | null;
-  note: string | null;
-}
-
 export interface PaginatedStockTrades {
   trades: StockTrade[];
   total: number;
@@ -213,7 +203,6 @@ export interface PaginatedStockTrades {
   perPage: number;
   totalPages: number;
   lateCount: number;
-  sourceStatus?: SourceStatus | null;
 }
 
 export interface KeyVote {
@@ -460,9 +449,6 @@ export interface DisclosureScan {
 export interface Holdings {
   /** False when no annual report has been ingested for this member yet. */
   available: boolean;
-  /** How the source's reads are going; its note says the report may not be
-   *  the newest filed. */
-  sourceStatus?: SourceStatus | null;
   /** "2025 annual report", "new-filer report as of 2026-03-24" — what the
    * holdings describe, as the page names it. */
   reportLabel: string;

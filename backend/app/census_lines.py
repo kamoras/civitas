@@ -37,6 +37,7 @@ from app.atomic_write import runtime_data_path
 from app.contact import BOT_USER_AGENT
 from app.file_cache import new_reload_lock, read_json_preferring, reload_if_moved
 from app.state_names import STATE_NAMES
+from app.web_bot_auth import signed_headers
 
 RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
 MAPS_NAME = "redrawn_congressional_maps.json"
@@ -135,7 +136,7 @@ def state_maps(congress: int, states: Iterable[str], cycles: dict) -> dict[str, 
 def _get(url: str, timeout: int = 120, attempts: int = 3) -> bytes:
     """GET, tried again on a dropped connection or a 5xx (www2.census.gov
     resets one now and then); a 4xx is an answer and raises at once."""
-    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(url, headers=signed_headers(url, {"User-Agent": BOT_USER_AGENT}))
     for attempt in range(attempts):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -209,7 +210,7 @@ TIGER = "https://www2.census.gov/geo/tiger"
 def exists(url: str) -> bool:
     """Whether www2.census.gov serves `url` (a HEAD request; any failure
     but a 404 raises, so an outage is never read as "not published")."""
-    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(url, method="HEAD", headers=signed_headers(url, {"User-Agent": BOT_USER_AGENT}))
     try:
         with urllib.request.urlopen(req, timeout=60):
             return True

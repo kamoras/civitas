@@ -74,6 +74,13 @@ intermediate is never a trust anchor — the chain must still end at a root in
 certifi's bundle, and a self-signed certificate is never added. An issuer
 fetched over plain HTTP that a network attacker replaced would fail exactly
 there.
+
+## Signed as Civitas (Web Bot Auth)
+
+Every https request is signed with the instance's Ed25519 key when one is
+configured (app/web_bot_auth.py), by a request hook the constructor adds
+last, after any hook a caller passes: httpx runs request hooks once per
+redirect hop, so a hop to another host carries a signature over that host.
 """
 
 import asyncio
@@ -87,6 +94,8 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
+
+from app.web_bot_auth import sign_request
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +254,8 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("verify", TLS_CONTEXT)
+        hooks = kwargs.get("event_hooks") or {}
+        kwargs["event_hooks"] = {**hooks, "request": [*hooks.get("request", []), sign_request]}
         self._completes_chains = kwargs["verify"] is TLS_CONTEXT
         super().__init__(**kwargs)
 
