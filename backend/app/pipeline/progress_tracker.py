@@ -22,7 +22,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.error_utils import record_exception
+from app.error_utils import ExpectedSourceFailure, record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
@@ -172,7 +172,10 @@ class ProgressTracker:
             f"{pipeline}: step {key} failed",
             f"{pipeline} step '{key}' failed and the run continued without it"
             + (f": {detail}" if detail else "") + "."
-            + (f" Cause: {cause}. The traceback is on the run row (admin, Pipelines)." if cause else ""),
+            # A cause that ends a sentence of its own (EfdRefused's) keeps one full stop.
+            + (f" Cause: {cause.rstrip('.')}." if cause else "")
+            + (" The traceback is on the run row (admin, Pipelines)."
+               if cause and not isinstance(error, ExpectedSourceFailure) else ""),
             dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
             condition=self._failed_condition(key),
         )

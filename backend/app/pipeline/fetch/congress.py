@@ -10,6 +10,7 @@ from lxml import etree
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.analyze.bill_stage import became_law_action
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
@@ -585,11 +586,13 @@ async def fetch_bill(
     return None
 
 
-class CongressUnavailable(RuntimeError):
+class CongressUnavailable(ExpectedSourceFailure, RuntimeError):
     """Congress.gov could not be read for something a score depends on (a
     bill's actions decide its stage and whether it became law). Raised, not
     cached as [], so the run keeps the stored record instead of saving a
     bill as never acted on."""
+
+    source_host = "api.congress.gov"
 
 
 async def fetch_bill_actions(
