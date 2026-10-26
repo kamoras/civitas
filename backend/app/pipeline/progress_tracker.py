@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.error_utils import ExpectedSourceFailure, record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app import source_reads
 from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
 
@@ -50,6 +51,7 @@ class ProgressTracker:
         # Rate-limiter counter snapshots taken at each step's begin(), so a
         # terminal transition can persist the delta over that step's window.
         self._rl_baselines: dict[str, dict] = {}
+        self._read_baselines: dict[str, dict] = {}
         self._last_heartbeat = 0.0
         for key, phase, label in steps:
             self._steps[key] = {
@@ -73,6 +75,7 @@ class ProgressTracker:
         # rather than at terminal time so the delta covers exactly the
         # step's own window.
         self._rl_baselines[key] = rate_limiter.snapshot()
+        self._read_baselines[key] = source_reads.counts()
         self._flush()
 
     def update(self, key: str, *, done: int | None = None, detail: str | None = None) -> None:
@@ -261,6 +264,7 @@ class ProgressTracker:
                 logger.debug("Phase timing rollback failed", exc_info=True)
 
         self._record_rate_limit_stats(step, run_kind, run_id)
+        self._record_source_reads(step, run_kind, run_id)
 
     def _record_rate_limit_stats(self, step: dict, run_kind: str, run_id: int) -> None:
         """Persist how much of this step was spent blocked on each source's
@@ -313,6 +317,38 @@ class ProgressTracker:
                 self._db.rollback()
             except Exception:
                 logger.debug("Rate limit stat rollback failed", exc_info=True)
+
+
+    def _record_source_reads(self, step: dict, run_kind: str, run_id: int) -> None:
+        """Persist which hosts this step read, and how many of its requests
+        each answered or failed (app/source_reads.py), then write the
+        process's host records so the source map is current as of the step.
+        Same posture as the rate-limit rows: its own commit, every failure
+        swallowed."""
+        from app.models import SourceReadStat
+
+        baseline = self._read_baselines.pop(step["key"], None)
+        if baseline is None:
+            return
+        try:
+            for host, (answered, failed) in source_reads.diff(baseline, source_reads.counts()).items():
+                row = (
+                    self._db.query(SourceReadStat)
+                    .filter_by(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
+                    .one_or_none()
+                )
+                if row is None:
+                    row = SourceReadStat(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
+                    self._db.add(row)
+                row.answered, row.failed, row.recorded_at = answered, failed, utcnow()
+            self._db.commit()
+        except Exception:
+            logger.debug("Source read write failed for %s/%s", run_kind, step.get("key"), exc_info=True)
+            try:
+                self._db.rollback()
+            except Exception:
+                logger.debug("Source read rollback failed", exc_info=True)
+        source_reads.flush()
 
 
 def _parse_iso(value) -> "datetime | None":

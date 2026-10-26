@@ -1,0 +1,116 @@
+"""The source map: what each host answered (app/source_reads.py) and the
+state each source is in now (app/source_health.py)."""
+
+import httpx
+import pytest
+
+from app import crawl_policy, crawler, source_health, source_reads
+from app.models import SourceFailureCount, SourceReadStat
+
+
+@pytest.fixture(autouse=True)
+def _fresh_reads():
+    source_reads.reset_for_tests()
+    yield
+    source_reads.reset_for_tests()
+
+
+class TestReads:
+    def test_an_answer_clears_a_failure_and_a_failure_dates_from_the_first(self):
+        source_reads.answered("a.gov", 200, False)
+        source_reads.answered("a.gov", 503, False)
+        first = source_reads.reads()["a.gov"]["failingSince"]
+        source_reads.unanswered("a.gov", httpx.ConnectTimeout("slow"))
+        rec = source_reads.reads()["a.gov"]
+        assert rec["failingSince"] == first and rec["kind"] == "unavailable"
+        assert rec["reason"] == "no answer in time"
+        source_reads.answered("a.gov", 404, False)  # an answer about one address
+        assert "failingSince" not in source_reads.reads()["a.gov"]
+
+    def test_kinds(self):
+        assert source_reads.failure_of(403, True)[0] == "walled"
+        assert source_reads.failure_of(429, False)[0] == "refused"
+        assert source_reads.failure_of(502, False)[0] == "unavailable"
+        assert source_reads.failure_of(403, False) is None
+
+    def test_two_processes_merge_newest_first(self):
+        old = {"lastOk": "2026-10-20T00:00:00+00:00", "lastFailure": "2026-10-23T00:00:00+00:00",
+               "failingSince": "2026-10-23T00:00:00+00:00", "kind": "walled", "reason": "wall"}
+        new = {"lastFailure": "2026-10-25T00:00:00+00:00", "failingSince": "2026-10-25T00:00:00+00:00",
+               "kind": "unavailable", "reason": "down"}
+        merged = source_reads.merge(old, new)
+        assert merged["failingSince"] == "2026-10-23T00:00:00+00:00"
+        assert (merged["kind"], merged["reason"]) == ("unavailable", "down")
+        assert merged["lastOk"] == "2026-10-20T00:00:00+00:00"
+
+    def test_flush_writes_the_file_another_process_reads(self):
+        source_reads.answered("b.gov", 200, False)
+        source_reads.flush()
+        source_reads.reset_for_tests()
+        assert source_reads.reads()["b.gov"]["lastOk"]
+
+    def test_counts_diff_per_step(self):
+        before = source_reads.counts()
+        source_reads.answered("c.gov", 200, False)
+        source_reads.answered("c.gov", 500, False)
+        assert source_reads.diff(before, source_reads.counts()) == {"c.gov": (1, 1)}
+
+
+def _hosts(*names):
+    return [{"host": n, "readers": [{"module": "app.pipeline.fetch.fec", "rps": None, "registry": None}]}
+            for n in names]
+
+
+class TestMap:
+    def test_each_state_by_rule(self, db_session, monkeypatch):
+        monkeypatch.setattr(crawler, "hosts", lambda: _hosts(
+            "walled.gov", "down.gov", "fine.gov", "never.gov", "skipped.gov"))
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {
+            "walled.gov": {"reason": "a bot wall's challenge (HTTP 403)", "since": "2026-10-23T04:00:00+00:00"},
+        })
+        source_reads.answered("down.gov", 200, False)
+        source_reads.answered("down.gov", 503, False)
+        source_reads.answered("fine.gov", 200, False)
+        source_reads.answered("skipped.gov", 200, False)
+        # skipped.gov was read in stock-trades run 1, and run 2 read only fine.gov.
+        db_session.add_all([
+            SourceReadStat(run_kind="stock_trades_pipeline_runs", run_id=1, step_key="senate_ptr",
+                           host="skipped.gov", answered=3, failed=0),
+            SourceReadStat(run_kind="stock_trades_pipeline_runs", run_id=2, step_key="house_ptr",
+                           host="fine.gov", answered=2, failed=1),
+            SourceFailureCount(date=source_health.utcnow().date().isoformat(), run_kind="pipeline_runs",
+                               step="fetch", host="down.gov", kind="unavailable", count=2),
+        ])
+        db_session.commit()
+        body = source_health.build(db_session)
+        by = {e["host"]: e for e in body["sources"]}
+        assert by["walled.gov"]["state"] == "walled"
+        assert by["walled.gov"]["line"].startswith("Not readable since Oct 23, 2026: a bot wall's challenge")
+        assert by["down.gov"]["state"] == "unavailable" and by["down.gov"]["failedSteps30d"] == 2
+        assert by["fine.gov"]["state"] == "ok" and by["fine.gov"]["runs"] == ["stock trades · house_ptr"]
+        # Not asked is not failed.
+        assert by["never.gov"]["state"] == "not_read" and by["never.gov"]["line"] == "No read on record yet."
+        assert by["skipped.gov"]["state"] == "not_read" and by["skipped.gov"]["lastGood"]
+        assert [e["state"] for e in body["sources"]][:2] == ["walled", "unavailable"]
+        assert by["fine.gov"]["reads"]  # what its reader reads, from the module's docstring
+        public = source_health.public(body)
+        assert set(public["sources"][0]) == {"host", "reads", "state", "stateLabel", "since", "lastGood",
+                                             "reason", "line"}
+
+    def test_a_registry_wall_holds_until_the_host_answers(self, db_session, monkeypatch):
+        monkeypatch.setattr(crawler, "hosts", lambda: _hosts("www.ohiosos.gov"))
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
+        entry = source_health.build(db_session)["sources"][0]
+        assert entry["state"] == "walled" and entry["since"]
+        source_reads.answered("www.ohiosos.gov", 200, False)
+        assert source_health.build(db_session)["sources"][0]["state"] == "ok"
+
+    def test_every_host_the_code_names_is_on_the_map(self, db_session):
+        # All but the hosts only the frontend's photo route reads, which the
+        # backend can't see and the summary names.
+        photo_only = {h["host"] for h in crawler.hosts()
+                      if {r["module"] for r in h["readers"]} == {crawler.PHOTO_ROUTE}}
+        hosts = {h["host"] for h in crawler.hosts()} - photo_only
+        body = source_health.build(db_session)
+        assert {e["host"] for e in body["sources"]} == hosts
+        assert photo_only and "photo hosts" in body["summary"]
