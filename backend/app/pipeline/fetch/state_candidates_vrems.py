@@ -47,7 +47,7 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import (
-    BROWSER_HEADERS,
+    FETCH_HEADERS,
     fetch_json_with_retry,
     fetch_with_retry,
 )
@@ -215,7 +215,7 @@ async def fetch_confirmed_candidates(
 
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", f"{base}/Candidate/CandidateSearch?electionId={election_id}",
-        log_label=f"{state} candidate search page", headers=BROWSER_HEADERS,
+        log_label=f"{state} candidate search page", headers=FETCH_HEADERS,
     )
     if resp is None:
         return None
@@ -248,7 +248,7 @@ async def fetch_confirmed_candidates(
         }
         resp = await fetch_with_retry(
             client, _rate_limiter, "POST", f"{base}/Candidate/CandidateSearch/",
-            log_label=f"{state} candidates for office {office_id}", headers=BROWSER_HEADERS,
+            log_label=f"{state} candidates for office {office_id}", headers=FETCH_HEADERS,
             files={k: (None, v) for k, v in fields.items()},
         )
         if resp is None:

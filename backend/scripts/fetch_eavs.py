@@ -35,7 +35,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 
 DATASETS_URL = "https://www.eac.gov/research-and-data/datasets-codebooks-and-surveys"
 OUT = Path(__file__).resolve().parent.parent / "app" / "data" / "eavs.json"
@@ -94,7 +94,7 @@ def aggregate(rows: list[dict]) -> dict:
 
 def main() -> None:
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
-    with httpx.Client(headers={"User-Agent": BOT_USER_AGENT}, follow_redirects=True, timeout=120) as client:
+    with httpx.Client(headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=120) as client:
         page = client.get(DATASETS_URL)
         page.raise_for_status()
         year, version, url = newest_release(page.text, str(page.url))

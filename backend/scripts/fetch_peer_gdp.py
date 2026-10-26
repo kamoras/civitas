@@ -40,7 +40,7 @@ import sys
 import urllib.parse
 import urllib.request
 
-from app.contact import CONTACT_COMMENT
+from app.contact import USER_AGENT
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_files, xlsx_sheet_rows
 US = "USA"  # app.pipeline.fetch.peer_gdp.US; not imported, since that module reads the file this writes
 
@@ -72,9 +72,8 @@ def peer_countries() -> tuple[str, ...]:
 DATAVERSE = "https://dataverse.nl"
 RELEASE_NAME = re.compile(r"^Maddison Project Database (\d{4})$")
 # dataverse.nl challenges browser-style User-Agents (an Anubis proof-of-work
-# page, served with a 200); a client that names itself without "Mozilla" is
-# let through, so this one does (BOT_USER_AGENT starts "Mozilla/5.0").
-USER_AGENT = f"Civitas/1.0{CONTACT_COMMENT}"
+# page, served with a 200); USER_AGENT names Civitas, not a browser, and is
+# let through.
 FIRST_YEAR = 1946  # a base for 1947, where Effectiveness's postwar comparison begins
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "peer_gdp_per_capita.json"
 

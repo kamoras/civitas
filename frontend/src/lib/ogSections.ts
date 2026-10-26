@@ -43,6 +43,11 @@ export const SECTION_CARDS: Record<string, SectionCard> = {
     title: "Data sources, AI use and privacy",
     subtitle: "Every source, what software does with it, and what the site never collects.",
   },
+  "/about/crawler": {
+    eyebrow: "About",
+    title: "The Civitas crawler",
+    subtitle: "Its name, every site it reads and how fast, and how to opt out.",
+  },
   "/about/limitations": {
     eyebrow: "About",
     title: "Known limitations",

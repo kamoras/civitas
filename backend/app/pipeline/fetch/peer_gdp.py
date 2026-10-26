@@ -55,7 +55,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app import data_refresh
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
@@ -105,7 +105,7 @@ async def fetch_world_bank_per_capita(
     cached = api_cache_get(db, _CACHE_TIER, url, max_age_hours=_CACHE_TTL_HOURS)
     if cached is None:
         try:
-            resp = await client.get(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=DEFAULT_FETCH_TIMEOUT_S)
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=DEFAULT_FETCH_TIMEOUT_S)
             resp.raise_for_status()
             body = resp.json()
             rows = body[1] if isinstance(body, list) and len(body) > 1 and body[1] else None

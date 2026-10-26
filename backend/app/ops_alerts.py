@@ -31,6 +31,7 @@ from datetime import date, datetime, timedelta, timezone
 import httpx
 
 from app.config import settings
+from app.contact import USER_AGENT
 from app.database import SessionLocal
 from app.election_calendar import federal_states
 from app.election_phase import active_election
@@ -373,7 +374,7 @@ def _send_ntfy(subject: str, body: str) -> None:
         httpx.post(
             settings.ALERT_NTFY_URL,
             content=body.encode(),
-            headers={"Title": f"Civitas: {subject}", "Priority": "high"},
+            headers={"Title": f"Civitas: {subject}", "Priority": "high", "User-Agent": USER_AGENT},
             timeout=10.0,
         )
     except Exception:
@@ -534,6 +535,7 @@ def check_feedback_token_expiration() -> None:
             headers={
                 "Authorization": f"Bearer {settings.FEEDBACK_TOKEN}",
                 "Accept": "application/vnd.github+json",
+                "User-Agent": USER_AGENT,
             },
             timeout=10.0,
         )

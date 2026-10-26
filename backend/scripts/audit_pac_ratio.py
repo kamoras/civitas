@@ -25,12 +25,12 @@ import json
 import pathlib
 import urllib.request
 
-from app.contact import CONTACT_NOTE
+from app.contact import USER_AGENT
 from app.site_url import SITE_URL
 from app.pipeline.analyze.score_calculator import compute_funding_reference
 
 API_BASE = f"{SITE_URL}/api"
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (PAC-ratio audit{CONTACT_NOTE})"}
+UA = {"User-Agent": USER_AGENT}
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "funding_reference.json"
 
 

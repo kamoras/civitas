@@ -85,12 +85,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from fetch_state_leg_crosswalk import _FIPS  # noqa: E402  (one state table)
 
-from app.contact import CONTACT_COMMENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.pipeline.vector_store import get_similarity_model  # noqa: E402
 
-# Dataverse challenges browser-style User-Agents; one that names itself
-# without "Mozilla" is let through (as scripts/fetch_peer_gdp.py's).
-USER_AGENT = f"Civitas/1.0{CONTACT_COMMENT}"
+# Dataverse challenges browser-style User-Agents; USER_AGENT names Civitas,
+# not a browser, and is let through (as scripts/fetch_peer_gdp.py's).
 
 DATAVERSE = "https://dataverse.harvard.edu"
 CES_DOI = "doi:10.7910/DVN/X11EP6"

@@ -23,6 +23,7 @@ from huggingface_hub import try_to_load_from_cache
 
 from app.atomic_write import runtime_data_path, update_json_file
 from app.config import settings
+from app.contact import USER_AGENT
 from app.pipeline.vector_store import _SIMILARITY_MODEL_NAME, EMBEDDING_MODEL_NAME
 from app.time_utils import utcnow
 
@@ -42,7 +43,8 @@ def llm_meta(base_url: str | None = None) -> dict | None:
     """The served model's name, parameters and weight bytes; None when the
     server can't be read or names neither."""
     try:
-        resp = httpx.get(f"{base_url or settings.LLAMA_SERVER_URL}/v1/models", timeout=10)
+        resp = httpx.get(f"{base_url or settings.LLAMA_SERVER_URL}/v1/models", timeout=10,
+                         headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
         model = resp.json()["data"][0]
         meta = model.get("meta") or {}

@@ -46,12 +46,12 @@ import urllib.parse
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
 API = "https://en.wikipedia.org/w/api.php"
-HEADERS = {"User-Agent": BOT_USER_AGENT}
+HEADERS = {"User-Agent": USER_AGENT}
 POLL_LICENSE = "CC BY-SA 4.0"
 POLL_LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 POLL_ATTRIBUTION = "Wikipedia contributors"

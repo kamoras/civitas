@@ -36,7 +36,7 @@ from lxml import etree
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "name_casing.json"
 BULK = "https://www.govinfo.gov/bulkdata/FR/{y}/{m:02d}/FR-{y}-{m:02d}-{d:02d}.xml"
@@ -97,7 +97,7 @@ def fetch(day: datetime.date, cache: pathlib.Path) -> bytes | None:
         return path.read_bytes() or None
     url = BULK.format(y=day.year, m=day.month, d=day.day)
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT}), timeout=120) as r:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=120) as r:
             body = r.read()
     except Exception:
         body = b""  # no issue that day (weekend, holiday)

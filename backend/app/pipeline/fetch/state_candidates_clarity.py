@@ -86,7 +86,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     is_not_a_person,
     runoff_threshold,
@@ -112,10 +112,9 @@ logger = logging.getLogger(__name__)
 
 CLARITY_BASE = "https://results.enr.clarityelections.com"
 
-# Clarity 403s a request with no browser-like User-Agent (same behaviour
-# Civix showed) — an honest, identifying UA works, matching the convention
-# state_candidates_tx.py and sec_tickers.py already use.
-_HEADERS = BROWSER_HEADERS
+# Clarity 403s a request with no User-Agent; Civitas's own is served
+# (measured 2026-10-25).
+_HEADERS = FETCH_HEADERS
 
 # Three small requests per state per run — a polite pace is plenty.
 _rate_limiter = RateLimiter(rps=1.0)

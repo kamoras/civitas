@@ -31,7 +31,7 @@ import sys
 
 import httpx
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.pipeline.fetch.congress import parse_house_vote_xml
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
@@ -69,7 +69,7 @@ def _normalized(vote: str) -> str:
 
 
 async def main(year: int) -> None:
-    headers = {"User-Agent": BOT_USER_AGENT}
+    headers = {"User-Agent": USER_AGENT}
     async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as client:
         last = await _latest_roll(client, year)
         rolls = []
@@ -123,7 +123,7 @@ async def main(year: int) -> None:
 
 async def motions_to_commit(congress: int) -> None:
     first_year = 1789 + (congress - 1) * 2
-    headers = {"User-Agent": BOT_USER_AGENT}
+    headers = {"User-Agent": USER_AGENT}
     party_line = 0
     found = []
     async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as client:

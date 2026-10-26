@@ -61,7 +61,7 @@ import httpx
 
 from app import data_refresh, retractions
 from app.config import settings
-from app.contact import SELF_FETCH_USER_AGENT
+from app.contact import USER_AGENT
 from app.models import BroadcastPost
 from app.pipeline.analyze.bluesky_utils import (
     BSKY_MAX_IMAGE_BYTES,
@@ -365,7 +365,7 @@ def _post_image(post: BroadcastPost) -> PostImage | None:
         return None
     internal = settings.FRONTEND_INTERNAL_URL.rstrip("/") + post.image_url[len(SITE_URL):]
     try:
-        resp = httpx.get(internal, timeout=30, headers={"User-Agent": SELF_FETCH_USER_AGENT})
+        resp = httpx.get(internal, timeout=30, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
     except Exception:
         logger.warning("Post image unreadable (%s); sending the link card", internal)
@@ -517,7 +517,7 @@ def refresh_engagement(db: Session) -> int:
         batch = {post.bsky_uri: post for post in rows[start:start + 25]}
         try:
             resp = httpx.get(_BSKY_GET_POSTS, params=[("uris", uri) for uri in batch], timeout=15,
-                             headers={"User-Agent": SELF_FETCH_USER_AGENT})
+                             headers={"User-Agent": USER_AGENT})
             resp.raise_for_status()
             found = resp.json()["posts"]
         except Exception:

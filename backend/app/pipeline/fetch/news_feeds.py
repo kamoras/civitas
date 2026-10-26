@@ -28,7 +28,7 @@ from defusedxml import ElementTree as SafeET
 
 import httpx
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.ops_alerts import check_source_freshness
 from app.photos import photo_source_allowed
 from app.web_bot_auth import signed_headers
@@ -609,7 +609,7 @@ def fetch_news_articles(
         t0 = time.perf_counter()
         try:
             resp = httpx.get(url, timeout=FEED_TIMEOUT, follow_redirects=True, headers=signed_headers(url, {
-                "User-Agent": BOT_USER_AGENT,
+                "User-Agent": USER_AGENT,
             }))
             resp.raise_for_status()
             every_item = _parse_rss_feed(

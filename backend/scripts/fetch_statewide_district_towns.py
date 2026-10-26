@@ -64,7 +64,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.election_phase import active_election  # noqa: E402
 from app.pipeline.fetch import state_candidates_ma as ma  # noqa: E402
 from app.pipeline.fetch import state_candidates_nh as nh  # noqa: E402
@@ -200,7 +200,7 @@ async def massachusetts(client: httpx.AsyncClient, year: int) -> dict[str, list[
     for district, election_id in sorted(first.items(), key=lambda kv: int(kv[0])):
         resp = await client.get(
             f"{ma._BASE_URL}/elections/download/{election_id}/precincts_include:0/",
-            headers={"User-Agent": BOT_USER_AGENT},
+            headers={"User-Agent": USER_AGENT},
         )
         resp.raise_for_status()
         rows = list(csv.reader(io.StringIO(resp.text)))

@@ -34,7 +34,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -58,7 +58,7 @@ _CACHE_TTL_HOURS = 24 * 30
 _NO_EXPIRY_HOURS = 24 * 365 * 100
 # Wide enough for the profile's portrait at 3x, small enough to stay cheap.
 _THUMB_WIDTH = 480
-_HEADERS = {"User-Agent": BOT_USER_AGENT}
+_HEADERS = {"User-Agent": USER_AGENT}
 _RATE_LIMITER = RateLimiter(rps=1.0)
 _SI_SEARCH = "https://api.si.edu/openaccess/api/v1.0/search"
 # The Smithsonian's image delivery service: the only media address used.

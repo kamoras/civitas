@@ -71,7 +71,7 @@ from urllib.parse import urljoin
 import httpx
 import pdfplumber
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     normalize_party,
@@ -114,7 +114,7 @@ _BANNER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_HEADERS = BROWSER_HEADERS
+_HEADERS = FETCH_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 
 

@@ -4,14 +4,16 @@
  * (`app/api/og/route.tsx`) and the same-origin photo route every page loads
  * its pictures from (`app/photo/[kind]/[id]/route.ts`, via lib/photos.ts).
  *
- * bioguide.congress.gov sits behind Cloudflare bot-mitigation that blocks a
- * plain HEAD request outright (confirmed live) and challenges a GET that
- * self-identifies as a bot/non-browser client — a browser-shaped User-Agent
- * gets a normal 200, confirmed live, so that's used here rather than a
- * self-identifying one. A 5s timeout keeps a slow/hanging host (also
- * observed live) from stalling the caller instead of just dropping the photo,
- * and a size cap keeps an unexpected body from being buffered whole.
+ * Each request names Civitas (crawlerUserAgent, the backend's User-Agent):
+ * bioguide.congress.gov, Congress.gov, Oyez, Wikimedia, the Smithsonian and
+ * Roll Call answered it as they answered a browser on 2026-10-25 (bioguide had challenged a
+ * non-browser User-Agent when this was written, and a browser's was sent
+ * until then). A 5s timeout keeps a slow/hanging host
+ * from stalling the caller instead of just dropping the photo, and a size
+ * cap keeps an unexpected body from being buffered whole.
  */
+import { crawlerUserAgent } from "@/lib/crawler";
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /** What a fetch came back with. `missing` is the host saying there is no
@@ -80,10 +82,7 @@ export async function fetchRemoteImage(
     for (let hop = 0; ; hop++) {
       if (!onAllowedHost(target, hosts)) return { status: "failed" };
       const res = await fetch(target, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
-        },
+        headers: { "User-Agent": crawlerUserAgent() },
         redirect: "manual",
         signal,
       });

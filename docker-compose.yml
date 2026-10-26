@@ -136,6 +136,10 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=/api
+      # The contact the photo route's fetches name, as the backend's do
+      # (src/lib/crawler.ts crawlerUserAgent; app/contact.py). Runtime, not
+      # build: it is never inlined into a browser bundle.
+      - CONTACT_EMAIL=${CONTACT_EMAIL:-}
     # No depends_on — Swarm has no concept of startup-order dependencies
     # between services (each task's lifecycle is independent) and rejects
     # the long `condition: service_healthy` form outright ("must be a

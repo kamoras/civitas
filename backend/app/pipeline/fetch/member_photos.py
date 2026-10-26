@@ -51,7 +51,7 @@ from app.error_utils import output_summary
 from app.models import ApiCache, MemberPhoto, Representative, Senator
 from app.photos import bioguide_portrait_url, credited_depiction, photo_source_allowed
 from app.pipeline.fetch.congress import member_detail_cache_key
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS
+from app.pipeline.fetch.http_utils import FETCH_HEADERS
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ async def _image(client: httpx.AsyncClient, url: str) -> bytes | None:
     try:
         # Neither host redirects these URLs (checked 2026-10-13); one that
         # starts to is a failure to look at, not a hop to follow blind.
-        resp = await client.get(url, headers=BROWSER_HEADERS, timeout=15.0, follow_redirects=False)
+        resp = await client.get(url, headers=FETCH_HEADERS, timeout=15.0, follow_redirects=False)
     except httpx.HTTPError as exc:
         raise _FetchFailed(str(exc)) from exc
     if resp.status_code in (404, 410):

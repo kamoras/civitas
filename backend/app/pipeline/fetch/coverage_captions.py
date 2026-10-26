@@ -35,7 +35,7 @@ from html.parser import HTMLParser
 
 from sqlalchemy.orm import Session
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.http_client import make_async_client
 from app.models import RaceCoverageItem
 from app.pipeline.analyze.election_coverage import score_items
@@ -223,7 +223,7 @@ async def recheck_stored_captions(db: Session, *, limit: int = MAX_PER_NIGHT, de
     for row in _unverified(db).order_by(RaceCoverageItem.fetched_at.desc(), RaceCoverageItem.id.desc()):
         by_url.setdefault(row.url, []).append(row)
     counts = {"pages": 0, "fixed": 0, "clean": 0, "unreadable": 0, "no_description": 0}
-    async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+    async with make_async_client(headers={"User-Agent": USER_AGENT}) as client:
         for url, items in by_url.items():
             if deadline is not None and deadline():
                 break

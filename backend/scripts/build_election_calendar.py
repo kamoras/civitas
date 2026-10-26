@@ -63,7 +63,7 @@ import lxml.html
 import pdfplumber
 
 from app.http_client import is_bot_challenge
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS
+from app.pipeline.fetch.http_utils import FETCH_HEADERS
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCES = pathlib.Path(__file__).resolve().parent / "election_calendar_sources.json"
@@ -101,7 +101,7 @@ def fetch(url: str, client: httpx.Client, cache: pathlib.Path | None) -> tuple[s
     if key and key.exists():
         return key.read_text(), "ok (cached)"
     try:
-        r = client.get(url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+        r = client.get(url, headers=FETCH_HEADERS, follow_redirects=True, timeout=30)
     except httpx.HTTPError as exc:
         return None, f"fetch failed: {type(exc).__name__}"
     if is_bot_challenge(r):
@@ -302,7 +302,7 @@ def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pa
     r = None
     for _ in range(2):  # once more after a refusal or a dropped connection, which come and go
         try:
-            r = client.get(url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+            r = client.get(url, headers=FETCH_HEADERS, follow_redirects=True, timeout=30)
         except httpx.HTTPError as exc:
             r, failed = None, type(exc).__name__
             continue
@@ -332,7 +332,7 @@ _DATE_FIELDS = ("date", "endDate", "time", "endTime")
 def _links(url: str, client: httpx.Client) -> list[str]:
     """The same-host links of the page at `url`, in document order."""
     try:
-        r = client.get(url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+        r = client.get(url, headers=FETCH_HEADERS, follow_redirects=True, timeout=30)
     except httpx.HTTPError:
         return []
     if r.status_code >= 400 or is_bot_challenge(r) or "html" not in r.headers.get("content-type", ""):

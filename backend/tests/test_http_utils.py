@@ -19,7 +19,7 @@ import httpx
 import pytest
 
 from app.pipeline.fetch.http_utils import (
-    BROWSER_HEADERS,
+    FETCH_HEADERS,
     fetch_bytes_with_retry,
     fetch_json_with_retry,
     fetch_text_with_retry,
@@ -248,14 +248,14 @@ class TestFetchBytesWithRetry:
     async def test_headers_default_to_browser_headers_but_none_opts_out(self):
         # house_ptr.py passes headers=None deliberately to keep its
         # pre-extraction behavior (httpx's own bare defaults, never
-        # BROWSER_HEADERS) -- this proves that override actually reaches
+        # FETCH_HEADERS) -- this proves that override actually reaches
         # the request rather than the default silently winning anyway.
         resp = MagicMock(status_code=200, content=b"ok")
         client = MagicMock()
         client.request = AsyncMock(return_value=resp)
 
         await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label")
-        assert client.request.await_args.kwargs["headers"] == BROWSER_HEADERS
+        assert client.request.await_args.kwargs["headers"] == FETCH_HEADERS
 
         client.request.reset_mock()
         await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label", headers=None)
@@ -377,12 +377,12 @@ def test_contact_address_is_configured_and_held_nowhere():
 
     from app.contact import CONTACT_EMAIL
     from app.pipeline.fetch import sec_tickers, state_candidates_tx
-    from app.pipeline.fetch.http_utils import BROWSER_HEADERS
+    from app.pipeline.fetch.http_utils import FETCH_HEADERS
 
     assert CONTACT_EMAIL == "civitas-tests@example.org"
-    assert BROWSER_HEADERS["User-Agent"].endswith(f"(+{CONTACT_EMAIL})")
-    assert sec_tickers._headers()["User-Agent"].endswith(CONTACT_EMAIL)
-    assert state_candidates_tx._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
+    assert FETCH_HEADERS["User-Agent"].endswith(f"/about/crawler; {CONTACT_EMAIL})")
+    assert sec_tickers._headers()["User-Agent"] == FETCH_HEADERS["User-Agent"]
+    assert state_candidates_tx._HEADERS["User-Agent"] == FETCH_HEADERS["User-Agent"]
 
     this = Path(__file__).resolve()
     backend = this.parents[1]
@@ -415,11 +415,12 @@ def _contact_in_fresh_process(value: str | None) -> dict:
     from pathlib import Path
 
     env = {k: v for k, v in os.environ.items() if k != "CONTACT_EMAIL"}
+    env["SITE_URL"] = "https://example.org"
     if value is not None:
         env["CONTACT_EMAIL"] = value
     code = (
         "import json, app.contact as c; print(json.dumps({k: getattr(c, k) for k in "
-        "('CONTACT_EMAIL', 'BOT_USER_AGENT', 'SELF_FETCH_USER_AGENT', 'CONTACT_COMMENT', 'CONTACT_NOTE')}))"
+        "('CONTACT_EMAIL', 'USER_AGENT', 'BOT_USER_AGENT', 'CRAWLER_PAGE')}))"
     )
     # -S: no site-packages, so contact.py must import on the standard
     # library alone, as the scripts run it on a bare python3.
@@ -433,9 +434,9 @@ def _contact_in_fresh_process(value: str | None) -> dict:
 def test_contact_set_names_it_in_every_user_agent():
     c = _contact_in_fresh_process("ops@example.org")
     assert c["CONTACT_EMAIL"] == "ops@example.org"
-    assert c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0; +ops@example.org)"
-    assert c["SELF_FETCH_USER_AGENT"] == "Civitas-Bot/1.0 (+ops@example.org)"
-    assert c["CONTACT_NOTE"] == "; contact: ops@example.org"
+    assert c["USER_AGENT"] == "Civitas/1.0 (+https://example.org/about/crawler; ops@example.org)"
+    assert c["BOT_USER_AGENT"] == c["USER_AGENT"]
+    assert c["CRAWLER_PAGE"] == "https://example.org/about/crawler"
     assert c["stderr"] == ""
 
 
@@ -443,16 +444,14 @@ def test_contact_set_names_it_in_every_user_agent():
 def test_contact_unset_names_civitas_without_an_address(value):
     c = _contact_in_fresh_process(value)
     assert c["CONTACT_EMAIL"] == ""
-    assert c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0)"
-    assert c["SELF_FETCH_USER_AGENT"] == "Civitas-Bot/1.0"
-    assert c["CONTACT_COMMENT"] == c["CONTACT_NOTE"] == ""
+    assert c["USER_AGENT"] == "Civitas/1.0 (+https://example.org/about/crawler)"
 
 
 @pytest.mark.parametrize("value", ["not-an-address", "a@@example.org", "a@b@example.org", "@example.org",
                                    "ops@localhost", "ops@example.org (me)", "o ps@example.org"])
 def test_contact_invalid_is_unset_with_a_warning(value):
     c = _contact_in_fresh_process(value)
-    assert c["CONTACT_EMAIL"] == "" and c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0)"
+    assert c["CONTACT_EMAIL"] == "" and c["USER_AGENT"] == "Civitas/1.0 (+https://example.org/about/crawler)"
     assert "not an email address" in c["stderr"]
 
 
@@ -485,21 +484,24 @@ def test_sec_refuses_without_a_contact_and_alerts(monkeypatch):
 
 
 # User-Agents sent without the contact on purpose, each explained where it
-# is written: (file, a fragment of the line). New Hampshire's filter refuses
-# the "(+contact)" comment; the bioguide photo host refuses anything but a
-# browser; fetch_site_fonts.py sends next/font's own browser string, so
-# Google Fonts serves the files next/font would.
+# is written: (file, a fragment of the line). fetch_site_fonts.py, a script
+# run by hand, sends next/font's own browser string because Google Fonts
+# picks the font format from it (to Civitas's own it serves a different
+# stylesheet, measured 2026-10-25), so the files match what next/font would
+# fetch. No source the site reads is sent a browser's name.
 _BROWSER_ONLY_USER_AGENTS = {
-    ("backend/app/pipeline/fetch/state_candidates_nh.py", "Chrome/151"),
-    ("frontend/src/lib/remoteImage.ts", "Chrome/128"),
+    # The hosts that refuse Civitas's own User-Agent (owner decision,
+    # 2026-10-25): one table, each entry with its measurement.
+    ("backend/app/contact.py", "Chrome/151"),
+    ("backend/app/contact.py", "Civitas/1.0"),
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
     # Not a request header: robots.txt's rule for which crawlers it applies to.
     ("frontend/src/app/robots.ts", "*"),
 }
 # Names that carry the contact: a value built from one names it.
 _CONTACT_NAMES = {
-    "CONTACT_EMAIL", "CONTACT_COMMENT", "CONTACT_NOTE", "BOT_USER_AGENT", "SELF_FETCH_USER_AGENT",
-    "CIVIC_CONTACT", "BROWSER_HEADERS", "require_contact",
+    "CONTACT_EMAIL", "USER_AGENT", "BOT_USER_AGENT", "FETCH_HEADERS", "FETCH_JSON_HEADERS",
+    "require_contact",
 }
 # A string naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
 _CIVITAS_TOKEN_TEXT = re.compile(r"\bcivitas[\w-]*/\d", re.IGNORECASE)
@@ -716,15 +718,13 @@ def _user_agent_offenders(backend, files):
 def test_every_user_agent_names_the_contact():
     """A User-Agent written as a string literal, or a literal naming Civitas
     as a client, bypasses the contact: every request says how to reach us,
-    through CIVIC_CONTACT, BROWSER_HEADERS, BOT_USER_AGENT or
-    SELF_FETCH_USER_AGENT (the site's URL in the frontend, which can't
-    import the address) — the few browser-only strings aside."""
+    through USER_AGENT or FETCH_HEADERS (the site's URL in the frontend,
+    crawlerUserAgent) — the one browser string aside."""
     from pathlib import Path
 
-    from app.contact import BOT_USER_AGENT, CONTACT_EMAIL, SELF_FETCH_USER_AGENT
+    from app.contact import CONTACT_EMAIL, USER_AGENT
 
-    assert BOT_USER_AGENT.endswith(f"+{CONTACT_EMAIL})")
-    assert SELF_FETCH_USER_AGENT.endswith(f"(+{CONTACT_EMAIL})")
+    assert USER_AGENT.endswith(f"/about/crawler; {CONTACT_EMAIL})")
     backend = Path(__file__).resolve().parents[1]
     offenders, read = _user_agent_offenders(backend, _checked_in(backend))
     assert read > 50, "the sweep read almost nothing"
@@ -744,7 +744,7 @@ def test_every_user_agent_names_the_contact():
     'UA = "Civitas/1.0 (bill title calibration)"',
     'USER_AGENT = rf"Civitas/1.0"',
     'H = {"Accept": "text/html#x", "User-Agent": "Civitas/1.0"}',
-    'A = {"User-Agent": "Mozilla/5.0 Foo"}\nB = BROWSER_HEADERS',
+    'A = {"User-Agent": "Mozilla/5.0 Foo"}\nB = FETCH_HEADERS',
     'ua = get(); h = {"User-Agent": "Mozilla/5.0 Foo"}',
     'H = {"User-Agent": "Foo/1.0"}; DOC = """x"""',
     '_UA = "Mozilla/5.0 (X11) Foo"',

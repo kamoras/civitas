@@ -36,6 +36,7 @@ from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
 from app.api.special_elections import router as special_elections_router
 from app.api.sources import router as sources_router
+from app.api.crawler import router as crawler_router
 from app.api.this_week import router as this_week_router
 from app.api.visits import router as visits_router
 
@@ -70,6 +71,7 @@ api_router.include_router(this_week_router, tags=["this-week"])
 api_router.include_router(sections_router, tags=["sections"])
 api_router.include_router(search_router, tags=["search"])
 api_router.include_router(sources_router, tags=["sources"])
+api_router.include_router(crawler_router, tags=["sources"])
 api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])
 api_router.include_router(pipeline_router, tags=["pipeline"])

@@ -91,7 +91,7 @@ REPO = Path(__file__).resolve().parents[2]
 # Runs from the repo root on a bare python3: app.contact is standard library only.
 sys.path.insert(0, str(REPO / "backend"))
 from app import census_lines  # noqa: E402
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 
 OUTPUT = REPO / "backend" / "app" / "data" / "state_leg_district_crosswalk.json"
 
@@ -358,7 +358,7 @@ def download(url: str, cache: Path) -> Path:
     dest = cache / url.rsplit("/", 1)[1]
     if not dest.exists():
         print(f"downloading {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         part = dest.with_suffix(".part")
         # www2.census.gov resets long transfers now and then; the 100MB
         # state files need a second try often enough to build it in.
@@ -381,7 +381,7 @@ def _query(url: str, params: dict) -> dict:
     failed query as HTTP 200 with an {"error": ...} body, so that raises
     rather than reading as "nothing there"."""
     req = urllib.request.Request(
-        url, data=urllib.parse.urlencode(params).encode(), headers={"User-Agent": BOT_USER_AGENT}
+        url, data=urllib.parse.urlencode(params).encode(), headers={"User-Agent": USER_AGENT}
     )
     # TIGERweb drops a slow query now and then (a read timed out in a
     # full build, 2026-10-23): a build that runs unattended tries again.

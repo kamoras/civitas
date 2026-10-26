@@ -61,7 +61,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import pick_nominee
 from app.pipeline.fetch.state_candidates_tabular import _discover_urls
 from app.pipeline.rate_limiter import RateLimiter
@@ -221,7 +221,7 @@ async def fetch_confirmed_candidates(
 
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", urls[0], timeout=60.0,
-        log_label=f"KY primary certification {year}", headers=BROWSER_HEADERS,
+        log_label=f"KY primary certification {year}", headers=FETCH_HEADERS,
     )
     if resp is None:
         return None
