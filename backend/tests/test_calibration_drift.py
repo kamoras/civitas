@@ -158,7 +158,9 @@ def test_an_action_center_cut_is_the_stored_refit_in_use(store, freeze_utcnow):
 
     freeze_utcnow(datetime(2028, 3, 1, 12))
     for gate in ("cluster", "near_identical", "restatement"):
-        assert gate in cd.GATES and cd.REFITTING[gate] is None and cd.PARAMETERS[gate] == ("threshold",)
+        assert gate in cd.GATES and cd.REFITTING[gate] is None and cd.PARAMETERS[gate][0] == "threshold"
+    # The restatement rule's same-actor cut decides too (claims.restates).
+    assert cd.PARAMETERS["restatement"] == ("threshold", "threshold_same_actor")
     bundled = cd._calibration_sha("cluster_pair_calibration.json", ("threshold",), store, "cluster")
     api_cache_set(store, cd.CUTS_TIER, "cluster", {"threshold": 0.75, "date": "2028-03-01"},
                   normal_ttl_hours=24)

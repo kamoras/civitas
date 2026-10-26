@@ -322,6 +322,29 @@ class TestDistinctClaims:
         claims = [_claim("A did X."), _claim("A did X again."), _claim("C did Y.")]
         assert [c.text for c in mod.distinct_claims(claims)] == ["A did X.", "C did Y."]
 
+    def test_a_same_actor_cut_holds_pairs_about_one_actor_to_their_own_cut(self, monkeypatch):
+        """With a refit's same-actor cut, two claims about one actor at a
+        cosine between the two cuts are one fact; about two actors, two."""
+        import numpy as np
+
+        from app.pipeline import vector_store
+        from app.pipeline.analyze import claims as mod
+
+        monkeypatch.setattr(mod, "restatement_calibration", lambda: {"threshold": 0.87, "threshold_same_actor": 0.7})
+        b = np.array([0.8, 0.6, 0.0])  # cosine 0.8 with A
+        vectors = {"Doe is leaving the post.": np.array([1.0, 0.0, 0.0]), "Jane Doe is departing.": b,
+                   "Roe is departing.": b}
+        monkeypatch.setattr(vector_store, "get_similarity_model", lambda: None)
+        monkeypatch.setattr(vector_store, "encode_normalized", lambda model, texts: np.array([vectors[x] for x in texts]))
+        first = Claim("Doe is leaving the post.", "NPR", "u1", actor="Doe")
+        same = Claim("Jane Doe is departing.", "PBS", "u2", actor="Jane Doe")
+        other = Claim("Roe is departing.", "PBS", "u3", actor="Roe")
+        assert mod.distinct_claims([first, same]) == [first]
+        assert mod.distinct_claims([first, other]) == [first, other]
+        # Without a same-actor cut, every pair is held to `threshold`.
+        monkeypatch.setattr(mod, "restatement_calibration", lambda: {"threshold": 0.87})
+        assert mod.distinct_claims([first, same]) == [first, same]
+
     def test_a_failure_keeps_every_claim(self, monkeypatch):
         from app.pipeline import vector_store
         from app.pipeline.analyze import claims as mod
@@ -349,3 +372,53 @@ class TestDistinctClaims:
         claims = [_claim("A federal judge ordered the agency to restore the reporters' access."),
                   _claim("The agency said it would appeal the ruling to the circuit court.")]
         assert len(mod.distinct_claims(claims)) == 2
+
+
+class TestSameActor:
+    """Whether two actor spans name one party: a name match by containment."""
+
+    def test_a_name_and_its_title_are_one_actor(self):
+        from app.pipeline.analyze.claims import same_actor
+
+        assert same_actor("Trump", "President Trump")
+        assert same_actor("Rep. Jane Doe", "U.S. Rep. Jane Doe")
+        assert same_actor("The Justice Department", "Justice Department")
+
+    def test_two_parties_or_a_missing_actor_are_not(self):
+        from app.pipeline.analyze.claims import same_actor
+
+        assert not same_actor("Treasury Secretary Jane Doe", "Energy Secretary John Roe")
+        assert not same_actor("DOJ", "Justice Department")  # read as two: held to the common cut
+        assert not same_actor("", "Trump") and not same_actor(None, None)
+
+    def test_the_extracted_claim_keeps_its_actor(self):
+        claims = extract_claims([_Article(title="Jury finds Acme Corp liable", summary=TestExtractClaims.SRC)],
+                                lambda _s: {"actor": "Acme Corp", "predicate": "liable for fraud and negligence"})
+        assert claims[0].actor == "Acme Corp"
+
+
+class TestRecordedClaims:
+    """The restatement fit's lines with an actor come from the recorded
+    claim calls: each verified claim once, with the actor the model
+    located."""
+
+    def test_verified_calls_become_claims_with_their_actor(self, db_session):
+        from datetime import datetime
+
+        from app.models import LlmGenerationSample
+        from app.pipeline.analyze import claims as mod
+        from app.pipeline.analyze.post_composer import _CLAIM_SOURCE_END, _CLAIM_SOURCE_START, CLAIM_TASK
+
+        source = "Senator Quillfeather introduced a bill to fund rural hospitals on Tuesday."
+        prompt = f"Example...{_CLAIM_SOURCE_START}{source}{_CLAIM_SOURCE_END}\n- rules"
+        answer = '{"actor": "Senator Quillfeather", "predicate": "introduced a bill to fund rural hospitals"}'
+        for day, passed, out in ((1, True, answer), (2, True, answer), (2, False, answer), (2, True, "not json")):
+            db_session.add(LlmGenerationSample(task=CLAIM_TASK, rank=1, attempt=1, input_text=prompt,
+                                               output_json=out, passed=passed,
+                                               created_at=datetime(2028, 3, day, 12)))
+        db_session.add(LlmGenerationSample(task=CLAIM_TASK, rank=1, attempt=1, input_text=prompt, output_json=answer,
+                                           passed=True, created_at=datetime(2028, 2, 1)))  # before the window
+        db_session.flush()
+        got = mod.recorded_claims(db_session, datetime(2028, 3, 1))
+        assert [(day, actor) for _, day, _, actor in got] == [(datetime(2028, 3, 1).date(), "Senator Quillfeather")]
+        assert got[0][0] == source and got[0][2].startswith("Senator Quillfeather introduced a bill")
