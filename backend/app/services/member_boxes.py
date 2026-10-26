@@ -27,6 +27,7 @@ from app.readout import compact_money, seat_name
 from app.score_display import shown_share
 from app.services.congress_service import bill_label
 from app.services.constituent_survey import survey_year
+from app.services.record_cards import long_date
 from app.services.presidential_support_service import summary as support_summary
 
 _PLURAL = {"D": "Democrats", "R": "Republicans", "I": "independents"}
@@ -53,6 +54,13 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
 
 def _stat(value: float, text: str, caption: str) -> dict:
     return {"type": "stat", "value": value, "text": text, "caption": caption}
+
+
+def _dated(what: str, iso: str | None) -> str:
+    """"Newest on October 9, 2026.": a date in the site's wording, or "" when
+    there is none to state."""
+    day = long_date(iso)
+    return f"{what} {day}." if day else ""
 
 
 def short_committee(name: str) -> str:
@@ -181,7 +189,7 @@ def votes_box(dimension: dict | None) -> dict:
     kinds = sorted((k for k in counts if counts[k]), key=lambda k: -counts[k])
     lead, n = kinds[0], counts[kinds[0]]
     dates = [d for d in ((v.get("rollCall") or {}).get("date") for v in listed) if d]
-    newest = f"Newest {max(dates)}." if dates else ""
+    newest = _dated("Newest on", max(dates)) if dates else ""
     if len(kinds) == 1:
         # One kind: its count would be the strip's count again, so no figure.
         headline = (f"The break was on {_BREAK_KINDS[lead][0]}" if n == 1
@@ -218,19 +226,21 @@ def bills_box(bills: list[dict] | None, branch: str) -> dict:
     own = [b for b in bills or []
            if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES and bill_label(b.get("billId"))]
     if not own:
-        return {**box, "headline": "No bills sponsored this Congress", "dek": None}
+        return {**box, "headline": "No bills sponsored this Congress", "dek": None, "billId": None}
     top = max(own, key=lambda b: ((BILL_STAGES.get(b.get("stage") or "") or {}).get("order", 0),
                                   b.get("latestActionDate") or "", b.get("introducedDate") or ""))
     phrase = _STAGE_PHRASE.get(top.get("stage") or "")
     if phrase:
         headline = f"{bill_label(top['billId'])} {phrase.format(chamber=_CHAMBER[branch])}"
-        when = f"Latest action {top['latestActionDate']}." if top.get("latestActionDate") else ""
+        when = _dated("Latest action", top.get("latestActionDate"))
     else:
         top = max(own, key=lambda b: b.get("introducedDate") or "")
         headline = f"Newest bill: {bill_label(top['billId'])}"
-        when = f"Introduced {top['introducedDate']}." if top.get("introducedDate") else ""
+        when = _dated("Introduced", top.get("introducedDate"))
     title = (top.get("title") or "").rstrip(".")
-    return {**box, "headline": headline, "dek": " ".join(p for p in (f"{title}." if title else "", when) if p)
+    # The bill named, so its More can list the others without it again.
+    return {**box, "headline": headline, "billId": top["billId"],
+            "dek": " ".join(p for p in (f"{title}." if title else "", when) if p)
             or None}
 
 
@@ -287,7 +297,7 @@ def holdings_box(holdings) -> dict | None:
     if holdings is None or not holdings.available:
         return None
     kicker = f"Holdings · {holdings.report_label}" if holdings.report_label else "Holdings"
-    filed = f"Filed {holdings.filed_date}." if holdings.filed_date else None
+    filed = _dated("Filed", holdings.filed_date) or None
     if not holdings.parsed:
         return {"kicker": kicker, "headline": "Report on file could not be read", "dek": filed, "figure": None}
     n = holdings.holdings_count

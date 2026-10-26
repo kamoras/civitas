@@ -41,13 +41,13 @@ def test_bills_box_names_the_bill_furthest_along_not_the_strips_count():
     ]
     box = mb.bills_box(bills, "senate")
     assert box["headline"] == "S. 9 passed the Senate"
-    assert box["dek"] == "Clean Water Act. Latest action 2025-09-10."
+    assert box["dek"] == "Clean Water Act. Latest action September 10, 2025."
     assert box["figure"] is None and " of " not in box["headline"]
     law = mb.bills_box([_bill("HR.5", "HR", "ENACTED", "2025-01-03", "2025-08-01", "Roads Act")], "house")
     assert law["headline"] == "H.R. 5 became law"
     quiet = mb.bills_box([bills[0], _bill("S.3", "S", "REFERRED", "2025-04-01", "2025-04-01", "Newer")], "senate")
     assert quiet["headline"] == "Newest bill: S. 3"
-    assert quiet["dek"] == "Newer. Introduced 2025-04-01."
+    assert quiet["dek"] == "Newer. Introduced April 1, 2025."
     assert mb.bills_box([bills[3]], "house")["headline"] == "No bills sponsored this Congress"
 
 
@@ -64,18 +64,18 @@ def test_votes_box_tells_what_the_breaks_were_on_not_how_many():
     box = mb.votes_box({"finding": "Breaks ... 3 times ...",
                         "facts": {"partyVotes": 499, "breaks": 4, "breakVotes": listed}})
     assert box["headline"] == "2 breaks were on nominations"
-    assert box["dek"] == "1 on a bill or resolution, 1 on another question. Newest 2026-06-23."
+    assert box["dek"] == "1 on a bill or resolution, 1 on another question. Newest on June 23, 2026."
     assert "499" not in box["headline"] + box["dek"] and "times" not in box["dek"]
     # All of one kind: the kind's count would be the strip's count again.
     same = [_break("2026-07-15", bill_id="HR.8595"), _break("2026-05-01", bill_id="HR.1")]
     same[1]["rollCall"]["amendment"] = "H.Amdt. 9"
     mixed = mb.votes_box({"facts": {"partyVotes": 322, "breaks": 2, "breakVotes": same}})
     assert mixed["headline"] == "1 break was on an amendment"
-    assert mixed["dek"] == "1 on a bill or resolution. Newest 2026-07-15."
+    assert mixed["dek"] == "1 on a bill or resolution. Newest on July 15, 2026."
     one_kind = mb.votes_box({"facts": {"partyVotes": 322, "breaks": 2, "breakVotes": same[:1] * 2}})
     assert (one_kind["headline"], one_kind["figure"]) == ("Every break was on bills and resolutions", None)
     one = mb.votes_box({"facts": {"partyVotes": 10, "breaks": 1, "breakVotes": [_break("2025-05-01")]}})
-    assert (one["headline"], one["dek"]) == ("The break was on another question", "Newest 2025-05-01.")
+    assert (one["headline"], one["dek"]) == ("The break was on another question", "Newest on May 1, 2025.")
     none = mb.votes_box({"facts": {"partyVotes": 493, "breaks": 0, "breakVotes": []}})
     assert none["headline"] == "No votes against the party to list" and none["figure"] is None
     flank = mb.votes_box({"facts": {"partyVotes": 493, "breaks": 0, "breakVotes": [],
@@ -123,7 +123,7 @@ def test_holdings_box_states_the_total_as_the_schema_prints_it():
                         holdings_count=179, unvalued_count=1, total_low=21_027_153.0, total_shown="$21.0M+")
     box = mb.holdings_box(h)
     assert box["headline"] == "$21.0M+ disclosed across 179 assets"
-    assert box["dek"] == "Filed 2026-08-08. 1 asset with no stated value, not charted."
+    assert box["dek"] == "Filed August 8, 2026. 1 asset with no stated value, not charted."
     assert mb.holdings_box(SimpleNamespace(available=False)) is None
 
 

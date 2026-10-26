@@ -552,6 +552,63 @@ describe("MemberScorecard", () => {
     expect(within(column).queryByText(/Electing a Member/)).not.toBeInTheDocument();
   });
 
+  it("doesn't list the bill the box's headline names again under it", async () => {
+    const config = {
+      industries: {},
+      platformCategories: {},
+      policyAreas: [],
+      billStages: {
+        REFERRED: { name: "Referred to Committee", color: "", order: 2 },
+        PASSED_CHAMBER: { name: "Passed Chamber", color: "", order: 6 },
+        IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "", order: 7 },
+      },
+      substantiveBillTypes: ["HJRES", "HR", "S", "SJRES"],
+    } as AppConfig;
+    const withTwo = {
+      ...member,
+      sponsoredBills: [
+        ...(member.sponsoredBills ?? []),
+        {
+          ...member.sponsoredBills![0],
+          billId: "HR.2",
+          title: "Second Bill Act",
+          stage: "PASSED_CHAMBER",
+        },
+      ],
+    };
+    const boxes = {
+      committees: { count: 0, line: "No committee seats on file", posts: [], items: [] },
+      bills: {
+        kicker: "Bills · this Congress",
+        headline: "H.R. 1373 passed the House",
+        dek: "Tennessee Valley Authority Transparency Act of 2025. Latest action June 1, 2025.",
+        figure: null,
+        billId: "HR.1373",
+      },
+    } as unknown as MemberBoxes;
+    render(
+      <ConfigProvider value={config}>
+        <main>
+          <MemberScorecard
+            member={withTwo}
+            chamber="house"
+            breakdown={breakdown}
+            district={2}
+            committees={[]}
+            boxes={boxes}
+          />
+        </main>
+      </ConfigProvider>
+    );
+    const column = document.getElementById("legislative-effectiveness")!;
+    expect(within(column).getByText("Next furthest along")).toBeInTheDocument();
+    expect(within(column).getByText("Second Bill Act")).toBeInTheDocument();
+    // Named once: in the box's line, not again in the list.
+    expect(within(column).getAllByText(/Tennessee Valley Authority Transparency Act/)).toHaveLength(
+      1
+    );
+  });
+
   it("leads each column with the API's finding, with no 0 to 100 score behind it", async () => {
     const withFindings = {
       fundingIndependence: {

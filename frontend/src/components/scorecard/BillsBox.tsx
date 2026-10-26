@@ -4,7 +4,7 @@ import Link from "@/components/Link";
 import type { SponsoredBill } from "@/types/senator";
 import type { EffectivenessFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";
-import type { MemberBox as Box } from "@/types/politicians";
+import type { MemberBoxes } from "@/types/politicians";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MemberBox, { Block } from "./MemberBox";
@@ -60,7 +60,7 @@ export default function BillsBox({
   onMore,
 }: {
   chamber: "senate" | "house";
-  box: Box | null | undefined;
+  box: MemberBoxes["bills"] | null | undefined;
   bills: SponsoredBill[];
   dimension: ScoreBreakdownDimension | undefined;
   onMore: () => void;
@@ -77,6 +77,8 @@ export default function BillsBox({
   // leave out too) that got past automatic referral.
   const furthest = [...bills]
     .filter((b) => isBill(b.billType))
+    // The bill the box's headline names isn't listed again under it.
+    .filter((b) => b.billId !== box?.billId)
     .filter((b) => order(b.stage) > (config?.billStages.REFERRED?.order ?? 2))
     .sort((a, b) => order(b.stage) - order(a.stage))
     .slice(0, BILLS_SHOWN);
@@ -113,7 +115,7 @@ export default function BillsBox({
               !facts && <p className="text-body text-ink-lo">No sponsored bills on record yet.</p>
             )}
             {furthest.length > 0 && (
-              <Block label="Furthest along">
+              <Block label={box?.billId ? "Next furthest along" : "Furthest along"}>
                 <ul className="flex flex-col gap-1.5">
                   {furthest.map((b) => (
                     <li
