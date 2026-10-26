@@ -251,7 +251,7 @@ def reporter(run_name: str):
                 why = f"it ended {outcome.status} ({detail or 'see its run row'})"
             send_ops_alert(
                 f"{run_name} {link.label} run {'crashed' if crash else 'failed'}",
-                f"{why}.{' The traceback is on the run row (admin, Pipelines).' if crash else ''} "
+                f"{why.rstrip('.')}.{' The traceback is on the run row (admin, Pipelines).' if crash else ''} "
                 f"{link.label} data stays as "
                 "the last run left it until the next nightly run. The rest of its chain still runs.",
                 dedupe_key=f"crashed-{tag}",

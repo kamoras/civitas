@@ -175,7 +175,8 @@ class ProgressTracker:
             f"{pipeline}: step {key} failed",
             f"{pipeline} step '{key}' failed and the run continued without it"
             + (f": {detail}" if detail else "") + "."
-            + (f" Cause: {cause}." if cause else "")
+            # A cause that ends a sentence of its own (EfdRefused's) keeps one full stop.
+            + (f" Cause: {cause.rstrip('.')}." if cause else "")
             + (" The traceback is on the run row (admin, Pipelines)."
                if cause and not isinstance(error, ExpectedSourceFailure) else ""),
             dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
