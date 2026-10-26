@@ -2604,11 +2604,21 @@ which names the rest and replaces a registry name that doesn't read as a
 publisher; a test fails while a host has no name; the admin tab adds each
 reading module's docstring), and its state as of its last read: refused or walled while
 `crawl_policy`'s backoff holds, walled where the ballot-measure registry
-documents a wall the host hasn't answered past, walled, refused or
-unavailable when its last request failed (failing since the first failure
-after its last answer), not read this run when nothing is on record or its
-run kind's latest run didn't ask it, else ok. What each host answered comes
-from `app/source_reads.py`: every governed request ends there (a 5xx, a 429,
+documents a wall the host hasn't had a good read past, walled, refused or
+unavailable when its latest outcome failed (failing since the first failure
+after its last good read), not read this run when nothing is on record or
+its run kind's latest run didn't ask it, else ok. **A good read is a step
+that got what it came for**, not a 200 on the way (eFD's home page loads,
+then its terms agreement is refused): for a host a pipeline step reads, the
+last good read and "since" come from step outcomes (`SourceReadStat`, each
+row marked `failed_on_host` when the step ended on an ExpectedSourceFailure
+naming the host, and before those rows the same steps' outcomes in the runs'
+progress records); raw answers date only hosts no step reads. The runs that
+read a host come from the code (`crawler.run_readers`: the run whose module
+takes the run row, and the `app.pipeline` modules it imports), so they are
+right before any run has recorded a read; "last asked" is a request, a
+step, a refusal record or the registry's dated wall, and "never" only with
+none. What each host answered comes from `app/source_reads.py`: every governed request ends there (a 5xx, a 429,
 a bot wall's challenge or no answer fails the host; a 403 or 404 is an
 answer about one address), kept per host on the data volume
 (`source_reads.json`, merged across processes) and per pipeline step in

@@ -47,6 +47,10 @@ export interface AdminSourceHealthEntry extends SourceHealthEntry {
   /** The failure as recorded: a status code, a refusal's own words. */
   reason: string | null;
   lastAttempt: string | null;
+  /** The same as the site prints it: "Oct 22, 2026". */
+  lastAttemptText: string | null;
+  /** The runs that read it, from the code: "Stock trades", "Election". */
+  readBy: string[];
   /** "stock trades · senate_ptr": the runs and steps that read it. */
   runs: string[];
   requests30d: number;

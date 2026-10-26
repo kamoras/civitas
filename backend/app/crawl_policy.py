@@ -293,6 +293,7 @@ def _release(host: str) -> None:
 def _check(host: str) -> None:
     entry = refusing(host)
     if entry:
+        source_reads.held_off(host, entry.get("reason") or "")
         raise HostRefusing(host, f"refusing Civitas ({entry.get('reason')})", entry.get("until"))
 
 

@@ -84,6 +84,8 @@ describe("SourcesTable (admin)", () => {
           reads: ["Fetch + parse Senate STOCK Act periodic transaction reports."],
           reason: "Akamai's Access Denied to the terms agreement (browser)",
           lastAttempt: "2026-10-26T03:10:00+00:00",
+          lastAttemptText: "Oct 26, 2026",
+          readBy: ["Stock trades"],
           runs: ["stock trades · senate_ptr"],
           requests30d: 4,
           failedRequests30d: 4,
@@ -96,7 +98,8 @@ describe("SourcesTable (admin)", () => {
     const row = within(
       screen.getByRole("list", { name: "Every external source and its health" })
     ).getAllByRole("listitem")[0];
-    expect(row).toHaveTextContent("stock trades · senate_ptr");
+    expect(row).toHaveTextContent("Last asked Oct 26, 2026 · read by Stock trades");
+    expect(row).toHaveTextContent("Steps on record: stock trades · senate_ptr");
     expect(row).toHaveTextContent("3 failed steps; 4 of 4 requests failed");
     expect(row).toHaveTextContent("Recorded: Akamai's Access Denied");
   });

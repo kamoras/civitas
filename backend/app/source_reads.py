@@ -79,6 +79,14 @@ def unanswered(host: str, exc: BaseException) -> None:
     _record(host, False, "unavailable", unanswered_reason(exc))
 
 
+def held_off(host: str, reason: str) -> None:
+    """A reader asked for the host while its refusal backoff holds: no
+    request went out, but the step that asked still needed the host and
+    didn't get it, so it counts against the host (and its step) like a
+    refusal."""
+    _record(host, False, "walled" if "bot wall" in reason else "refused", reason)
+
+
 def _record(host: str, ok: bool, kind: str | None, reason: str | None) -> None:
     host, now = host.lower(), _now()
     with _lock:

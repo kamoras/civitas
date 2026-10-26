@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { fetchAdminSourceHealth } from "@/lib/api";
 import type { AdminSourceHealth, SourceHealthEntry } from "@/types/sources";
-import { formatTime } from "./format";
 import { Panel } from "./widgets";
 
 /** The state's colour: a failing source stands out, one not read this run
@@ -48,9 +47,12 @@ export function SourcesTable({ data }: { data: AdminSourceHealth }) {
               <span className="block text-ink-lo">{s.line}</span>
               {s.reason && <span className="block text-ink-min">Recorded: {s.reason}</span>}
               <span className="block text-ink-lo">
-                Last asked {s.lastAttempt ? formatTime(s.lastAttempt) : "never"} · read by{" "}
-                {s.runs.length ? s.runs.join(", ") : "no pipeline run"}
+                Last asked {s.lastAttemptText ?? "never"} · read by{" "}
+                {s.readBy.length ? s.readBy.join(", ") : "no nightly run"}
               </span>
+              {s.runs.length > 0 && (
+                <span className="block text-ink-min">Steps on record: {s.runs.join(", ")}</span>
+              )}
               <span className="block text-ink-lo tabular-nums">
                 {data.windowDays} days: {s.failuresText}
               </span>

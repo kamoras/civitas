@@ -1,7 +1,8 @@
 """Which hosts each pipeline step read
 
 `source_read_stats`: per (run kind, run id, step, host), how many of the
-step's requests the host answered and how many failed
+step's requests the host answered and how many failed, and whether the
+step failed on the host
 (app/source_reads.py, written by ProgressTracker), for the source map
 (app/source_health.py).
 
@@ -31,6 +32,7 @@ def upgrade() -> None:
         sa.Column('host', sa.String(length=128), nullable=False),
         sa.Column('answered', sa.Integer(), nullable=False),
         sa.Column('failed', sa.Integer(), nullable=False),
+        sa.Column('failed_on_host', sa.Boolean(), nullable=False),
         sa.Column('recorded_at', sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('run_kind', 'run_id', 'step_key', 'host', name='uq_source_read_stat_run_step_host'),

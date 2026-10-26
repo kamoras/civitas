@@ -1,11 +1,17 @@
 """The source map: what each host answered (app/source_reads.py) and the
 state each source is in now (app/source_health.py)."""
 
+import json
+import time
+from datetime import datetime
+
 import httpx
 import pytest
 
 from app import crawl_policy, crawler, source_health, source_reads
-from app.models import SourceFailureCount, SourceReadStat
+from app.models import SourceFailureCount, SourceReadStat, StockTradesPipelineRun
+from app.pipeline.fetch.senate_ptr import EfdRefused
+from app.pipeline.progress_tracker import ProgressTracker
 
 
 @pytest.fixture(autouse=True)
@@ -57,8 +63,16 @@ class TestReads:
 
 
 def _hosts(*names):
-    return [{"host": n, "readers": [{"module": "app.pipeline.fetch.fec", "rps": None, "registry": None}]}
+    # Read by senate_ptr, which only the stock-trades run imports.
+    return [{"host": n, "readers": [{"module": "app.pipeline.fetch.senate_ptr", "rps": None, "registry": None}]}
             for n in names]
+
+
+def _stock_run(db, run_id: int, when: str, status: str, step: str = "senate_ptr"):
+    db.add(StockTradesPipelineRun(
+        id=run_id, status="completed", started_at=datetime.fromisoformat(when),
+        progress_detail=json.dumps([{"key": step, "status": status, "completedAt": when}]),
+    ))
 
 
 class TestMap:
@@ -105,6 +119,57 @@ class TestMap:
         assert entry["state"] == "walled" and entry["since"]
         source_reads.answered("www.ohiosos.gov", 200, False)
         assert source_health.build(db_session)["sources"][0]["state"] == "ok"
+
+    def test_a_good_read_is_a_step_that_got_what_it_came_for(self, db_session, monkeypatch):
+        # eFD: the last stock run that read it whole was Oct 22; from Oct 23
+        # its senate_ptr step failed on it, though its home page still
+        # answered 200 on the way to the refused agreement. The runs before
+        # the per-step rows existed are read from their own progress records.
+        monkeypatch.setattr(crawler, "hosts", lambda: _hosts("efd.example.gov"))
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
+        _stock_run(db_session, 1, "2026-10-22T03:40:00", "done")
+        _stock_run(db_session, 2, "2026-10-23T03:41:00", "failed")
+        _stock_run(db_session, 3, "2026-10-24T03:39:00", "failed")
+        db_session.add(SourceReadStat(
+            run_kind="stock_trades_pipeline_runs", run_id=3, step_key="senate_ptr", host="efd.example.gov",
+            answered=1, failed=1, failed_on_host=True, recorded_at=datetime(2026, 10, 24, 3, 39),
+        ))
+        db_session.commit()
+        source_reads.answered("efd.example.gov", 200, False)  # the home page, today
+        source_reads.answered("efd.example.gov", 403, True)
+        e = source_health.build(db_session)["sources"][0]
+        assert e["lastGood"] == "2026-10-22" and e["since"] == "2026-10-23"
+        assert e["state"] == "walled"
+        assert e["line"] == ("Not readable since Oct 23, 2026: the site blocks automated reads. "
+                             "Last good read Oct 22, 2026.")
+        assert e["readBy"] == ["Stock trades"]
+
+    def test_a_step_that_fails_on_a_host_it_never_reached_is_recorded(self, db_session):
+        # eFD's refusal can be known before asking (its backoff): the step
+        # still failed on eFD, with no request in its window.
+        run = StockTradesPipelineRun(status="running")
+        db_session.add(run)
+        db_session.commit()
+        tracker = ProgressTracker(run, [("senate_ptr", "fetch", "Senate")], db_session, time.time())
+        tracker.begin("senate_ptr")
+        try:
+            raise EfdRefused("refused")
+        except EfdRefused:
+            tracker.fail("senate_ptr")
+        row = db_session.query(SourceReadStat).one()
+        assert (row.host, row.step_key, row.answered, row.failed_on_host) == (
+            "efdsearch.senate.gov", "senate_ptr", 0, True)
+
+    def test_read_by_comes_from_the_code_and_a_registry_wall_dates_an_ask(self, db_session, monkeypatch):
+        # Ohio before any run has recorded a read: the Election run imports
+        # its reader, and the registry's wall was measured on a request.
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
+        by = {e["host"]: e for e in source_health.build(db_session)["sources"]}
+        assert by["www.ohiosos.gov"]["readBy"] == ["Election"]
+        assert by["www.ohiosos.gov"]["lastAttempt"] == "2026-10-22"
+        assert "Stock trades" in by["efdsearch.senate.gov"]["readBy"]
+        # Nothing at all on record: never asked.
+        assert by["thehill.com"]["lastAttempt"] is None
 
     def test_every_source_on_the_map_is_named_as_site_copy(self, db_session):
         # Who publishes it and what is taken, from the news feeds, the state

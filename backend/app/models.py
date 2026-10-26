@@ -2475,8 +2475,8 @@ class PipelineRateLimitStat(Base):
 
 
 class SourceReadStat(Base):
-    """Which hosts one pipeline step read, and how many of its requests
-    each answered or failed (app/source_reads.py, diffed over the step's
+    """Which hosts one pipeline step read, how many of its requests each
+    answered or failed, and whether the step failed on the host (app/source_reads.py, diffed over the step's
     window by ProgressTracker, as PipelineRateLimitStat is). What the
     source map (app/source_health.py) reads for the runs and steps that
     read a host and whether the latest run read it at all. Same caveat as
@@ -2491,6 +2491,11 @@ class SourceReadStat(Base):
     host: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The step failed on this host: it ended on an ExpectedSourceFailure
+    # naming it (a bot wall, a refusal, an outage). What tells a good read,
+    # a step that got what it came for, from a 200 on the way to a refusal
+    # (eFD's home page loads, then its terms agreement is refused).
+    failed_on_host: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
     __table_args__ = (

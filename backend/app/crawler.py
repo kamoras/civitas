@@ -29,6 +29,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app import web_bot_auth
+from app.pipeline import run_tracker
 from app.config import settings
 from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, HOST_USER_AGENTS, USER_AGENT
 from app.photo_hosts import PHOTO_SOURCE_HOSTS
@@ -270,6 +271,52 @@ def pace(rps: float | None, registry: str | None = None) -> str:
         gap = 1 / rps
         return f"1 request every {gap:g} seconds at most"
     return f"{rps:g} request{'s' if rps != 1 else ''} a second at most"
+
+
+@lru_cache(maxsize=1)
+def run_readers() -> dict[str, set[str]]:
+    """Each pipeline run's table name -> the reader modules its run imports,
+    read from the code so it is right before any run has recorded a read.
+
+    A run's module is the one that takes its run row (calls an `acquire_*`
+    lock with the run model, run_tracker.run_tables' models). From it,
+    every `app.pipeline.*` module it imports, anywhere in the file, and so
+    on, but not through another run's module: the Senate helpers the House
+    run imports are not the House run reading the Senate's sources. Outside
+    app/pipeline/ nothing is followed (the scheduler and alert modules
+    import nearly everything)."""
+    models = {m.__name__: m.__tablename__ for m in run_tracker.run_tables().values()}
+    imports: dict[str, set[str]] = {}
+    owner: dict[str, str] = {}
+    for path in sorted(APP.rglob("*.py")):
+        if "tests" in path.parts:
+            continue
+        name = _module_name(path).removesuffix(".__init__")
+        found: set[str] = set()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("app."):
+                found.add(node.module)
+                found.update(f"{node.module}.{a.name}" for a in node.names)
+            elif isinstance(node, ast.Import):
+                found.update(a.name for a in node.names if a.name.startswith("app."))
+            elif isinstance(node, ast.Call) and getattr(node.func, "id", "").startswith("acquire_"):
+                for arg in node.args:
+                    if isinstance(arg, ast.Name) and arg.id in models:
+                        owner[name] = models[arg.id]
+        imports[name] = found
+    reader_modules = {r["module"] for r in readers()}
+    out: dict[str, set[str]] = {}
+    for start, table in owner.items():
+        seen, todo = set(), [start]
+        while todo:
+            module = todo.pop()
+            if module in seen:
+                continue
+            seen.add(module)
+            todo.extend(m for m in imports.get(module, ())
+                        if m.startswith("app.pipeline.") and m in imports and m not in owner)
+        out.setdefault(table, set()).update(seen & reader_modules)
+    return out
 
 
 def hosts() -> list[dict]:

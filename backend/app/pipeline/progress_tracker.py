@@ -22,7 +22,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.error_utils import ExpectedSourceFailure, record_exception
+from app.error_utils import ExpectedSourceFailure, failure_host, record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app import source_reads
 from app.pipeline import rate_limiter, run_tracker
@@ -164,7 +164,8 @@ class ProgressTracker:
         error = sys.exception()
         cause = record_exception(self._run, error, key) if error is not None else None
         self._flush()
-        self._record_timing(step)
+        # The host a source failure names: the step failed on that host.
+        self._record_timing(step, failed_host=failure_host(error) if isinstance(error, ExpectedSourceFailure) else None)
         # Every caller logs the exception and carries on, and the run still
         # ends "completed" — so without this a failed step is visible only
         # to someone reading that night's logs. Supplementary's justice step
@@ -207,7 +208,7 @@ class ProgressTracker:
             logger.debug("Progress commit failed, rolling back", exc_info=True)
             self._db.rollback()
 
-    def _record_timing(self, step: dict) -> None:
+    def _record_timing(self, step: dict, failed_host: str | None = None) -> None:
         """Persist one durable timing row for a step that just reached a
         terminal state.
 
@@ -265,7 +266,7 @@ class ProgressTracker:
                 logger.debug("Phase timing rollback failed", exc_info=True)
 
         self._record_rate_limit_stats(step, run_kind, run_id)
-        self._record_source_reads(step, run_kind, run_id)
+        self._record_source_reads(step, run_kind, run_id, failed_host)
 
     def _record_rate_limit_stats(self, step: dict, run_kind: str, run_id: int) -> None:
         """Persist how much of this step was spent blocked on each source's
@@ -320,10 +321,15 @@ class ProgressTracker:
                 logger.debug("Rate limit stat rollback failed", exc_info=True)
 
 
-    def _record_source_reads(self, step: dict, run_kind: str, run_id: int) -> None:
-        """Persist which hosts this step read, and how many of its requests
-        each answered or failed (app/source_reads.py), then write the
-        process's host records so the source map is current as of the step.
+    def _record_source_reads(
+        self, step: dict, run_kind: str, run_id: int, failed_host: str | None = None,
+    ) -> None:
+        """Persist which hosts this step read, how many of its requests each
+        answered or failed (app/source_reads.py), and the host the step
+        failed on (`failed_host`, from its ExpectedSourceFailure: a row of
+        its own when no request reached it, as when eFD's refusal is known
+        before asking), then write the process's host records so the source
+        map is current as of the step.
         Same posture as the rate-limit rows: its own commit, every failure
         swallowed."""
         from app.models import SourceReadStat
@@ -332,7 +338,10 @@ class ProgressTracker:
         if baseline is None:
             return
         try:
-            for host, (answered, failed) in source_reads.diff(baseline, source_reads.counts()).items():
+            reads = source_reads.diff(baseline, source_reads.counts())
+            if failed_host and failed_host != "unknown":
+                reads.setdefault(failed_host, (0, 0))
+            for host, (answered, failed) in reads.items():
                 row = (
                     self._db.query(SourceReadStat)
                     .filter_by(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
@@ -342,6 +351,7 @@ class ProgressTracker:
                     row = SourceReadStat(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
                     self._db.add(row)
                 row.answered, row.failed, row.recorded_at = answered, failed, utcnow()
+                row.failed_on_host = host == failed_host
             self._db.commit()
         except Exception:
             logger.debug("Source read write failed for %s/%s", run_kind, step.get("key"), exc_info=True)

@@ -3,27 +3,42 @@ Sources tab (GET /api/admin/source-health) and the map on /about/data
 (GET /api/sources/health, which leaves out run internals).
 
 Every host comes by rule, never from a list typed here: the hosts the code
-names (app/crawler.py, the same list /about/crawler shows), each with what
-its readers read (the first sentence of each reading module's docstring).
-Its state comes from what happened when it was last asked, in this order:
+names (app/crawler.py, the same list /about/crawler shows), its name
+(app/source_names.py), what its readers say they read (the admin's), and
+the runs that read it, from the code (crawler.run_readers: the runs whose
+modules import a reader of the host), so it is right before any run has
+recorded a read.
+
+**A good read is a step that got what it came for**, not a 200 on the way:
+eFD's home page loads, then its terms agreement is refused. For a host a
+pipeline step reads, the last good read and "failing since" come from step
+outcomes: the step's SourceReadStat rows (a step that read the host and
+did not fail on it with an ExpectedSourceFailure is good; one that did is a
+failure), and before those rows existed, the same steps' outcomes in the
+runs' own progress records (the steps the rows name, so history is read
+only for steps known to read the host). Raw answers (app/source_reads.py)
+date only hosts no step reads (the hourly feeds).
+
+Its state, in this order:
 
 1. **refused / walled**: the host's refusal backoff holds now
    (crawl_policy.refusals: a bot wall's challenge is walled, a 429 refused).
 2. **walled**: a wall written up in the ballot-measure registry (`wall`:
-   host, date measured), with no answer from the host since.
-3. **walled / refused / unavailable**: the host's last request failed
-   (app/source_reads.py), failing since the first failure after its last
-   answer.
-4. **not read this run**: no request on record, or a pipeline run read it
-   (SourceReadStat) and that run kind's latest run didn't. A source not
-   asked is not a source that failed (outage is not "no data").
-5. **ok**: it answered when last asked.
+   host, date measured), with no good read since.
+3. **walled / refused / unavailable**: its latest step outcome was a
+   failure (else, for a host no step reads, its last request failed),
+   failing since the first failure after its last good read.
+4. **not read this run**: nothing on record, or a run read it and that run
+   kind's latest run didn't. A source not asked is not a source that failed
+   (outage is not "no data").
+5. **ok**: its latest step outcome, or answer, was good.
 
 Read path only: no fetch, no model. Outside app/pipeline/, so it never
 moves the analysis-code fingerprint.
 """
 
 import ast
+import json
 import re
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -33,11 +48,14 @@ from sqlalchemy.orm import Session
 
 from app import crawl_policy, crawler, source_names, source_reads
 from app.models import SourceFailureCount, SourceReadStat
+from app.pipeline import run_tracker
 from app.pipeline.fetch import ballot_measure_pdf_sources
 from app.source_failures import run_label
 from app.time_utils import utcnow
 
 WINDOW_DAYS = 30
+# How many of a run kind's newest runs are read for step history.
+HISTORY_RUNS = 120
 
 STATE_LABELS = {
     "ok": "Read normally",
@@ -117,6 +135,73 @@ def _run_reads(db: Session, since: datetime) -> tuple[dict, dict]:
     return reads, in_latest
 
 
+def _code_runs() -> dict[str, set[str]]:
+    """host -> the run tables whose runs read it, from the code."""
+    by_module: dict[str, set[str]] = {}
+    for table, modules in crawler.run_readers().items():
+        for module in modules:
+            by_module.setdefault(module, set()).add(table)
+    return {h["host"]: set().union(*(by_module.get(r["module"], set()) for r in h["readers"]))
+            for h in crawler.hosts()}
+
+
+def _iso(value) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat() if isinstance(value, datetime) else str(value)
+
+
+def _step_events(db: Session, code_runs: dict[str, set[str]]) -> dict[str, list[tuple[str, bool]]]:
+    """host -> [(when, good)] for every step outcome on record that read
+    it: its SourceReadStat rows (good: answered and didn't fail on the
+    host), then, for the (run, step) pairs those rows name, the outcome of
+    the same step in the runs' progress records (done is good, failed is
+    not), which reaches back before the rows existed. A row from a run the
+    code says doesn't read the host is left out: the hourly refresh's
+    requests fall in a pipeline step's window."""
+    events: dict[str, list[tuple[str, bool]]] = {}
+    pairs: dict[tuple[str, str], set[str]] = {}
+    seen: set[tuple[str, int, str, str]] = set()
+    for r in db.query(SourceReadStat):
+        if r.run_kind not in code_runs.get(r.host, ()):
+            continue
+        good = not r.failed_on_host and r.answered > 0
+        events.setdefault(r.host, []).append((_iso(r.recorded_at)[:19], good))
+        pairs.setdefault((r.run_kind, r.step_key), set()).add(r.host)
+        seen.add((r.run_kind, r.run_id, r.step_key, r.host))
+    models = {m.__tablename__: m for m in run_tracker.run_tables().values()}
+    for table in {kind for kind, _ in pairs}:
+        model = models.get(table)
+        if model is None:
+            continue
+        runs = (db.query(model.id, model.progress_detail).order_by(model.id.desc()).limit(HISTORY_RUNS))
+        for run_id, detail in runs:
+            try:
+                steps = json.loads(detail or "[]")
+            except ValueError:
+                continue
+            for step in steps if isinstance(steps, list) else []:
+                hosts = pairs.get((table, step.get("key")), ())
+                status, when = step.get("status"), step.get("completedAt")
+                if status not in ("done", "failed") or not when:
+                    continue
+                for host in hosts:
+                    if (table, run_id, step["key"], host) not in seen:
+                        events.setdefault(host, []).append((when[:19], status == "done"))
+    return events
+
+
+def _outcomes(events: list[tuple[str, bool]]) -> tuple[str | None, str | None, bool | None]:
+    """(last good, failing since, latest was good) from step outcomes."""
+    if not events:
+        return None, None, None
+    events = sorted(events)
+    good = [w for w, ok in events if ok]
+    last_good = good[-1] if good else None
+    after = [w for w, ok in events if not ok and (last_good is None or w > last_good)]
+    return last_good, (after[0] if after else None), events[-1][1]
+
+
 def _failed_steps(db: Session, since: str) -> dict[str, int]:
     return dict(
         db.query(SourceFailureCount.host, func.sum(SourceFailureCount.count))
@@ -139,6 +224,15 @@ def _count(n: int, one: str) -> str:
     return f"{n:,} {one}{'' if n == 1 else 's'}"
 
 
+def _latest_kinds(db: Session) -> dict[str, str]:
+    """host -> the kind of its newest counted source failure."""
+    out: dict[str, str] = {}
+    for host, kind in (db.query(SourceFailureCount.host, SourceFailureCount.kind)
+                       .order_by(SourceFailureCount.date)):
+        out[host] = kind
+    return out
+
+
 def _failures_text(steps: int, failed: int, requests: int) -> str:
     """"1 failed step; 2 of 3 requests failed", for the admin's column."""
     return f"{_count(steps, 'failed step')}; {failed:,} of {_count(requests, 'request')} failed"
@@ -157,6 +251,10 @@ def build(db: Session) -> dict:
     records = source_reads.reads()
     run_reads, in_latest = _run_reads(db, since_dt)
     failed_steps = _failed_steps(db, since_day)
+    code_runs = _code_runs()
+    events = _step_events(db, code_runs)
+    kinds = _latest_kinds(db)
+    labels = {m.__tablename__: label for label, m in run_tracker.run_tables().items()}
 
     entries = []
     hosts = crawler.hosts()
@@ -169,18 +267,34 @@ def build(db: Session) -> dict:
         if host in photo_only:
             continue
         rec = records.get(host, {})
-        last_ok, reason, since = rec.get("lastOk"), None, None
-        if (ref := refusing.get(host)) is not None:
+        stepped = host in events
+        if stepped:
+            # A step reads it: step outcomes decide (see the module docstring).
+            last_ok, step_since, latest_good = _outcomes(events[host])
+        else:
+            last_ok, step_since, latest_good = rec.get("lastOk"), rec.get("failingSince"), None
+        wall = walls.get(host)
+        ref = refusing.get(host)
+        reason, since = None, None
+        if ref is not None:
             state = "walled" if "bot wall" in (ref.get("reason") or "") else "refused"
-            reason, since = ref.get("reason"), ref.get("since")
-        elif (wall := walls.get(host)) and (not last_ok or last_ok[:10] < wall.get("measured", "")):
-            state, reason, since = "walled", "the site blocks automated reads (a bot wall)", wall.get("measured")
-        elif rec.get("failingSince"):
-            state, reason, since = rec.get("kind") or "unavailable", rec.get("reason"), rec["failingSince"]
+            reason, since = ref.get("reason"), step_since or ref.get("since")
+        elif wall and (not last_ok or last_ok[:10] < wall.get("measured", "")):
+            state, reason = "walled", "the site blocks automated reads (a bot wall)"
+            since = step_since or wall.get("measured")
+        elif (latest_good is False) if stepped else bool(step_since):
+            state = rec.get("kind") if rec.get("failingSince") else None
+            state = state or kinds.get(host) or "unavailable"
+            reason, since = rec.get("reason"), step_since
         elif not last_ok or (host in run_reads and not in_latest.get(host)):
             state = "not_read"
         else:
             state = "ok"
+        # When it was last asked: a request, a step, or what a refusal or
+        # the registry's wall dates. "Never" only with no record at all.
+        asked = [rec.get("lastAttempt"), max((w for w, _ in events.get(host, ())), default=None),
+                 ref.get("since") if ref else None, wall.get("measured") if wall else None]
+        last_asked = max(filter(None, asked), default=None, key=lambda v: v[:19])
         runs = run_reads.get(host, {})
         entries.append({
             "host": host,
@@ -196,7 +310,10 @@ def build(db: Session) -> dict:
             "plainReason": PLAIN_REASONS.get(state),
             "line": _line(state, _day(since), _day(last_ok), PLAIN_REASONS.get(state)),
             # Admin only (public() drops them).
-            "lastAttempt": rec.get("lastAttempt"),
+            "lastAttempt": last_asked,
+            "lastAttemptText": _text(last_asked),
+            # The runs that read it, from the code; the steps that did, as recorded.
+            "readBy": sorted(labels.get(t, t) for t in code_runs.get(host, ())),
             "runs": sorted(runs.get("runs", ())),
             "requests30d": runs.get("answered", 0) + runs.get("failed", 0),
             "failedRequests30d": runs.get("failed", 0),
