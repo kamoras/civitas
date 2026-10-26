@@ -631,7 +631,7 @@ class TestMissingDescriptionIsAudible:
             _item("House takes it up", "https://example.com/b"),
         )
         with patch(
-            "app.pipeline.fetch.news_feeds.httpx.get",
+            "httpx.get",
             return_value=_feed_response(feed),
         ), caplog.at_level(logging.INFO):
             articles = fetch_news_articles([{"name": "Test", "url": "https://x/f"}])
@@ -646,7 +646,7 @@ class TestMissingDescriptionIsAudible:
             _item("House takes it up", "https://example.com/b"),
         )
         with patch(
-            "app.pipeline.fetch.news_feeds.httpx.get",
+            "httpx.get",
             return_value=_feed_response(feed),
         ), caplog.at_level(logging.INFO):
             articles = fetch_news_articles([{"name": "Test", "url": "https://x/f"}])
