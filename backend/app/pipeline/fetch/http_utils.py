@@ -36,7 +36,9 @@ import requests
 from app.contact import USER_AGENT
 from app.error_utils import redact_sensitive_params
 from app.crawl_policy import HostRefusing
-from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge, observe_answer, source_gate
+from app.http_client import (
+    DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge, observe_answer, observe_unanswered, source_gate,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -353,7 +355,11 @@ async def fetch_bytes_with_retry(
 def _gated_request(method: str, url: str, timeout: float, kwargs: dict) -> "requests.Response":
     """requests.request with the source's manners (http_client.source_gate)."""
     with source_gate(url, method):
-        resp = requests.request(method, url, timeout=timeout, **kwargs)
+        try:
+            resp = requests.request(method, url, timeout=timeout, **kwargs)
+        except requests.RequestException as exc:
+            observe_unanswered(url, exc)
+            raise
     observe_answer(getattr(resp, "url", None) or url, resp.status_code,
                    getattr(resp, "headers", None), (getattr(resp, "content", None) or b"")[:4096])
     return resp

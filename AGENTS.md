@@ -2593,6 +2593,50 @@ that wraps several failures (the scanned pages) fails as the source only
 when every one underneath was the source's. Mark a new exception of this
 kind with the mixin; never list classes in the formatter.
 
+**The source map** (2026-10, `app/source_health.py`): every host the code
+names (`crawler.hosts()`, the list /about/crawler shows; never a hand list;
+the hosts only the frontend's photo route reads are left off and counted in
+the summary, since Node fetches them outside the backend's client),
+who publishes it and what is taken from it, named as site copy
+(`app/source_names.py`: a news feed's outlet name, a state registry's
+`source_name` or republishing office, else `app/data/source_ledger.json`,
+which names the rest and replaces a registry name that doesn't read as a
+publisher; a test fails while a host has no name; the admin tab adds each
+reading module's docstring), and its state as of its last read: refused or walled while
+`crawl_policy`'s backoff holds, walled where the ballot-measure registry
+documents a wall the host hasn't had a good read past, walled, refused or
+unavailable when its latest outcome failed (failing since the first failure
+after its last good read), not read this run when nothing is on record or
+its run kind's latest run didn't ask it, else ok. **A good read is a step
+that got what it came for**, not a 200 on the way (eFD's home page loads,
+then its terms agreement is refused): for a host a pipeline step reads, the
+last good read and "since" come from step outcomes (`SourceReadStat`, each
+row marked `failed_on_host` when the step ended on an ExpectedSourceFailure
+naming the host, and before those rows the same steps' outcomes in the runs'
+progress records); raw answers date only hosts no step reads. What reads a
+host comes from the code, so it is right before anything has recorded a
+read: the nightly runs (`crawler.run_readers`: the run whose module takes
+the run row, and the `app.pipeline` modules it imports) and the scheduler's
+jobs (`crawler.job_readers`: each `add_job` in scheduler.py, followed
+through the functions it calls, a module outside app/pipeline/ counted only
+where a function the job reaches sends a request, named with when it runs,
+"Action Center, every hour at :15"), and for a host neither reads, the pages
+that ask for it (`crawler.request_readers`). A host the site only sends to
+is not a source (`source_health.outbound_modules`: the module every alert
+goes through, the one every post goes through, and an API route that
+forwards a reader's submission): it is kept off the public map and out of
+"read by", and the admin lists it under outbound services; "last asked" is a request, a
+step, a refusal record or the registry's dated wall, and "never" only with
+none. What each host answered comes from `app/source_reads.py`: every governed request ends there (a 5xx, a 429,
+a bot wall's challenge or no answer fails the host; a 403 or 404 is an
+answer about one address), kept per host on the data volume
+(`source_reads.json`, merged across processes) and per pipeline step in
+`SourceReadStat` (ProgressTracker diffs the counts over each step, as it does
+for the rate limiters). The admin's Sources tab shows it all (`GET
+/api/admin/source-health`); /about/data shows the state, last good read and
+plain reason (`GET /api/sources/health`), with no run internals. A source not
+asked is never shown as a failure.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the
@@ -2821,6 +2865,7 @@ the pending list).
 | Civitas-computed district lean (display only, beside Cook) | `backend/scripts/build_district_lean.py`, `backend/app/data/district_lean.json`, `backend/app/data/district_lean_corrections.json`, `backend/app/district_lean.py` |
 | Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
 | Generated data files' automatic refresh (cadence, gates, provenance, staleness alerts) | `backend/app/data_refresh.py` (`DATA_FILES`), `scheduler._data_refresh` |
+| Expected source failures (marker, one-line run rows, daily counter) and the source map (every host's state, last good read, reason) | `backend/app/error_utils.py` (`ExpectedSourceFailure`), `backend/app/source_failures.py`, `backend/app/source_reads.py`, `backend/app/source_health.py`, `backend/app/source_names.py`, `backend/app/data/source_ledger.json`, `frontend/src/components/admin/SourceFailures.tsx`, `SourcesDashboard.tsx`, `frontend/src/components/about/SourceHealth.tsx` |
 | Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
