@@ -42,7 +42,10 @@ import numpy as np
 
 from app import calibration_drift
 from app.database import SessionLocal
-from app.pipeline.analyze.post_composer import compose, headline_source
+from app.models import LlmGenerationSample
+from app.pipeline.analyze.post_composer import (
+    _CLAIM_SOURCE_END, _CLAIM_SOURCE_START, CLAIM_TASK, compose, headline_source,
+)
 from app.pipeline import vector_store
 from app.pipeline.cache import api_cache_get
 from app.time_utils import utcnow
@@ -69,6 +72,10 @@ class Claim:
     text: str          # "actor predicate." — rendered, never paraphrased
     source_name: str
     source_url: str
+    # Who did or said it: the actor span compose() verified, as the model
+    # located it. Restatement is decided from it and the text together
+    # (distinct_claims).
+    actor: str = ""
 
 
 def _tokens(text: str) -> frozenset[str]:
@@ -159,6 +166,7 @@ def _extract(articles: list, ask: Callable[[str], dict | None], source_of) -> li
             text=text,
             source_name=getattr(article, "source_name", "") or "",
             source_url=getattr(article, "url", "") or "",
+            actor=str(located.get("actor") or "").strip().strip(",;:"),
         ))
     return claims
 
@@ -240,6 +248,13 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
 # fact below it (measured 2026-10-25 on the replayed clusters: one fact in
 # two outlets' words at 0.62 to 0.86, two facts at 0.51 to 0.84), which the
 # two-claim gate still counts twice.
+#
+# Two claims about the same actor (same_actor) are held to their own cut,
+# `threshold_same_actor`, when the refit has one: fitted the same way over
+# the two-fact pairs whose actors match, which needs MIN_HARD_NEGATIVES of
+# them, and adopted only under precision_rule.accept against the rule in
+# use (action_center.fit_restatement_cut). Without one, every pair is held
+# to `threshold`.
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
 RESTATEMENT_CALIBRATION_PATH = _DATA_DIR / "claim_restatement_calibration.json"
 _RESTATEMENT_TIER, _RESTATEMENT_KEY = "action-cuts", "restatement"
@@ -298,9 +313,58 @@ def stated_figures(text: str) -> frozenset[str]:
     return frozenset(out)
 
 
+_ACTOR_WORD_RE = re.compile(r"[a-z0-9]+")
+_ARTICLES = frozenset({"a", "an", "the"})
+
+
+def same_actor(a: str | None, b: str | None) -> bool:
+    """Whether two actor spans name one party: one's words (articles aside)
+    are all among the other's ("Trump" and "President Trump", "Rep. Jane
+    Doe" and "U.S. Rep. Jane Doe"). A name match, not a classification:
+    spans that name one party differently ("DOJ", "Justice Department")
+    read as two, which holds the pair to the cut every pair is held to."""
+    wa = frozenset(_ACTOR_WORD_RE.findall((a or "").lower())) - _ARTICLES
+    wb = frozenset(_ACTOR_WORD_RE.findall((b or "").lower())) - _ARTICLES
+    return bool(wa and wb) and (wa <= wb or wb <= wa)
+
+
+def restates(score: float, actor_a: str | None, actor_b: str | None, calibration: dict) -> bool:
+    """Whether two claims at cosine SCORE are one fact under CALIBRATION
+    (restatement_calibration's shape)."""
+    same_cut = calibration.get("threshold_same_actor")
+    cut = same_cut if same_cut is not None and same_actor(actor_a, actor_b) else calibration["threshold"]
+    return score >= cut
+
+
+def recorded_claims(db, since: datetime) -> list[tuple]:
+    """(source, date, claim, actor) for each claim the claim calls recorded
+    since SINCE located and compose() verifies, at its first recording: the
+    restatement fit's lines that carry their actor."""
+    rows = (db.query(LlmGenerationSample.input_text, LlmGenerationSample.output_json, LlmGenerationSample.created_at)
+            .filter(LlmGenerationSample.task == CLAIM_TASK, LlmGenerationSample.passed.is_(True),
+                    LlmGenerationSample.created_at >= since)
+            .order_by(LlmGenerationSample.id))
+    out, seen = [], set()
+    for prompt, answer, at in rows:
+        source = prompt.split(_CLAIM_SOURCE_START, 1)[-1].rsplit(_CLAIM_SOURCE_END, 1)[0]
+        try:
+            located = json.loads(answer or "{}")
+        except ValueError:
+            continue
+        if not isinstance(located, dict):
+            continue
+        actor = str(located.get("actor") or "").strip().strip(",;:")
+        text = compose(actor, str(located.get("predicate") or ""), source)
+        if text and text not in seen:
+            seen.add(text)
+            out.append((source, at.date(), text, actor))
+    return out
+
+
 def distinct_claims(claims: list[Claim]) -> list[Claim]:
-    """CLAIMS without those that restate an earlier one, in order, so the
-    first (best-sourced) wording of each fact is the one kept.
+    """CLAIMS without those that restate an earlier one (restates: their
+    texts' cosine, and whether they share an actor), in order, so the first
+    (best-sourced) wording of each fact is the one kept.
 
     Like on_topic, a failure keeps every claim: this runs inside the hourly
     refresh, and it only ever removes."""
@@ -308,13 +372,15 @@ def distinct_claims(claims: list[Claim]) -> list[Claim]:
         return claims
     try:
         vectors = vector_store.encode_normalized(vector_store.get_similarity_model(), [c.text for c in claims])
-        threshold = restatement_calibration()["threshold"]
+        calibration = restatement_calibration()
+        float(calibration["threshold"])
     except Exception:
         logger.exception("Claim restatement check failed — keeping every claim")
         return claims
     kept: list[int] = []
     for i in range(len(claims)):
-        if all(float(vectors[i] @ vectors[j]) < threshold for j in kept):
+        if not any(restates(float(vectors[i] @ vectors[j]), claims[i].actor, claims[j].actor, calibration)
+                   for j in kept):
             kept.append(i)
     # The gate's pass, for the drift check: a claim dropped as a restatement.
     calibration_drift.observe("restatement", [float(i not in kept) for i in range(len(claims))], 0.5)
