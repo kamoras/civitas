@@ -36,7 +36,6 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-import httpx
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
@@ -103,7 +102,7 @@ from app.pipeline import lease
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import congress_gov_url_for_bill_id
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
-from app.http_client import make_async_client
+from app.http_client import make_async_client, source_request
 from app.pipeline.fetch.news_digest import (
     _POSSESSIVE_SUFFIX_RE,
     _entity_items,
@@ -1791,7 +1790,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     if "news.google.com/rss/articles/" not in url:
         return url
     try:
-        resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
+        resp = source_request("HEAD", url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
             "User-Agent": USER_AGENT,
         }))
         final = str(resp.url)
@@ -1801,7 +1800,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     except Exception:
         logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
+        resp = source_request("GET", url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
             "User-Agent": USER_AGENT,
         }))
         final = str(resp.url)

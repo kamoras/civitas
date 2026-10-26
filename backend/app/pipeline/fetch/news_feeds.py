@@ -26,12 +26,10 @@ from xml.etree.ElementTree import Element
 
 from defusedxml import ElementTree as SafeET
 
-import httpx
 
-from app.contact import USER_AGENT
+from app.http_client import conditional_get
 from app.ops_alerts import check_source_freshness
 from app.photos import photo_source_allowed
-from app.web_bot_auth import signed_headers
 
 logger = logging.getLogger(__name__)
 
@@ -608,9 +606,7 @@ def fetch_news_articles(
         observed[url] = (name, None)
         t0 = time.perf_counter()
         try:
-            resp = httpx.get(url, timeout=FEED_TIMEOUT, follow_redirects=True, headers=signed_headers(url, {
-                "User-Agent": USER_AGENT,
-            }))
+            resp = conditional_get(url, timeout=FEED_TIMEOUT, follow_redirects=True)
             resp.raise_for_status()
             every_item = _parse_rss_feed(
                 resp.content, name, ZoneInfo(feed_info.get("timezone", "UTC")), keep_old=True,

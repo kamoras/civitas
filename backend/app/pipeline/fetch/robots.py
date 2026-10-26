@@ -102,6 +102,9 @@ class _Group:
     # Any record after the user-agent lines ends the run of them, even one
     # that adds no rule (an empty Disallow, a crawl-delay).
     closed: bool = False
+    # Crawl-delay, seconds between requests: not in RFC 9309, but the
+    # common extension a site uses to ask for a pace; obeyed.
+    crawl_delay: float | None = None
 
 
 @dataclass
@@ -128,6 +131,16 @@ class Robots:
             if (best is None or key > best) and rule.matches(path):
                 best = key
         return True if best is None else best[1]
+
+    def crawl_delay(self, agent: str) -> float | None:
+        """The Crawl-delay the groups that apply to `agent` ask for (the
+        longest, if several do), or None."""
+        if self.blanket is not None:
+            return None
+        token = _agent_token(agent)
+        groups = [g for g in self.groups if token in g.agents] or [g for g in self.groups if "*" in g.agents]
+        delays = [g.crawl_delay for g in groups if g.crawl_delay is not None]
+        return max(delays) if delays else None
 
 
 ALLOW_ALL = Robots(blanket=True)
@@ -233,6 +246,13 @@ def _parse_lines(text: str) -> Robots:
             current.closed = True
             if key in ("allow", "disallow") and value:  # An empty Disallow disallows nothing.
                 current.rules.append(_rule(key == "allow", normalize(value)))
+            elif key == "crawldelay":
+                try:
+                    delay = float(value)
+                except ValueError:
+                    continue
+                if delay >= 0 and delay == delay and delay != float("inf"):
+                    current.crawl_delay = max(current.crawl_delay or 0.0, delay)
     return Robots(groups=groups)
 
 

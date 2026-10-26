@@ -57,8 +57,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-import httpx
 
+from app.http_client import source_request
 from app import data_refresh, retractions
 from app.config import settings
 from app.contact import USER_AGENT
@@ -365,7 +365,7 @@ def _post_image(post: BroadcastPost) -> PostImage | None:
         return None
     internal = settings.FRONTEND_INTERNAL_URL.rstrip("/") + post.image_url[len(SITE_URL):]
     try:
-        resp = httpx.get(internal, timeout=30, headers={"User-Agent": USER_AGENT})
+        resp = source_request("GET", internal, timeout=30, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
     except Exception:
         logger.warning("Post image unreadable (%s); sending the link card", internal)
@@ -516,7 +516,7 @@ def refresh_engagement(db: Session) -> int:
     for start in range(0, len(rows), 25):  # getPosts takes at most 25
         batch = {post.bsky_uri: post for post in rows[start:start + 25]}
         try:
-            resp = httpx.get(_BSKY_GET_POSTS, params=[("uris", uri) for uri in batch], timeout=15,
+            resp = source_request("GET", _BSKY_GET_POSTS, params=[("uris", uri) for uri in batch], timeout=15,
                              headers={"User-Agent": USER_AGENT})
             resp.raise_for_status()
             found = resp.json()["posts"]

@@ -145,6 +145,7 @@ function Sources({ facts }: { facts: CrawlerFacts }) {
                     <span className="font-id text-small text-ink-hi">{r.module}</span>: {r.pace}
                   </li>
                 ))}
+                <li>At least {h.minimumGap} between requests to it, one at a time.</li>
               </ul>
             </Fact>
           ))}
@@ -182,6 +183,98 @@ function Schedule({ facts }: { facts: CrawlerFacts }) {
             </Item>
           ))}
         </List>
+      </Box>
+    </Boxes>
+  );
+}
+
+function Manners({ facts }: { facts: CrawlerFacts }) {
+  const m = facts.manners;
+  return (
+    <Boxes>
+      <Box
+        id="pace"
+        title="One request at a time"
+        dek={`Never two requests to one site at once, and at least ${m.minimumGap} between them, longer where a site's robots.txt asks.`}
+        more="how the pace is set"
+      >
+        <P>
+          The gap is the site&apos;s Crawl-delay where its robots.txt names one. Otherwise it is{" "}
+          {m.minimumGap}, or a reader&apos;s own published limit where that is faster (the list
+          above gives each site&apos;s). A request that would have to wait more than {m.longestWait}{" "}
+          is not sent: it fails, saying why.
+        </P>
+      </Box>
+      <Box
+        id="refusals"
+        title="A refusal is final"
+        dek={`A challenge page or a "too many requests" stops all requests to that site: for ${m.firstBackoff}, then twice as long each time it refuses again, up to ${m.longestBackoff}.`}
+        more="what it does on a refusal"
+      >
+        <P>
+          When the wait ends, one request is sent to see whether the site will answer; an answer
+          clears the record, another refusal doubles the wait. The record is kept on the server, so
+          every job and every restart keeps to it. A Retry-After is honoured: a short one sets the
+          next request&apos;s time, a long one is a wait of its own. A challenge page
+          (Cloudflare&apos;s, Akamai&apos;s, Imperva&apos;s) is never answered or worked around, and
+          any cookie it sets is thrown away. A source that refuses is recorded as unreadable, with
+          the reason, never as having nothing to say. A plain &ldquo;forbidden&rdquo; for one
+          address is not asked again in the same run.
+        </P>
+      </Box>
+      <Box
+        id="robots"
+        title="robots.txt"
+        dek={`It sets the pace, not what is read: a site's Crawl-delay is kept, but a Disallow does not stop the crawler reading.`}
+        more="why, and how it is read"
+      >
+        <P>
+          Each site&apos;s robots.txt is read before the first request to it, under the name
+          &ldquo;Civitas&rdquo;, and kept {m.robotsKept}. Its Crawl-delay, if it names one, sets the
+          gap between requests. Its Allow and Disallow rules are not applied: the crawler reads
+          public records at the addresses its code names, the same documents a person would open,
+          not pages it discovers by following links.
+        </P>
+        <P>
+          One part of the crawler does follow Disallow: the weekly search for new state election
+          pages, which follows links on election offices&apos; sites, skips anything robots.txt
+          keeps crawlers from.
+        </P>
+      </Box>
+      <Box
+        id="caching"
+        title="Asked once, kept"
+        dek="Records are stored and asked for again only when they change: news feeds are asked only for what changed since the last read."
+        more="how"
+      >
+        <P>
+          A feed that sends an ETag or Last-Modified is asked with If-None-Match and
+          If-Modified-Since, and a &ldquo;not modified&rdquo; answer costs the site no body. A
+          bill&apos;s records are read again only after Congress.gov lists the bill as updated.
+          Pictures are fetched once and served from this site, so a reader&apos;s browser never asks
+          your server for them.
+        </P>
+      </Box>
+      <Box
+        id="refusing-now"
+        title="Refusing it now"
+        dek={
+          facts.refusing.length
+            ? `${facts.refusing.length} site${facts.refusing.length === 1 ? " is" : "s are"} refusing the crawler, and are not being asked.`
+            : "No site is refusing the crawler right now."
+        }
+        more={facts.refusing.length ? "which, and until when" : undefined}
+      >
+        {facts.refusing.length ? (
+          <Facts>
+            {facts.refusing.map((r) => (
+              <Fact key={r.host} label={r.host}>
+                {r.reason}; refused {r.times} time{r.times === 1 ? "" : "s"} in a row since{" "}
+                {r.since}, next asked after {r.until} UTC.
+              </Fact>
+            ))}
+          </Facts>
+        ) : null}
       </Box>
     </Boxes>
   );
@@ -234,66 +327,28 @@ export default async function CrawlerChapter() {
       </Section>
 
       <Section id="manners" title="How it behaves">
-        <Boxes>
-          <Box
-            id="refusals"
-            title="A refusal is final"
-            dek="A block, a challenge page or a login wall is never worked around: the crawler stops, and the page that needed it says the source couldn't be read."
-            more="what it does on a refusal"
-          >
-            <P>
-              A challenge page (Cloudflare&apos;s, Akamai&apos;s, Imperva&apos;s) is never retried
-              within a run, and any cookie it set is thrown away, so a second request can&apos;t
-              slip through on it. A source that refuses is recorded as unreadable, with the reason,
-              never as having nothing to say. A request refused for being too fast (429) waits and
-              tries again a few times, then stops.
-            </P>
-          </Box>
-          <Box
-            id="robots"
-            title="robots.txt"
-            dek="The weekly crawl that looks for new state election pages reads each site's robots.txt and follows it on every request."
-            more="what it reads it by"
-          >
-            <P>
-              It reads the file as RFC 9309 says, under the name &ldquo;Civitas&rdquo;, and treats a
-              challenge in place of the file as a wall, not as permission. The other readers fetch
-              the documents a source publishes for this use, at addresses written into the code
-              above, and do not yet check robots.txt before each request.
-            </P>
-          </Box>
-          <Box
-            id="caching"
-            title="Asked once, kept"
-            dek="What the crawler reads is stored, and asked for again only when the source says it changed or when it goes stale."
-            more="how long it keeps things"
-          >
-            <P>
-              A bill&apos;s records, for example, are read again only after Congress.gov lists the
-              bill as updated. Pictures are fetched once and served from this site, so a
-              reader&apos;s browser never asks your server for them.
-            </P>
-          </Box>
-        </Boxes>
+        {facts ? <Manners facts={facts} /> : <Unreadable />}
       </Section>
 
       <Section id="contact-us" title="Asking for a change, or opting out">
         <Boxes>
           <Box
             id="opt-out"
-            title="To keep it out"
+            title="To slow it or keep it out"
             dek={
               <>
-                Add <code className={CODE}>User-agent: Civitas</code> and{" "}
-                <code className={CODE}>Disallow: /</code> to your robots.txt, or write to us.
+                To slow it, add a <code className={CODE}>Crawl-delay</code> for{" "}
+                <code className={CODE}>User-agent: Civitas</code> to your robots.txt. To keep it
+                out, write to us.
               </>
             }
             more="what happens next"
           >
             <P>
-              The weekly crawl follows it from its next visit. For the readers that fetch documents
-              by address, write to us too, and we will stop or slow them: a reader that can&apos;t
-              read your site is shown as unreadable on our pages, never filled in another way.
+              A Crawl-delay is read within a day and followed from then on. robots.txt does not stop
+              the crawler reading, so to be left out, write to us and we will stop the readers that
+              read your site. A reader that can&apos;t read your site is shown as unreadable on our
+              pages, never filled in another way.
             </P>
           </Box>
           <Box

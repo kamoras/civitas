@@ -35,6 +35,7 @@ from pathlib import Path
 
 from app.atomic_write import runtime_data_path
 from app.contact import USER_AGENT
+from app.http_client import source_gate
 from app.file_cache import new_reload_lock, read_json_preferring, reload_if_moved
 from app.state_names import STATE_NAMES
 from app.web_bot_auth import signed_headers
@@ -139,7 +140,7 @@ def _get(url: str, timeout: int = 120, attempts: int = 3) -> bytes:
     req = urllib.request.Request(url, headers=signed_headers(url, {"User-Agent": USER_AGENT}))
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with source_gate(url), urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as exc:
             if exc.code < 500 or attempt == attempts - 1:
@@ -212,7 +213,7 @@ def exists(url: str) -> bool:
     but a 404 raises, so an outage is never read as "not published")."""
     req = urllib.request.Request(url, method="HEAD", headers=signed_headers(url, {"User-Agent": USER_AGENT}))
     try:
-        with urllib.request.urlopen(req, timeout=60):
+        with source_gate(url, "HEAD"), urllib.request.urlopen(req, timeout=60):
             return True
     except urllib.error.HTTPError as exc:
         if exc.code == 404:

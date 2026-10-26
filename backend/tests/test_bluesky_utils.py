@@ -104,7 +104,7 @@ def test_og_card_reads_the_card_both_attribute_orders_and_entities():
 
 def test_fetch_og_card_reads_the_page_or_says_it_couldnt():
     page = MagicMock(text='<meta property="og:image" content="https://civitas-research.org/api/og?issue=x"/>')
-    with patch("app.pipeline.analyze.bluesky_utils.httpx.get", return_value=page):
+    with patch("httpx.get", return_value=page):
         assert fetch_og_card("https://civitas-research.org/issue/x")["image"] == "https://civitas-research.org/api/og?issue=x"
-    with patch("app.pipeline.analyze.bluesky_utils.httpx.get", side_effect=OSError("down")):
+    with patch("httpx.get", side_effect=OSError("down")):
         assert fetch_og_card("https://civitas-research.org/issue/x") is None

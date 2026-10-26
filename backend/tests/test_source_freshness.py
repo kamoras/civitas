@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from app import ops_alerts
@@ -192,7 +193,7 @@ class TestFeedsReportWhatTheyShowed:
                 raise OSError("connection refused")
             return response
 
-        with patch.object(news_feeds.httpx, "get", side_effect=get), \
+        with patch.object(httpx, "get", side_effect=get), \
              patch.object(news_feeds, "check_source_freshness") as checked:
             articles = news_feeds.fetch_news_articles(feeds=feeds)
         assert [a.title for a in articles] == ["Story 0"]
