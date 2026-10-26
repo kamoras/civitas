@@ -490,6 +490,10 @@ def test_sec_refuses_without_a_contact_and_alerts(monkeypatch):
 # stylesheet, measured 2026-10-25), so the files match what next/font would
 # fetch. No source the site reads is sent a browser's name.
 _BROWSER_ONLY_USER_AGENTS = {
+    # The hosts that refuse Civitas's own User-Agent (owner decision,
+    # 2026-10-25): one table, each entry with its measurement.
+    ("backend/app/contact.py", "Chrome/151"),
+    ("backend/app/contact.py", "Civitas/1.0"),
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
     # Not a request header: robots.txt's rule for which crawlers it applies to.
     ("frontend/src/app/robots.ts", "*"),

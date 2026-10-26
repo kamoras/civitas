@@ -30,7 +30,7 @@ from pathlib import Path
 
 from app import web_bot_auth
 from app.config import settings
-from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, USER_AGENT
+from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, HOST_USER_AGENTS, USER_AGENT
 from app.photos import PHOTO_SOURCE_HOSTS
 from app.site_url import SITE_DOMAIN
 
@@ -315,6 +315,10 @@ def summary() -> dict:
     listed = hosts()
     return {
         "userAgent": USER_AGENT,
+        "userAgentExceptions": [
+            {"host": host, "userAgent": ua, "reason": why}
+            for host, (ua, why) in sorted(HOST_USER_AGENTS.items())
+        ],
         "page": CRAWLER_PAGE,
         "contact": CONTACT_EMAIL or None,
         "signing": _signing(),

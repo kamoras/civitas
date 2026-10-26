@@ -20,6 +20,8 @@ export interface CrawlerHost {
 
 export interface CrawlerFacts {
   userAgent: string;
+  /** The hosts that refuse userAgent, each with the form it is sent and the measurement. */
+  userAgentExceptions: { host: string; userAgent: string; reason: string }[];
   page: string;
   contact: string | null;
   signing: { configured: boolean; directory: string | null };

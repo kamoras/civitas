@@ -194,3 +194,27 @@ def test_the_efd_browser_names_civitas():
     src = (APP / "pipeline" / "fetch" / "senate_ptr.py").read_text()
     assert "new_page(user_agent=USER_AGENT)" in src
     assert "new_page()" not in src and "new_context()" not in src
+
+
+@pytest.mark.asyncio
+async def test_a_refusing_host_gets_its_measured_form_and_no_other_host_does():
+    import httpx
+
+    from app.http_client import make_async_client
+
+    seen = {}
+
+    def handler(request):
+        seen[request.url.host] = request.headers["User-Agent"]
+        return httpx.Response(200)
+
+    async with make_async_client(transport=httpx.MockTransport(handler)) as client:
+        for host in (*contact.HOST_USER_AGENTS, "www.fec.gov"):
+            await client.get(f"https://{host}/x", headers={"User-Agent": contact.USER_AGENT})
+        await client.get("https://api.example.org/x", headers={"User-Agent": "Caller/1.0"})
+    for host, (ua, why) in contact.HOST_USER_AGENTS.items():
+        assert seen[host] == ua and "Civitas/1.0" in ua and why
+    assert seen["www.fec.gov"] == contact.USER_AGENT
+    assert seen["api.example.org"] == "Caller/1.0"
+    body = json.loads(crawler_facts().body)
+    assert {e["host"] for e in body["userAgentExceptions"]} == set(contact.HOST_USER_AGENTS)

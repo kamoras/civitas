@@ -59,9 +59,8 @@ yes/no explanation or fiscal statement is printed — those stay None.
 Headers: www.sos.nh.gov's Akamai answers Civitas's User-Agent with a 403
 (measured 2026-10-25: any User-Agent carrying a contact in a comment is
 refused, a bare "Civitas/1.0" or a browser's is served). Until then this
-module sent the contact-less form; it now sends Civitas's own, and while the
-refusal stands the read fails and is alerted (AGENTS.md §7), never sent under
-another name.
+module sent the contact-less form; now the shared client sends the host's measured exception (contact.HOST_USER_AGENTS):
+a bare "Civitas/1.0".
 """
 
 import logging

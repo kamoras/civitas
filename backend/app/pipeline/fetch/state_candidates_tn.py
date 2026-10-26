@@ -16,8 +16,7 @@ own module rather than a tabular config entry.
 sos.tn.gov answers a User-Agent that isn't a browser's with a 403,
 Civitas's own included (measured 2026-10-25; the file host,
 sos-prod.tnsosgovfiles.com, does not). It was read under a browser's
-User-Agent until then; while the refusal stands, the results page can't be
-read and the read is alerted as failed (AGENTS.md §7). Discovery
+User-Agent until then; now the shared client sends the host's measured exception (contact.HOST_USER_AGENTS). Discovery
 reuses state_candidates_tabular's landing_page mode as-is: the results
 page lists every past election's files, dated in the filename itself
 ("20260806AllbyPrecinct.xlsx"), so the current cycle's file is found by

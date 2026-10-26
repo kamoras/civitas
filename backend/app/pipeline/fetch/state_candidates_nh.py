@@ -9,8 +9,8 @@ already seen for OH/MO/TN/NY/GA/MN); a complete, standards-compliant
 header set reaches every hop and every file cleanly (no Referer needed,
 despite an early research hunch that it might be). Its WAF refuses a
 User-Agent carrying a contact (measured 2026-09-10 and 2026-10-25); this
-module sent a browser's until 2026-10-25 and now sends Civitas's own, so
-while the refusal stands the read fails and is alerted (AGENTS.md §7).
+module sent a browser's until 2026-10-25; now the shared client sends the host's measured exception (contact.HOST_USER_AGENTS):
+a bare "Civitas/1.0".
 
 THREE-hop discovery, all plain GETs:
 1. `/elections` (stable, no year) — its own "{year} Election Results"

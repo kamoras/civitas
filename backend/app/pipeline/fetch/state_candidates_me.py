@@ -136,8 +136,8 @@ logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
 # www.maine.gov answers a User-Agent that isn't a browser's with a 403,
-# Civitas's own included (measured 2026-10-25); while it does, this read
-# fails and is alerted (AGENTS.md §7), never sent under another name.
+# Civitas's own included (measured 2026-10-25); the shared client sends it
+# the host's measured exception (contact.HOST_USER_AGENTS).
 _LANDING_URL = "https://www.maine.gov/sos/elections-voting/election-results-data"
 
 _NON_CANDIDATE_COLUMNS = {"dis", "cty", "municipality", "blank", "tbc"}

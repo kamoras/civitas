@@ -95,7 +95,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
-from app.contact import USER_AGENT
+from app.contact import HOST_USER_AGENTS, USER_AGENT, user_agent_for
 from app.web_bot_auth import sign_request
 
 logger = logging.getLogger(__name__)
@@ -244,6 +244,15 @@ def load_issuer(cert: x509.Certificate, body: bytes) -> x509.Certificate | None:
     return None if issuer.subject == issuer.issuer else issuer
 
 
+async def _host_user_agent(request: httpx.Request) -> None:
+    """Request hook: a host that refuses Civitas's User-Agent gets its
+    measured exception instead (app/contact.HOST_USER_AGENTS), each redirect
+    hop judged by its own host. A caller's own User-Agent is left alone."""
+    current = request.headers.get("User-Agent")
+    if current in (USER_AGENT, *(ua for ua, _ in HOST_USER_AGENTS.values())):
+        request.headers["User-Agent"] = user_agent_for(request.url.host)
+
+
 class BackstoppedAsyncClient(httpx.AsyncClient):
     """`httpx.AsyncClient` whose every request has a wall-clock ceiling.
 
@@ -261,7 +270,7 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
         headers.setdefault("User-Agent", USER_AGENT)
         kwargs["headers"] = headers
         hooks = kwargs.get("event_hooks") or {}
-        kwargs["event_hooks"] = {**hooks, "request": [*hooks.get("request", []), sign_request]}
+        kwargs["event_hooks"] = {**hooks, "request": [*hooks.get("request", []), _host_user_agent, sign_request]}
         self._completes_chains = kwargs["verify"] is TLS_CONTEXT
         super().__init__(**kwargs)
 

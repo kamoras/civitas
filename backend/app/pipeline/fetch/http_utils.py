@@ -80,9 +80,9 @@ redact_url = redact_sensitive_params
 # www.maine.gov and sos.tn.gov refuse any User-Agent that isn't a browser's
 # (even a bare "Civitas/1.0"); www.michigan.gov and www.sos.nh.gov refuse
 # one that carries a contact in a comment; goelect.txelections.civixapps.com
-# and mqscores.wustl.edu refuse one that carries an address. Those readers
-# now fail, alerted as unreadable, rather than be sent under another name
-# (the crawler page, /about/crawler, says how a site can ask for a change).
+# and mqscores.wustl.edu refuse one that carries an address. Those hosts
+# alone get the nearest form each serves, all still naming Civitas, from
+# one table (contact.HOST_USER_AGENTS), listed on /about/crawler.
 FETCH_HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

@@ -79,7 +79,7 @@ STATE_OFFICE_TYPES = frozenset({"SW", "SR"})
 
 # Civix's API 403s a request with no User-Agent, and (measured 2026-10-25)
 # one carrying an address, Civitas's own included; a contact email alone
-# was served. While it refuses, the read fails and is alerted (AGENTS.md §7).
+# was served, which the shared client sends it (contact.HOST_USER_AGENTS).
 _HEADERS = {"User-Agent": USER_AGENT}
 
 # Two real requests per sync run (elections list, then candidates) — a

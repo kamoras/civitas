@@ -16,9 +16,8 @@ request headers.
 Headers: michigan.gov's CDN (Akamai) answers Civitas's User-Agent with a
 challenge (403), keyed on the contact in its comment (measured 2026-09-28
 and again 2026-10-25: a bare "Civitas/1.0" is served, as is a browser's).
-Until 2026-10-25 this module dropped the comment; it now sends Civitas's own
-User-Agent, and while the refusal stands the read fails and is alerted
-(AGENTS.md §7), never sent under another name.
+Until 2026-10-25 this module dropped the comment; now the shared client sends the host's measured exception (contact.HOST_USER_AGENTS):
+a bare "Civitas/1.0".
 
 The document is one page per proposal, each certified on its own date
 (verified on both 2026 proposals):

@@ -1129,10 +1129,12 @@ Corollaries that follow from the same rule, all enforced in code:
   (`app/contact.USER_AGENT`; `make_async_client` sends it by default, the
   frontend's server fetches through `crawlerUserAgent`), with Accept and
   Accept-Language and nothing a browser says about itself
-  (`http_utils.FETCH_HEADERS`). No reader is sent under a browser's name;
-  a site that refuses Civitas's own is a refusal like any other, alerted,
-  never worked around (the hosts that did, measured that day, are in
-  `http_utils`' comment). `/about/crawler` says what the crawler reads, how
+  (`http_utils.FETCH_HEADERS`). The one place a User-Agent differs by
+  host is `contact.HOST_USER_AGENTS` (owner decision, 2026-10-25): the
+  seven hosts that refuse Civitas's own, each with the nearest form it
+  serves (all still naming Civitas) and the measurement, applied by
+  `make_async_client`'s request hook and listed on `/about/crawler`. A new
+  entry needs a measurement, never a guess. `/about/crawler` says what the crawler reads, how
   fast and when, from the code itself (`app/crawler.py`, `GET /api/crawler`):
   a new fetch module is listed by its URL constants and its RateLimiter,
   and a new scheduled job that reads from outside takes its trigger from

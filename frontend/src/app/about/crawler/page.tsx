@@ -47,10 +47,25 @@ function Identity({ facts }: { facts: CrawlerFacts }) {
         more="what each part means"
       >
         <P>
-          Every request the crawler sends carries this one User-Agent: the product name and version,
-          this page&apos;s address, and the address that reads mail about it. It is the same for
-          every source, and no request is sent under a browser&apos;s name.
+          Every request the crawler sends carries this User-Agent: the product name and version,
+          this page&apos;s address, and the address that reads mail about it. The only exceptions
+          are the sites listed under &ldquo;Where it sends another form&rdquo;.
         </P>
+      </Box>
+      <Box
+        id="exceptions"
+        title="Where it sends another form"
+        dek={`${facts.userAgentExceptions.length} sites refuse the name above. Each gets the nearest form it accepts, all still naming Civitas.`}
+        more="each site, its form and why"
+      >
+        <Facts>
+          {facts.userAgentExceptions.map((e) => (
+            <Fact key={e.host} label={e.host}>
+              <code className={CODE}>{e.userAgent}</code>
+              <span className="block">Measured: it {e.reason}.</span>
+            </Fact>
+          ))}
+        </Facts>
       </Box>
       <Box
         id="contact"
@@ -192,7 +207,10 @@ export default async function CrawlerChapter() {
           It reads public records to build this site, which is free and has no ads. It never logs
           in, buys data, or reads anything behind a paywall.
         </Point>
-        <Point>It always names itself and how to reach us, and never poses as a browser.</Point>
+        <Point>
+          It always names itself. A few sites refuse its usual name and get the nearest form they
+          accept instead, each listed on this page.
+        </Point>
         <Point>
           It asks for little and slowly: each reader has its own limit, and most records are read
           once and kept.
