@@ -48,7 +48,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import crawl_policy, crawler, source_names, source_reads
+from app.broadcast import publish
 from app.models import SourceFailureCount, SourceReadStat
+from app.ops_alerts import send_ops_alert
 from app.pipeline import run_tracker
 from app.pipeline.fetch import ballot_measure_pdf_sources
 from app.source_failures import run_label
@@ -136,25 +138,55 @@ def _run_reads(db: Session, since: datetime) -> tuple[dict, dict]:
     return reads, in_latest
 
 
+@lru_cache(maxsize=1)
+def outbound_modules() -> frozenset[str]:
+    """The modules that send rather than read, by where they sit in the
+    code: the one every operator alert goes through (send_ops_alert's), the
+    one every post goes through (broadcast.publish's), and an API route that
+    forwards what a reader submits (a POST route handler that itself posts
+    or puts to a service: feedback filed as a GitHub issue). A host only these
+    name is a service Civitas sends to, not a source it reads: it is kept
+    off the public map and out of "read by", and the admin lists it under
+    outbound services."""
+    out = {send_ops_alert.__module__, publish.__module__}
+    for path in sorted((crawler.APP / "api").glob("*.py")):
+        for fn in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            posts = any(isinstance(d, ast.Call) and getattr(d.func, "attr", None) == "post"
+                        for d in fn.decorator_list)
+            requests = any(isinstance(c, ast.Call) and getattr(c.func, "attr", None) in ("post", "put")
+                           and not (isinstance(c.func.value, ast.Name) and c.func.value.id == "router")
+                           for c in ast.walk(fn))
+            if posts and requests:
+                out.add(crawler._module_name(path))
+    return frozenset(out)
+
+
+def _data_modules(h: dict) -> set[str]:
+    """The modules that read the host as a source: its readers but the senders."""
+    return {r["module"] for r in h["readers"]} - outbound_modules()
+
+
+def _by_host(mapping: dict[str, set[str]]) -> dict[str, set[str]]:
+    """host -> the labels of the runs or jobs whose modules read it as a source."""
+    by_module: dict[str, set[str]] = {}
+    for label, modules in mapping.items():
+        for module in modules:
+            by_module.setdefault(module, set()).add(label)
+    return {h["host"]: set().union(*(by_module.get(m, set()) for m in _data_modules(h)))
+            for h in crawler.hosts()}
+
+
 def _code_runs() -> dict[str, set[str]]:
     """host -> the run tables whose runs read it, from the code."""
-    by_module: dict[str, set[str]] = {}
-    for table, modules in crawler.run_readers().items():
-        for module in modules:
-            by_module.setdefault(module, set()).add(table)
-    return {h["host"]: set().union(*(by_module.get(r["module"], set()) for r in h["readers"]))
-            for h in crawler.hosts()}
+    return _by_host(crawler.run_readers())
 
 
 def _code_jobs() -> dict[str, set[str]]:
     """host -> the scheduler jobs that read it, named with when they run
     ("Action Center, every hour at :15"), from the code (crawler.job_readers)."""
-    by_module: dict[str, set[str]] = {}
-    for job in crawler.job_readers().values():
-        for module in job["modules"]:
-            by_module.setdefault(module, set()).add(job["label"])
-    return {h["host"]: set().union(*(by_module.get(r["module"], set()) for r in h["readers"]))
-            for h in crawler.hosts()}
+    return _by_host({j["label"]: j["modules"] for j in crawler.job_readers().values()})
 
 
 def _iso(value) -> str | None:
@@ -275,9 +307,14 @@ def build(db: Session) -> dict:
     # backend's client, so nothing here sees its reads: such a host would
     # read as never asked. Left off the map, and the summary says so.
     photo_only = {h["host"] for h in hosts if {r["module"] for r in h["readers"]} == {crawler.PHOTO_ROUTE}}
+    outbound = []
     for h in hosts:
         host = h["host"]
         if host in photo_only:
+            continue
+        if not _data_modules(h):
+            # Only sent to (alerts, posts, forwarded feedback): not a source.
+            outbound.append({"host": host, "modules": sorted(r["module"] for r in h["readers"])})
             continue
         rec = records.get(host, {})
         stepped = host in events
@@ -330,8 +367,10 @@ def build(db: Session) -> dict:
             "readBy": (sorted(labels.get(t, t) for t in code_runs.get(host, ()))
                        + sorted(code_jobs.get(host, ()))
                        # Nothing scheduled reads it, but a page asks for it.
-                       or (["Site pages, when a reader asks"] if {r["module"] for r in h["readers"]}
+                       or (["Site pages, when a reader asks"] if _data_modules(h)
                            & crawler.request_readers() else [])),
+            # The modules that also send to it (alerts, posts), for the admin.
+            "alsoSendsTo": sorted({r["module"] for r in h["readers"]} & outbound_modules()),
             "runs": sorted(runs.get("runs", ())),
             "requests30d": runs.get("answered", 0) + runs.get("failed", 0),
             "failedRequests30d": runs.get("failed", 0),
@@ -349,7 +388,7 @@ def build(db: Session) -> dict:
            if photo_only else "")
     )
     return {"asOf": now.isoformat(timespec="minutes"), "windowDays": WINDOW_DAYS,
-            "counts": counts, "summary": summary, "sources": entries}
+            "counts": counts, "summary": summary, "sources": entries, "outbound": outbound}
 
 
 _PUBLIC = ("host", "publisher", "takes", "state", "stateLabel", "since", "lastGood", "line")

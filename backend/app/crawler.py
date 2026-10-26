@@ -329,64 +329,110 @@ def _module_index() -> dict[str, dict]:
                     if a.name.startswith("app."):
                         names[a.asname or a.name] = (a.name, None)
         functions = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        index[_module_name(path).removesuffix(".__init__")] = {"tree": tree, "names": names, "functions": functions}
+        constants = {t.id: n.value for n in tree.body if isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value
+                     for t in (n.targets if isinstance(n, ast.Assign) else [n.target]) if isinstance(t, ast.Name)}
+        index[_module_name(path).removesuffix(".__init__")] = {
+            "tree": tree, "names": names, "functions": functions, "constants": constants,
+        }
     return index
 
 
 def _function_seeds(index: dict, module: str, node: ast.AST, orchestrators: set[str], seen: set) -> set[str]:
-    """The modules a function reaches: what it imports and names, through
-    the module's own functions it calls. A function of a run's module (the
-    ballot sync's run_ballot_sync) is followed into that function alone,
-    never the run's whole module."""
+    """The modules a function reaches. An app.pipeline module it names
+    counts whole (and _closure follows its imports). Any other module, and
+    a run's module, is followed function by function: the functions of it
+    the code calls, and what those name, so a module used for one helper
+    (data_refresh.read, a file the refresh keeps) isn't taken for the
+    module's reading (data_refresh's fetches). A module counts as reached
+    when one of its functions it reaches sends a request (_requests)."""
     seeds: set[str] = set()
     info = index[module]
+
+    def walk_function(mod: str, name: str) -> None:
+        fn = index[mod]["functions"].get(name)
+        if fn is None or (mod, name) in seen:
+            return
+        seen.add((mod, name))
+        if mod not in orchestrators and _requests(index, mod, fn):
+            seeds.add(mod)
+        seeds.update(_function_seeds(index, mod, fn, orchestrators, seen))
 
     def ref(mod: str, attr: str | None) -> None:
         if attr and f"{mod}.{attr}" in index:
             mod, attr = f"{mod}.{attr}", None
         if mod not in index:
             return
-        if mod in orchestrators:
-            fn = index[mod]["functions"].get(attr or "")
-            if fn is not None and (mod, fn.name) not in seen:
-                seen.add((mod, fn.name))
-                seeds.update(_function_seeds(index, mod, fn, orchestrators, seen))
-            return
-        seeds.add(mod)
+        if mod.startswith("app.pipeline.") and mod not in orchestrators:
+            seeds.add(mod)
+        elif attr:
+            walk_function(mod, attr)
 
+    modules = {name: target for name, target in info["names"].items()}
     for n in ast.walk(node):
         if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("app"):
             for a in n.names:
                 ref(n.module, a.name)
+                modules[a.asname or a.name] = (n.module, a.name)
+    for n in ast.walk(node):
+        if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in modules:
+            mod, attr = modules[n.value.id]
+            target = f"{mod}.{attr}" if attr else mod
+            if target in index:  # module.function
+                ref(target, n.attr)
         elif isinstance(n, ast.Name):
-            if n.id in info["functions"] and (module, n.id) not in seen:
+            if n.id in info["functions"]:
+                walk_function(module, n.id)
+            elif n.id in modules:
+                ref(*modules[n.id])
+            elif n.id in info["constants"] and (module, n.id) not in seen:
+                # A module table of callbacks (data_refresh's DATA_FILES): the
+                # functions it names are called through it.
                 seen.add((module, n.id))
-                seeds.update(_function_seeds(index, module, info["functions"][n.id], orchestrators, seen))
-            elif n.id in info["names"]:
-                ref(*info["names"][n.id])
+                value = info["constants"][n.id]
+                if any(isinstance(m, ast.Name) and m.id in info["functions"] for m in ast.walk(value)):
+                    if _requests(index, module, value):
+                        seeds.add(module)
+                    seeds.update(_function_seeds(index, module, value, orchestrators, seen))
     return seeds
 
 
+def _requests(index: dict, module: str, fn: ast.AST) -> bool:
+    """Whether a function sends a request itself: it names a URL, a module
+    constant that is one, or anything imported from an HTTP client module
+    (_CLIENTS: httpx, requests, the app's own client and fetch helpers)."""
+    info = index[module]
+    tree_consts = info["constants"]
+    clients = {name for name, (mod, _) in info["names"].items() if mod in _CLIENTS}
+    clients |= {a.asname or a.name for node in info["tree"].body if isinstance(node, ast.Import)
+                for a in node.names if a.name in _CLIENTS}
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and _URL.match(n.value):
+            return True
+        if isinstance(n, ast.Name):
+            if n.id in clients:
+                return True
+            value = tree_consts.get(n.id)
+            if isinstance(value, ast.Constant) and isinstance(value.value, str) and _URL.match(value.value):
+                return True
+        if isinstance(n, ast.ImportFrom) and n.module in _CLIENTS:
+            return True
+    return False
+
+
 def _closure(index: dict, seeds: set[str], orchestrators: set[str]) -> set[str]:
-    """The seeds and what they import, and so on, never through a run's
-    module: from an app.pipeline module, every app.pipeline module it
-    imports anywhere in the file; from any other module, only what it
-    imports at its top level. Outside app/pipeline/ a function-level import
-    is one function's errand (the alert module's checks import half the
-    pipeline that way), followed only where a job's own functions make it
-    (_function_seeds)."""
+    """The seeds and every app.pipeline module an app.pipeline seed imports,
+    anywhere in the file, and so on, never through a run's module. A seed
+    outside app/pipeline/ was reached function by function
+    (_function_seeds) and is not expanded."""
     seen, todo = set(), list(seeds)
     while todo:
         module = todo.pop()
         if module in seen:
             continue
         seen.add(module)
-        tree = index[module]["tree"]
         if module.startswith("app.pipeline."):
-            nxt = {m for m in _imports(ast.walk(tree)) if m.startswith("app.pipeline.")}
-        else:
-            nxt = _imports(tree.body)
-        todo.extend(m for m in nxt if m in index and m not in orchestrators)
+            todo.extend(m for m in _imports(ast.walk(index[module]["tree"]))
+                        if m.startswith("app.pipeline.") and m in index and m not in orchestrators)
     return seen
 
 

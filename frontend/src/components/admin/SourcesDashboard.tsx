@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchAdminSourceHealth } from "@/lib/api";
 import type { AdminSourceHealth, SourceHealthEntry } from "@/types/sources";
+import { TYPE } from "@/lib/typeStyles";
 import { Panel } from "./widgets";
 
 /** The state's colour: a failing source stands out, one not read this run
@@ -56,10 +57,38 @@ export function SourcesTable({ data }: { data: AdminSourceHealth }) {
               <span className="block text-ink-lo tabular-nums">
                 {data.windowDays} days: {s.failuresText}
               </span>
+              {s.alsoSendsTo.length > 0 && (
+                <span className="block text-ink-min">
+                  Also sent to by {s.alsoSendsTo.join(", ")}
+                </span>
+              )}
             </div>
           </li>
         ))}
       </ul>
+      <section aria-labelledby="outbound-services" className="space-y-1 pt-2">
+        <h3 id="outbound-services" className={TYPE.boxTitle}>
+          Outbound services
+        </h3>
+        <p className="text-ink-lo">
+          Hosts the site only sends to (alerts, posts, forwarded feedback): not sources, so not on
+          the map.
+        </p>
+        {data.outbound.length ? (
+          <ul aria-label="Outbound services" className="divide-y divide-white/[0.04]">
+            {data.outbound.map((o) => (
+              <li key={o.host} className="py-1">
+                <span className="text-ink [overflow-wrap:anywhere]">{o.host}</span>{" "}
+                <span className="text-ink-min">sent to by {o.modules.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-ink-min">
+            None: every host a sending module names is also read as a source.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

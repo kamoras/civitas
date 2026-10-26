@@ -78,6 +78,7 @@ describe("SourcesTable (admin)", () => {
     const admin: AdminSourceHealth = {
       ...health,
       windowDays: 30,
+      outbound: [{ host: "ntfy.example", modules: ["app.ops_alerts"] }],
       sources: [
         {
           ...walled,
@@ -91,6 +92,7 @@ describe("SourcesTable (admin)", () => {
           failedRequests30d: 4,
           failedSteps30d: 3,
           failuresText: "3 failed steps; 4 of 4 requests failed",
+          alsoSendsTo: [],
         },
       ],
     };
@@ -102,5 +104,7 @@ describe("SourcesTable (admin)", () => {
     expect(row).toHaveTextContent("Steps on record: stock trades · senate_ptr");
     expect(row).toHaveTextContent("3 failed steps; 4 of 4 requests failed");
     expect(row).toHaveTextContent("Recorded: Akamai's Access Denied");
+    const outbound = screen.getByRole("list", { name: "Outbound services" });
+    expect(outbound).toHaveTextContent("ntfy.example");
   });
 });

@@ -2618,9 +2618,14 @@ host comes from the code, so it is right before anything has recorded a
 read: the nightly runs (`crawler.run_readers`: the run whose module takes
 the run row, and the `app.pipeline` modules it imports) and the scheduler's
 jobs (`crawler.job_readers`: each `add_job` in scheduler.py, followed
-through the functions it calls, named with when it runs, "Action Center,
-every hour at :15"), and for a host neither reads, the pages that ask for it
-(`crawler.request_readers`); "last asked" is a request, a
+through the functions it calls, a module outside app/pipeline/ counted only
+where a function the job reaches sends a request, named with when it runs,
+"Action Center, every hour at :15"), and for a host neither reads, the pages
+that ask for it (`crawler.request_readers`). A host the site only sends to
+is not a source (`source_health.outbound_modules`: the module every alert
+goes through, the one every post goes through, and an API route that
+forwards a reader's submission): it is kept off the public map and out of
+"read by", and the admin lists it under outbound services; "last asked" is a request, a
 step, a refusal record or the registry's dated wall, and "never" only with
 none. What each host answered comes from `app/source_reads.py`: every governed request ends there (a 5xx, a 429,
 a bot wall's challenge or no answer fails the host; a 403 or 404 is an

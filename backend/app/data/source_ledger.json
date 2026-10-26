@@ -37,13 +37,13 @@
     {"publisher": "O*NET (Department of Labor)", "takes": "Occupation data for reading what donors do for a living", "hosts": ["www.onetcenter.org"]},
     {"publisher": "Google Civic Information", "takes": "Contests on a town's ballot", "hosts": ["civicinfo.googleapis.com"]},
     {"publisher": "Google Trends", "takes": "What people are searching for, for the Action Center", "hosts": ["trends.google.com"]},
-    {"publisher": "Bluesky", "takes": "Trending topics, and the site's own posts", "hosts": ["public.api.bsky.app"]},
+    {"publisher": "Bluesky", "takes": "Trending topics for the Action Center", "hosts": ["public.api.bsky.app"]},
     {"publisher": "Internet Archive", "takes": "Archived copies of state documents behind a bot wall", "hosts": ["web.archive.org"]},
     {"publisher": "Vote.gov and USA.gov", "takes": "Official links for registering and voting", "hosts": ["vote.gov", "www.usa.gov"]},
     {"publisher": "Clarity Elections (state results)", "takes": "Election results several states publish here", "hosts": ["results.enr.clarityelections.com"]},
     {"publisher": "South Dakota Secretary of State", "takes": "South Dakota's certified general election ballot", "hosts": ["vip.sdsos.gov"]},
     {"publisher": "Clark County Election Department, Nevada", "takes": "Nevada's certified candidates and election results", "hosts": ["www.clarkcountynv.gov"]},
     {"publisher": "Delaware Department of Elections", "takes": "Delaware's certified candidates and election results", "hosts": ["data.delaware.gov", "elections.delaware.gov"]},
-    {"publisher": "GitHub", "takes": "Where site feedback and alerts are filed, and where some data files are published", "hosts": ["api.github.com"]}
+    {"publisher": "GitHub", "takes": "Election returns some sources publish there", "hosts": ["api.github.com"]}
   ]
 }

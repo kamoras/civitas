@@ -58,9 +58,19 @@ export interface AdminSourceHealthEntry extends SourceHealthEntry {
   failedSteps30d: number;
   /** The three counts in words: "1 failed step; 2 of 3 requests failed". */
   failuresText: string;
+  /** Modules that also send to it (alerts, posts), not reading it. */
+  alsoSendsTo: string[];
+}
+
+/** A host Civitas only sends to (alerts, posts, forwarded feedback). */
+export interface OutboundService {
+  host: string;
+  modules: string[];
 }
 
 export interface AdminSourceHealth extends Omit<SourceHealth, "sources"> {
   windowDays: number;
   sources: AdminSourceHealthEntry[];
+  /** Hosts only sending modules name: not sources, listed apart. */
+  outbound: OutboundService[];
 }

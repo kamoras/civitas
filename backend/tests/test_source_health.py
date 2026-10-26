@@ -184,6 +184,30 @@ class TestMap:
         # Every source on the map is read by something the code names.
         assert [h for h, e in by.items() if not e["readBy"]] == []
 
+    def test_hosts_the_site_only_sends_to_are_not_sources(self, db_session, monkeypatch):
+        # The senders are found from the code: the module every alert goes
+        # through, the one every post goes through, and the feedback route
+        # that files a reader's message as an issue.
+        assert source_health.outbound_modules() == {"app.ops_alerts", "app.broadcast", "app.api.feedback"}
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
+        body = source_health.build(db_session)
+        by = {e["host"]: e for e in body["sources"]}
+        # GitHub is a source only because the data refresh reads election
+        # returns there: read by that job alone, never by every job that
+        # can raise an alert.
+        assert [label.split(",")[0] for label in by["api.github.com"]["readBy"]] == ["Data file refresh"]
+        assert set(by["api.github.com"]["alsoSendsTo"]) == {"app.ops_alerts", "app.api.feedback"}
+        # Bluesky stays a source for its trends, but not for the site's own posts.
+        assert by["public.api.bsky.app"]["alsoSendsTo"] == ["app.broadcast"]
+        # A host only senders name is listed apart and kept off the public map.
+        hosts = crawler.hosts()
+        monkeypatch.setattr(crawler, "hosts", lambda: hosts + [
+            {"host": "alerts.example", "readers": [{"module": "app.ops_alerts", "rps": None, "registry": None}]},
+        ])
+        body = source_health.build(db_session)
+        assert {"host": "alerts.example", "modules": ["app.ops_alerts"]} in body["outbound"]
+        assert "alerts.example" not in {e["host"] for e in source_health.public(body)["sources"]}
+
     def test_every_scheduler_job_is_found(self):
         jobs = crawler.job_readers()
         assert set(crawler.SCHEDULE) <= set(jobs)
