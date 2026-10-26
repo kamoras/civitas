@@ -158,6 +158,23 @@ Every hour at :15
        │         outlets' words scored 0.62 to 0.86 and two facts 0.51 to
        │         0.84, so no cut separates them and a reworded fact can
        │         still count twice at the two-claim gate.
+       │         Each claim keeps its actor, and two claims about one
+       │         actor (claims.same_actor: one span's words within the
+       │         other's) are held to a cut of their own once the refit
+       │         has one: fitted the same way over the same-actor pairs
+       │         the data calls two facts (the lines above, plus one
+       │         actor's two lines whose own words date them days apart),
+       │         from the claims the recorded claim calls verified, which
+       │         needs 30 of them, and adopted on its own held-out
+       │         comparison on those pairs (restatement_in_use_after).
+       │         Measured 2026-10-26 (production copy, 21 days): 10 such
+       │         pairs (top 0.61), so none yet, and 0.87 holds for every
+       │         pair. Of the 27 issues published since 2026-10-11 (each a
+       │         lede and one fact), 1 restates at 0.87 (the old 0.96 let
+       │         it through); read by hand, 17 are one fact told twice, 10
+       │         with one actor (0.44 to 0.94) and 7 named two ways ("DOJ",
+       │         "Trump administration"), which no actor rule reaches,
+       │         while 3 one-actor pairs are two facts (0.55 to 0.57).
        │         Title = the top article's real headline, never a
        │         livestream or video page's: an article whose headline
        │         kicker (the label before its first ": ") scores past the
