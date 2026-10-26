@@ -173,23 +173,45 @@ async def bounded(awaitable, timeout: Any, *, label: str = "request"):
 # getting past a wall is not an option, it is the site saying no.
 _CHALLENGE_BODY_MARKERS = (b"_Incapsula_Resource", b"Just a moment...", b"/cdn-cgi/challenge-platform/")
 _AKAMAI_DENIED = b"<TITLE>Access Denied</TITLE>"
+# An answer that isn't a refusal (a 200, a 404) is a challenge only when its
+# body is the challenge page itself, never because the wall's script rides
+# on the site's own page. Measured from production, 2026-10-26: Imperva
+# adds an `_Incapsula_Resource` script to the end of every page it fronts
+# (Pennsylvania's and California's real IIS 404 for robots.txt), while its
+# challenge is a page of its own opening with this robots meta and that
+# script and nothing else (New Jersey's and Massachusetts's 212-byte 200s);
+# its block page names an incident ID. Cloudflare sent `cf-mitigated:
+# challenge` on sos.iowa.gov's real robots.txt (200, text/plain), and
+# injects `/cdn-cgi/challenge-platform/` into ordinary pages (JavaScript
+# Detections); its challenge page is "Just a moment...". Each of those
+# 404s and 200s was read as a wall and backed its host off.
+_IMPERVA_CHALLENGE_PAGE = b'<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">'
+_IMPERVA_INCIDENT = b"Incapsula incident ID"
+_CLOUDFLARE_CHALLENGE_PAGE = b"Just a moment..."
 
 
 def is_bot_challenge(response: httpx.Response) -> bool:
     """Whether `response` is a bot wall's challenge rather than the page."""
     headers = response.headers
-    if headers.get("cf-mitigated", "").lower() == "challenge":
-        return True
     refused = response.status_code in (401, 403, 429, 503)
-    if refused and "x-iinfo" in headers:
+    cloudflare = headers.get("cf-mitigated", "").lower() == "challenge"
+    imperva = "x-iinfo" in headers
+    if refused and (cloudflare or imperva):
         return True
     try:
         head = response.content[:4096]
     except httpx.ResponseNotRead:  # a stream nobody has read: headers only
         return False
-    if refused and headers.get("server", "") == "AkamaiGHost" and _AKAMAI_DENIED in head:
+    if refused:
+        if headers.get("server", "") == "AkamaiGHost" and _AKAMAI_DENIED in head:
+            return True
+        return any(m in head for m in _CHALLENGE_BODY_MARKERS)
+    if cloudflare and _CLOUDFLARE_CHALLENGE_PAGE in head:
         return True
-    return (refused or "x-iinfo" in headers) and any(m in head for m in _CHALLENGE_BODY_MARKERS)
+    return imperva and (
+        _IMPERVA_INCIDENT in head
+        or (_IMPERVA_CHALLENGE_PAGE in head and b"_Incapsula_Resource" in head)
+    )
 
 
 def _tls_context() -> ssl.SSLContext:
@@ -431,7 +453,14 @@ def observe_answer(url: str | httpx.URL, status: int, headers: Any, body: bytes 
     url = httpx.URL(str(url))
     if not crawl_policy.governed(url):
         return
-    response = httpx.Response(status, headers=dict(headers or {}), content=body[:4096])
+    # `body` is what the client already decoded (requests' .content), so the
+    # headers that describe the bytes on the wire go: httpx would decode a
+    # gzip body again and raise. Until 2026-10-26 that DecodingError failed
+    # every gzipped requests read after it arrived (Wikipedia's API, for the
+    # election map, every refresh from #1295's deploy on).
+    headers = {k: v for k, v in dict(headers or {}).items()
+               if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")}
+    response = httpx.Response(status, headers=headers, content=body[:4096])
     crawl_policy.observe(url, response, is_bot_challenge(response))
 
 
