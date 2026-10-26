@@ -297,6 +297,12 @@ export default function DataChapter() {
             </P>
           </Box>
           <Box
+            id="crawler"
+            title="The crawler that reads them"
+            dek="Every request names Civitas and how to reach us. Its page lists each site it reads, how fast and when, and how a site can opt out."
+            links={[{ label: "Our crawler", href: "/about/crawler" }]}
+          />
+          <Box
             title="Methods on every record page"
             dek="Every member and bill page ends in a methods, sources and citation section: where each figure comes from, the record as JSON, and a reference."
             more="what the section holds"

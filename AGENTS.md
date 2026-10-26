@@ -1131,10 +1131,21 @@ Corollaries that follow from the same rule, all enforced in code:
   "as archived by the Internet Archive on <date>". A wall that also turns
   the Archive's crawler away (Ohio's did) leaves no copy, and the state
   stays ingest_failed.
-  A refusal that a request naming its contact passes is not a wall:
-  maine.gov's CloudFront answers 403 to a User-Agent with no contact in it
-  (robots.txt included) and 200 to the pipeline's (2026-10-23), so an
-  unset `CONTACT_EMAIL`, not the state, is what a script sees there.
+  **Every request names Civitas, the same way** (2026-10-25): the one
+  User-Agent `Civitas/1.0 (+<SITE_URL>/about/crawler; <CONTACT_EMAIL>)`
+  (`app/contact.USER_AGENT`; `make_async_client` sends it by default, the
+  frontend's server fetches through `crawlerUserAgent`), with Accept and
+  Accept-Language and nothing a browser says about itself
+  (`http_utils.FETCH_HEADERS`). The one place a User-Agent differs by
+  host is `contact.HOST_USER_AGENTS` (owner decision, 2026-10-25): the
+  seven hosts that refuse Civitas's own, each with the nearest form it
+  serves (all still naming Civitas) and the measurement, applied by
+  `make_async_client`'s request hook and listed on `/about/crawler`. A new
+  entry needs a measurement, never a guess. `/about/crawler` says what the crawler reads, how
+  fast and when, from the code itself (`app/crawler.py`, `GET /api/crawler`):
+  a new fetch module is listed by its URL constants and its RateLimiter,
+  and a new scheduled job that reads from outside takes its trigger from
+  `crawler.SCHEDULE`.
   A wall is not a dead link, though. A voting step's link (the state
   page's "Your vote, step by step", one official link per task,
   `ballot_lookup.vote_steps`) the nightly link check is refused on
@@ -2331,7 +2342,7 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   per race, SE 0.004; Senate −0.030, SE 0.014), so the stated ones would stay.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
-  `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
+  `scripts/fetch_silver_bulletin_polls.py` with `USER_AGENT` and no other
   identifying header) refuses a whole file on a failed gate (terms sentence,
   exact columns, append-only with bounded logged corrections, 0 to N days
   with N the accepted file's reach, valid shares, a new cycle's Senate and
@@ -2652,7 +2663,7 @@ See `.env.example` for all options. Key variables:
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel (`PIPELINE_TRIGGER_TOKEN` for the public trigger routes; `.env.example`'s placeholder counts as unset for both, `app/api/auth.py`) |
-| `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
+| `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only; docker-compose.yml passes it to the frontend too, for its photo fetches). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `SITE_URL` | No | The site's public address. The domain is typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); read `broadcast.SITE_URL` / `settings.SITE_DOMAIN` or `SITE_URL` / `SITE_DOMAIN` from `lib/site.ts`, never a literal |
 | `REAL_IP_FROM` | No | The proxy nginx trusts to name the visitor (`nginx/real-ip.sh`; default loopback only). Required behind a reverse proxy; production's `.env` sets `192.168.0.101`, the Pi's LAN address its host nginx connects from |
 | `WEB_BOT_AUTH_KEY` | No | The instance's Ed25519 signing key (Web Bot Auth, `app/web_bot_auth.py`); unset, requests go out unsigned and the key directory answers 404 |

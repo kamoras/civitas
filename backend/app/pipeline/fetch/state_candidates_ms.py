@@ -18,10 +18,10 @@ THE PDF ITSELF is a wide table — one row per candidate, one column per
 COUNTY (all 82, so the real 2026 file spans 9-17 pages depending on how many
 candidates run) — printed by a report generator (ActiveReports) that has no
 Excel/CSV counterpart, only ever this PDF. Confirmed via pdftotext/pdffonts:
-real embedded text, not scanned, and a plain `httpx` GET with BROWSER_HEADERS
+real embedded text, not scanned, and a plain `httpx` GET with FETCH_HEADERS
 reaches it with no bot-detection friction at all (a bare header set gets an
 Akamai "Access Denied", exactly the shape already seen for OH/MO/TN/NY/GA/MN
-— see http_utils.BROWSER_HEADERS).
+— see http_utils.FETCH_HEADERS).
 
 Because a candidate's own row REPEATS across however many pages it takes to
 list all 82 counties (the same row, sliding further right each page), a
@@ -85,7 +85,7 @@ import pdfplumber
 
 from app.pipeline.fetch.state_candidates_common import runoff_threshold
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
 from app.pipeline.fetch.state_candidates_tabular import _votes
 from app.pipeline.rate_limiter import RateLimiter
@@ -93,7 +93,7 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 _INDEX_URL = "https://www.sos.ms.gov/elections-voting/election-results"
-_HEADERS = BROWSER_HEADERS
+_HEADERS = FETCH_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 
 _SENATE_RE = re.compile(r"United States-Senate")

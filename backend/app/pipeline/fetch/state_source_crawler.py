@@ -49,7 +49,7 @@ import httpx
 
 from app.http_client import is_bot_challenge
 from app.pipeline.fetch import robots
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -57,9 +57,9 @@ from app.state_names import STATE_NAMES  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = BROWSER_HEADERS
+_HEADERS = FETCH_HEADERS
 # The name robots.txt rules address us by: the product token our
-# User-Agent carries ("... Civitas/1.0 (+contact)"), matched as RFC 9309
+# User-Agent carries ("Civitas/1.0 (+page; contact)", app/contact.py), matched as RFC 9309
 # says (fetch/robots.py). urllib.robotparser read the whole browser-shaped
 # string as "Mozilla", so a site's "User-agent: Civitas" rules never applied.
 ROBOTS_AGENT = "Civitas"

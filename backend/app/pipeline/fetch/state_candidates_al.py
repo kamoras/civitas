@@ -75,7 +75,7 @@ from urllib.parse import urljoin
 import httpx
 import xlrd
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     clean_display_name,
@@ -101,7 +101,7 @@ def _special_cycle(source: dict) -> int | None:
     cycle = source.get("ecode_cycle")
     return int(cycle) if source.get("ecode") and cycle else None
 
-_HEADERS = BROWSER_HEADERS
+_HEADERS = FETCH_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 
 

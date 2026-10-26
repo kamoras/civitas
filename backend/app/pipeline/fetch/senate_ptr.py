@@ -47,6 +47,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_p
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.contact import USER_AGENT
 from app.http_client import is_bot_challenge
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -281,7 +282,7 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, channel=CHROMIUM_CHANNEL)
                 try:
-                    page = await browser.new_page()
+                    page = await browser.new_page(user_agent=USER_AGENT)  # Civitas, not HeadlessChrome
                     await sign_browser_page(page)  # identified as Civitas, verifiably (web_bot_auth)
                     page.set_default_timeout(_ACTION_TIMEOUT_MS)
                     return await _scrape_via_page(page, since_date, report_type, filer_type)

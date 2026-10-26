@@ -64,7 +64,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 # Runs from the repo root on a bare python3: app.contact is standard library only.
 sys.path.insert(0, str(REPO / "backend"))
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app import census_lines  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
 
@@ -166,7 +166,7 @@ def download(url: str, cache: Path) -> Path:
     dest = cache / url.rsplit("/", 1)[1]
     if not dest.exists():
         print(f"downloading {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req) as resp, open(dest, "wb") as fh:
             while chunk := resp.read(1 << 20):
                 fh.write(chunk)

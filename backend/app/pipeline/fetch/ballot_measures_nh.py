@@ -56,10 +56,11 @@ The General Court writes each question's text (the CACR; HB 1300), so
 title_authority names it, as published by the Secretary of State. No
 yes/no explanation or fiscal statement is printed — those stay None.
 
-Headers: www.sos.nh.gov and mm.nh.gov answer the standard BROWSER_HEADERS
-with an Akamai 403 and the same request without the User-Agent's
-"(+contact)" comment with 200 (measured 2026-09-28), so this module sends
-HEADERS_NO_CONTACT.
+Headers: www.sos.nh.gov's Akamai answers Civitas's User-Agent with a 403
+(measured 2026-10-25: any User-Agent carrying a contact in a comment is
+refused, a bare "Civitas/1.0" or a browser's is served). Until then this
+module sent the contact-less form; now the shared client sends the host's measured exception (contact.HOST_USER_AGENTS):
+a bare "Civitas/1.0".
 """
 
 import logging
@@ -71,7 +72,6 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
 from app.pipeline.fetch.ballot_measures_state_common import (
-    HEADERS_NO_CONTACT,
     get_bytes,
     get_text_or_missing,
     pdf_pages,
@@ -202,7 +202,7 @@ def parse_questions(pages: list[str] | str, year: int) -> list[dict] | None:
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     details_url = DETAILS_URL.format(year=year)
     page_html, missing = await get_text_or_missing(
-        client, details_url, f"NH {year} election details", headers=HEADERS_NO_CONTACT,
+        client, details_url, f"NH {year} election details",
     )
     awaited = f"the New Hampshire Secretary of State's {year} 'Questions on the General Election Ballot'"
     if missing:
@@ -221,7 +221,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         # Posted only in some cycles (2024 had a Voters' Guide instead):
         # its absence is neither a failure nor a "none".
         raise NotYetPublished(awaited, deadline_applies=False)
-    raw = await get_bytes(client, url, "NH general election questions", headers=HEADERS_NO_CONTACT)
+    raw = await get_bytes(client, url, "NH general election questions")
     if raw is None:
         return None
     try:

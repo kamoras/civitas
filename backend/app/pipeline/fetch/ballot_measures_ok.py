@@ -66,7 +66,7 @@ from app.election_calendar import next_election_day
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
 from app.pipeline.fetch.ballot_measures_state_common import pdf_text
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -222,7 +222,7 @@ async def _with_ballot_title(
     title_url = BALLOT_TITLE_URL.format(year=year, number=parsed["number"])
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", title_url, log_label=f"OK SQ {parsed['number']} ballot title",
-        headers=BROWSER_HEADERS, expected_statuses=(404,),
+        headers=FETCH_HEADERS, expected_statuses=(404,),
     )
     if resp is None:
         return None
@@ -341,7 +341,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             return None
         resp = await fetch_with_retry(
             client, _rate_limiter, "POST", URL, log_label=f"OK register page {page + 1}",
-            headers=BROWSER_HEADERS, data=form,
+            headers=FETCH_HEADERS, data=form,
         )
         if resp is None:
             return None

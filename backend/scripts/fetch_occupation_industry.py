@@ -64,7 +64,7 @@ from collections import defaultdict
 from datetime import date
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.pipeline.transform.occupation_industry import normalize_title  # noqa: E402
 
 PUMS_URL = "https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_pus.zip"
@@ -76,7 +76,7 @@ _ONET_VERSION = re.compile(r"db_(\d+)_(\d+)_")
 
 
 def _exists(url: str) -> bool:
-    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             return resp.status == 200
@@ -174,7 +174,7 @@ def fetch(work: pathlib.Path, urls: dict[str, str]) -> None:
         path = work / name
         if not path.exists():
             print(f"fetching {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req) as resp, path.open("wb") as out:
                 while chunk := resp.read(1 << 20):
                     out.write(chunk)
@@ -298,7 +298,7 @@ def main():
     if args.onet:
         onet = tuple(int(x) for x in args.onet.split("."))
     else:
-        req = urllib.request.Request(ONET_PAGE, headers={"User-Agent": BOT_USER_AGENT})
+        req = urllib.request.Request(ONET_PAGE, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=60) as resp:
             onet = newest_onet(resp.read().decode("utf-8", "replace"))
     print(f"ACS {year} 1-year PUMS, O*NET {onet[0]}.{onet[1]}")

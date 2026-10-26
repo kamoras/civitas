@@ -482,7 +482,7 @@ async def test_search_launches_full_chromium_not_the_headless_shell(monkeypatch)
     launches, closed = [], []
 
     class _Browser:
-        async def new_page(self):
+        async def new_page(self, **kw):
             return SimpleNamespace(set_default_timeout=lambda ms: None)
 
         async def close(self):
@@ -514,7 +514,7 @@ def _launcher(monkeypatch, scrape):
     """search_filings against a fake browser whose scrape is `scrape`."""
 
     class _Browser:
-        async def new_page(self):
+        async def new_page(self, **kw):
             return SimpleNamespace(set_default_timeout=lambda ms: None)
 
         async def close(self):

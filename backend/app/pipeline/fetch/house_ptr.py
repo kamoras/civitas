@@ -85,7 +85,7 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
         return cached
 
     # headers=None: this site has always been fetched with httpx's own
-    # bare defaults, never BROWSER_HEADERS (fetch_bytes_with_retry's own
+    # bare defaults, never FETCH_HEADERS (fetch_bytes_with_retry's own
     # default) -- preserved explicitly rather than silently picked up as
     # a side effect of sharing this helper with callers that do want it.
     zip_bytes = await fetch_bytes_with_retry(

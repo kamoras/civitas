@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fit_forecast_model as fit  # noqa: E402
 from app.atomic_write import runtime_data_path  # noqa: E402
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.forecast import training_polls as tp  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
 from app.time_utils import utcnow  # noqa: E402
@@ -39,8 +39,8 @@ REGENERATE = "backend/scripts/fetch_silver_bulletin_polls.py"
 
 
 def get(url: str) -> bytes:
-    """One GET, identified by BOT_USER_AGENT and nothing else."""
-    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+    """One GET, identified by USER_AGENT and nothing else."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             return resp.read()

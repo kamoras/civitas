@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 SCDB_ARCHIVE = "https://scdb.la.psu.edu/data/"
 FJC_JUDGES = "https://www.fjc.gov/sites/default/files/history/judges.csv"
+# mqscores.wustl.edu's Cloudflare challenges a User-Agent carrying an
+# address, Civitas's own included (measured 2026-10-25); the shared client
+# sends the host's measured exception (contact.HOST_USER_AGENTS).
 MQ_JUSTICES = "https://mqscores.wustl.edu/media/{year}/justices.csv"
 
 _CACHE_TIER = "justice_records"

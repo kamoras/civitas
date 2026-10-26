@@ -139,7 +139,7 @@ from urllib.parse import quote, urljoin
 import httpx
 
 from app.election_calendar import next_election_day
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     JUDICIAL_RESOLUTION_DECIDED_EARLY,
@@ -163,7 +163,7 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = BROWSER_HEADERS
+_HEADERS = FETCH_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 
 # A state's whole-election export is a few MB; anything far past that is a

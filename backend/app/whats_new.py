@@ -58,7 +58,7 @@ from sqlalchemy.orm import Session
 
 from app import broadcast
 from app.config import settings
-from app.contact import SELF_FETCH_USER_AGENT
+from app.contact import USER_AGENT
 from app.models import BroadcastPost
 from app.ops_alerts import send_ops_alert
 from app.time_utils import utcnow
@@ -136,7 +136,7 @@ def page_status(entry: dict) -> int | None:
     path = urlsplit(entry["url"]).path
     try:
         resp = httpx.get(settings.FRONTEND_INTERNAL_URL.rstrip("/") + path, timeout=30,
-                         follow_redirects=True, headers={"User-Agent": SELF_FETCH_USER_AGENT})
+                         follow_redirects=True, headers={"User-Agent": USER_AGENT})
     except Exception:
         return None
     return None if resp.status_code >= 500 else resp.status_code

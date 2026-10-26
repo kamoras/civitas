@@ -25,14 +25,14 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_files, xlsx_sheet_rows  # noqa: E402
 
 SUMMARY_PAGE = "https://www.epa.gov/egrid/summary-data"
 
 
 def _get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=120) as resp:
         return resp.read()
 

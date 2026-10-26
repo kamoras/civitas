@@ -45,6 +45,7 @@
     {"label": "Elections & ballots", "href": "/about/elections", "section": "About", "aliases": []},
     {"label": "News & Congress reports", "href": "/about/news", "section": "About", "aliases": ["corrections"]},
     {"label": "Data, AI & how it runs", "href": "/about/data", "section": "About", "aliases": ["sources", "data sources", "privacy", "ai"]},
+    {"label": "Our crawler", "href": "/about/crawler", "section": "About", "aliases": ["crawler", "bot", "user agent", "robots.txt", "opt out"]},
     {"label": "Known limitations", "href": "/about/limitations", "section": "About", "aliases": ["limitations"]},
     {"label": "References", "href": "/about/references", "section": "About", "aliases": ["bibliography", "citations"]},
     {"label": "Feeds", "href": "/feeds", "section": "Civitas", "aliases": ["rss", "atom", "subscribe"]},

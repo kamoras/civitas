@@ -31,7 +31,7 @@ from datetime import date
 
 import httpx
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
 WAYBACK = "https://web.archive.org/web/"
 PUBLISHER = "the Internet Archive"
-HEADERS = {"User-Agent": BOT_USER_AGENT}
+HEADERS = {"User-Agent": USER_AGENT}
 
 # The Archive asks API clients to keep to about one request a second and
 # answers 429 well before that from one address; a few seconds apart keeps

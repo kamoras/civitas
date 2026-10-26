@@ -47,7 +47,7 @@ import statsmodels.formula.api as smf
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.pipeline.analyze.justice_loyalty import Estimate, measurable  # noqa: E402
 
 # The Supreme Court Database release read: its file name carries it, and
@@ -127,7 +127,7 @@ def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
         path = cache / name
         if not path.exists():
             print(f"fetching {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req) as resp:
                 path.write_bytes(resp.read())
         paths[name] = path

@@ -43,7 +43,7 @@ from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, object_session
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.database import SessionLocal
@@ -1792,7 +1792,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
         return url
     try:
         resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
-            "User-Agent": BOT_USER_AGENT,
+            "User-Agent": USER_AGENT,
         }))
         final = str(resp.url)
         if "google.com" not in final:
@@ -1802,7 +1802,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
         logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
         resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers=signed_headers(url, {
-            "User-Agent": BOT_USER_AGENT,
+            "User-Agent": USER_AGENT,
         }))
         final = str(resp.url)
         if "google.com" not in final:
@@ -3117,7 +3117,7 @@ def _refresh_open_comment_views(db: Session) -> int:
     by_number = {r.external_id.removeprefix("fr-reg-"): r for r in rows}
 
     async def _fetch():
-        async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+        async with make_async_client(headers={"User-Agent": USER_AGENT}) as client:
             return await fetch_fr_metadata(
                 client, list(by_number), ["document_number", "page_views", "toc_subject", "toc_doc"],
             )

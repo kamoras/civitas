@@ -18,7 +18,7 @@ from collections import defaultdict
 import httpx
 from sqlalchemy.orm import Session
 
-from app.contact import BOT_USER_AGENT
+from app.contact import USER_AGENT
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
@@ -62,7 +62,7 @@ async def fetch_annual_series(client: httpx.AsyncClient, db: Session, series: st
     cached = api_cache_get(db, _CACHE_TIER, series, max_age_hours=_CACHE_TTL_HOURS)
     if cached is None:
         try:
-            resp = await client.get(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=DEFAULT_FETCH_TIMEOUT_S)
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=DEFAULT_FETCH_TIMEOUT_S)
             resp.raise_for_status()
         except Exception:
             logger.warning("FRED %s fetch failed", series, exc_info=True)

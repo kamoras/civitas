@@ -68,7 +68,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.contact import USER_AGENT  # noqa: E402
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_rows  # noqa: E402
 from app.pipeline.analyze.commemorative import (  # noqa: E402
@@ -117,7 +117,7 @@ def _get(url: str, path: pathlib.Path) -> pathlib.Path:
     """`url` downloaded to `path` (streamed), once."""
     if not path.exists():
         print(f"downloading {url}", file=sys.stderr)
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=600) as resp, open(path, "wb") as out:
             shutil.copyfileobj(resp, out, 1 << 20)
     return path
@@ -310,7 +310,7 @@ def main() -> None:
     ap.add_argument("--output", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
     args.cache.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(CEL_PAGE, headers={"User-Agent": BOT_USER_AGENT})
+    req = urllib.request.Request(CEL_PAGE, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=120) as resp:
         congress, cel = cel_sources(resp.read().decode("utf-8", "replace"))
     current = json.loads(args.in_use.read_text()) if args.in_use else {}

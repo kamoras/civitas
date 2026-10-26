@@ -55,6 +55,12 @@ export const ABOUT_CHAPTERS: readonly AboutChapter[] = [
       "Every data source, exactly where AI is and isn't used, what we record about visits, and the single small computer it all runs on.",
   },
   {
+    href: "/about/crawler",
+    title: "Our crawler",
+    blurb:
+      "Who is reading a site when Civitas does: its name, every site it reads and how fast, when it runs, and how to opt out.",
+  },
+  {
     href: "/about/limitations",
     title: "Known limitations",
     blurb:

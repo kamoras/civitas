@@ -28,7 +28,7 @@ import time
 import httpx
 from sqlalchemy.orm import Session
 
-from app.contact import UNSET_CONDITION, ContactUnset, require_contact
+from app.contact import UNSET_CONDITION, USER_AGENT, ContactUnset, require_contact
 from app.ops_alerts import send_ops_alert
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
@@ -61,7 +61,8 @@ def _headers() -> dict[str, str]:
     every caller already treats as "the SEC could not be read", never as
     an issuer with no record."""
     try:
-        return {"User-Agent": f"Civitas civic-transparency-platform {require_contact('SEC.gov')}"}
+        require_contact("SEC.gov")
+        return {"User-Agent": USER_AGENT}
     except ContactUnset as e:
         send_ops_alert(
             "SEC not fetched: CONTACT_EMAIL is not set",

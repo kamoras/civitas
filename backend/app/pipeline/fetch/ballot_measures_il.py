@@ -35,7 +35,7 @@ import re
 import httpx
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     resp = await fetch_with_retry(
         client, _rate_limiter, "POST", HOME_URL, log_label="IL voters' guide election select",
-        headers=BROWSER_HEADERS, data=postback_form(home_html, option_value),
+        headers=FETCH_HEADERS, data=postback_form(home_html, option_value),
     )
     if resp is None:
         return None

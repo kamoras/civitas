@@ -57,7 +57,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.fec import general_election_day
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     ballot_list_party,
     clean_display_name,
@@ -243,7 +243,7 @@ async def fetch_confirmed_candidates(
     async def _report(elecid: str, group: str) -> str | None:
         resp = await fetch_with_retry(
             client, _rate_limiter, "POST", url, log_label=f"{state} candidate list {elecid} {group}",
-            headers=BROWSER_HEADERS,
+            headers=FETCH_HEADERS,
             data={"elecid": elecid, "OfficeGroup": group, "StatusCode": "ALL", "OfficeCode": "ALL",
                   "CountyCode": "ALL", "PartyCode": "ALL", "FormsButton1": "RUN QUERY"},
         )

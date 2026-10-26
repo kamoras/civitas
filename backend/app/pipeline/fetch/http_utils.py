@@ -33,7 +33,7 @@ import logging
 import httpx
 import requests
 
-from app.contact import CONTACT_COMMENT
+from app.contact import USER_AGENT
 from app.error_utils import redact_sensitive_params
 from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge
 from app.pipeline.rate_limiter import RateLimiter
@@ -68,44 +68,31 @@ __all__ = [
 redact_url = redact_sensitive_params
 
 
-# Identify honestly, but send a COMPLETE request.
+# Civitas's own name and the headers any client sends: what it accepts,
+# and in which language. Nothing a browser sends about itself.
 #
-# A good number of state election sites sit behind a WAF that rejects on
-# the SHAPE of a request rather than on who is making it: a bare
-# User-Agent with no Accept, Accept-Language or Sec-Fetch-* headers looks
-# like a script and gets a 403 or a challenge page. Measured 2026-08-19
-# against the real sites — Ohio, Missouri, Tennessee and New York's
-# results portals all went from 403 to 200 with no change of identity,
-# purely by sending the headers a normal client always sends.
-#
-# The User-Agent still says who we are and how to reach us, and the rate
-# limits still apply. robots.txt governs crawling: the one module that
-# wanders a site looking for pages (state_source_crawler) checks it at every
-# request; the readers here fetch the documents a source publishes for
-# exactly this use, at addresses written into their config. This is standards-compliance, not disguise: a site that
-# wants to refuse Civitas can still refuse Civitas.
-CIVIC_CONTACT = f"Civitas/1.0{CONTACT_COMMENT}"
-BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-        f"Chrome/151.0.0.0 Safari/537.36 {CIVIC_CONTACT}"
-    ),
+# Until 2026-10-25 these were a browser's: a Chrome User-Agent with
+# "Civitas/1.0 (+contact)" appended, and the Sec-Fetch-* headers only a
+# browser sets. Measured that day on every host the code names (197, one
+# real address each, from the same network as production): the Sec-Fetch-*
+# headers changed no host's answer, so they are gone. The browser string
+# did matter on six hosts, which answer Civitas's own name with a refusal:
+# www.maine.gov and sos.tn.gov refuse any User-Agent that isn't a browser's
+# (even a bare "Civitas/1.0"); www.michigan.gov and www.sos.nh.gov refuse
+# one that carries a contact in a comment; goelect.txelections.civixapps.com
+# and mqscores.wustl.edu refuse one that carries an address. Those hosts
+# alone get the nearest form each serves, all still naming Civitas, from
+# one table (contact.HOST_USER_AGENTS), listed on /about/crawler.
+FETCH_HEADERS = {
+    "User-Agent": USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
 }
 
-# The same, shaped as a page's own script would send when fetching data.
-BROWSER_JSON_HEADERS = {
-    **BROWSER_HEADERS,
+# The same, asking for data.
+FETCH_JSON_HEADERS = {
+    **FETCH_HEADERS,
     "Accept": "application/json, text/plain, */*",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
 }
 
 
@@ -255,7 +242,7 @@ async def fetch_json_with_retry(
     url: str,
     label: str,
     *,
-    headers: dict = BROWSER_JSON_HEADERS,
+    headers: dict = FETCH_JSON_HEADERS,
     timeout: float = 30.0,
     **retry_kwargs,
 ) -> dict | list | None:
@@ -293,7 +280,7 @@ async def fetch_text_with_retry(
     url: str,
     label: str,
     *,
-    headers: dict = BROWSER_HEADERS,
+    headers: dict = FETCH_HEADERS,
     timeout: float = 30.0,
     **retry_kwargs,
 ) -> str | None:
@@ -320,7 +307,7 @@ async def fetch_bytes_with_retry(
     url: str,
     label: str,
     *,
-    headers: dict = BROWSER_HEADERS,
+    headers: dict = FETCH_HEADERS,
     timeout: float = 60.0,
     **retry_kwargs,
 ) -> bytes | None:
@@ -375,6 +362,9 @@ async def fetch_with_retry_requests(
     this instead of fetch_with_retry.
     """
     label = log_label or url
+    # Civitas's own name, never requests' "python-requests/x"; a caller's
+    # own User-Agent still wins.
+    request_kwargs["headers"] = {"User-Agent": USER_AGENT, **(request_kwargs.get("headers") or {})}
     for attempt in range(1, retries + 1):
         try:
             await rate_limiter.acquire()
