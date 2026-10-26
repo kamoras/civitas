@@ -492,18 +492,22 @@ def fit_cluster_cut(articles: Sequence[tuple], issue_sources: Sequence[Sequence[
 
 
 def restatement_pairs(lines: Sequence[tuple], two_stories: set = frozenset()) -> list[tuple[int, int, bool]]:
-    """(i, j, one fact) for the pairs of (group, date, line) claim lines
-    within a day of each other that the data decides. A group is one issue
-    or one feed article; `two_stories` holds the pairs of groups the data
-    says are two stories.
+    """(i, j, one fact) for the pairs of (group, date, line[, actor]) claim
+    lines within a day of each other that the data decides. A group is one
+    issue, one feed article or one claim call's source; `two_stories` holds
+    the pairs of groups the data says are two stories.
 
     One fact: the two quote one sentence (claims.SAME_SENTENCE_RUN words in
     a row), or state the same figure and share a distinctive entity. Two
-    facts: lines of two stories, or two lines of one issue stating figures
+    facts: lines of two stories, two lines of one issue stating figures
     with none in common ("$10 million spent" and "nearly $22 million
-    spent"). Any other pair is left out."""
-    signatures = [_issue_signature(line, []) for _, _, line in lines]
-    figures = [claim_layer.stated_figures(line) for _, _, line in lines]
+    spent"), or two lines about one actor (claims.same_actor) whose own
+    words date them days apart (days_disagree: the same official's act on
+    Friday and defence of it on Sunday). Any other pair is left out."""
+    signatures = [_issue_signature(line[2], []) for line in lines]
+    figures = [claim_layer.stated_figures(line[2]) for line in lines]
+    actors = [line[3] if len(line) > 3 else None for line in lines]
+    days = [stated_days(line[2], line[1]) if actor else frozenset() for line, actor in zip(lines, actors)]
     df: Counter = Counter()
     for s in signatures:
         df.update(s)
@@ -511,7 +515,7 @@ def restatement_pairs(lines: Sequence[tuple], two_stories: set = frozenset()) ->
     out = []
     for a, i in enumerate(order):
         for j in order[a + 1:]:
-            (gi, di, li), (gj, dj, lj) = lines[i], lines[j]
+            (gi, di, li), (gj, dj, lj) = lines[i][:3], lines[j][:3]
             if (dj - di).days > 1:
                 break
             if li.strip().lower() == lj.strip().lower():
@@ -523,10 +527,13 @@ def restatement_pairs(lines: Sequence[tuple], two_stories: set = frozenset()) ->
                 out.append((i, j, False))
             elif gi == gj and figures[i] and figures[j]:
                 out.append((i, j, False))
+            elif days_disagree(days[i], days[j]) and claim_layer.same_actor(actors[i], actors[j]):
+                out.append((i, j, False))
     return out
 
 
-def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use: float | None = None) -> dict | None:
+def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use: float | None = None,
+                        claims: Sequence[tuple] = (), in_use_same_actor: float | None = None) -> dict | None:
     """The restatement cut, from published issues (rows with date, summary,
     facts and what near_identical_pairs reads) and (title, description,
     published) feed articles, whose headlines are claims as an outlet
@@ -539,10 +546,20 @@ def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use
     while clustering joined nothing, as two facts at 0.86 and held the cut
     at 0.96. None with fewer than MIN_HARD_NEGATIVES two-fact pairs.
 
+    The (source, date, claim, actor) `claims` the claim calls recorded
+    (claims.recorded_claims) give an issue line that is one of them its
+    actor, and the rest are lines of their own. Pairs whose actors match
+    (claims.same_actor) get a cut of their own, `threshold_same_actor`,
+    fitted the same way over their own two-fact pairs when those number
+    MIN_HARD_NEGATIVES; every other pair keeps `threshold`.
+
     With `in_use`, the rule is held out on blocks of days against the cut in
     use (_held_out_against, a pair at or above the cut called one fact):
     `kept` says why the cut in use stays, or is None when the refit is
-    adopted."""
+    adopted. A same-actor cut is held out on its own, on the same-actor
+    pairs against the cut in use holds them to (`in_use_same_actor`, else
+    `in_use`), under `same_actor`; restatement_in_use_after adopts each."""
+    actor_of = {text: actor for _, _, text, actor in claims}
     lines = []
     for n, row in enumerate(issues):
         try:
@@ -551,8 +568,10 @@ def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use
             facts = []
         for line in [row.summary or "", *facts]:
             if line and line.strip():
-                lines.append((("issue", n), date.fromisoformat(str(row.date)[:10]), line))
-    lines += [(("article", n), a[2].date(), a[0]) for n, a in enumerate(articles) if a[0]]
+                lines.append((("issue", n), date.fromisoformat(str(row.date)[:10]), line, actor_of.get(line)))
+    lines += [(("article", n), a[2].date(), a[0], None) for n, a in enumerate(articles) if a[0]]
+    published = {line[2] for line in lines}
+    lines += [(("claim", source), day, text, actor) for source, day, text, actor in claims if text not in published]
     if len(lines) < 2:
         return None
     two_stories = {(("issue", i), ("issue", j)) for i, j, same in near_identical_pairs(issues) if not same}
@@ -561,9 +580,10 @@ def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use
     same = np.array([one for _, _, one in pairs], bool)
     if (~same).sum() < MIN_HARD_NEGATIVES:
         return None
-    vectors = _embed_texts_sim([line for _, _, line in lines])
+    vectors = _embed_texts_sim([line[2] for line in lines])
     scores = np.array([float(vectors[i] @ vectors[j]) for i, j, _ in pairs])
     days = np.array([max(lines[i][1], lines[j][1]).toordinal() for i, j, _ in pairs])
+    same_actor = np.array([claim_layer.same_actor(lines[i][3], lines[j][3]) for i, j, _ in pairs], bool)
 
     def cut(negatives: np.ndarray) -> float:
         return round(min(_zero_merge_cut(negatives, RESTATEMENT_NEGATIVE_QUANTILE) + CUT_MARGIN, 0.99), 2)
@@ -572,9 +592,38 @@ def fit_restatement_cut(issues: Sequence, articles: Sequence[tuple] = (), in_use
     out = {"threshold": threshold, "fitted": _zero_merge_cut(scores[~same], RESTATEMENT_NEGATIVE_QUANTILE),
            "margin": CUT_MARGIN, "quantile": RESTATEMENT_NEGATIVE_QUANTILE, "negatives": int((~same).sum()),
            "negatives_reaching": int((scores[~same] >= threshold).sum()), "positives": int(same.sum()),
-           "positives_joined": int((scores[same] >= threshold).sum()), "lines": len(lines)}
+           "positives_joined": int((scores[same] >= threshold).sum()), "lines": len(lines),
+           "same_actor_negatives": int((~same & same_actor).sum()),
+           "same_actor_positives": int((same & same_actor).sum())}
+    if out["same_actor_negatives"] >= MIN_HARD_NEGATIVES:
+        out["threshold_same_actor"] = cut(scores[~same & same_actor])
     if in_use is not None:
         out.update(_held_out_against(scores, same, days, in_use, cut))
+        if "threshold_same_actor" in out:
+            # Its own decision, on the pairs it decides: same-actor pairs,
+            # against the cut the rule in use holds them to.
+            own = _held_out_against(scores[same_actor], same[same_actor], days[same_actor],
+                                    in_use if in_use_same_actor is None else in_use_same_actor, cut)
+            out["same_actor"] = {"in_use": own["in_use"], "held_out": own["held_out"], "kept": own["kept"]}
+    return out
+
+
+def restatement_in_use_after(fitted: dict, in_use: dict) -> dict:
+    """The restatement cut to use after a refit (fit_restatement_cut with
+    `in_use`), each of its two cuts decided on its own: `threshold` is the
+    refit's when its `kept` is None, and `threshold_same_actor` is the
+    refit's when its own held-out comparison's is (`same_actor.kept`), each
+    else the one in use's. `kept` is None when anything changed, else why
+    nothing did."""
+    base_adopted = not fitted.get("kept")
+    actor_adopted = "threshold_same_actor" in fitted and not fitted.get("same_actor", {"kept": "not held out"})["kept"]
+    out = dict(fitted) if base_adopted else {**in_use, "refit": {k: v for k, v in fitted.items() if k != "date"}}
+    out.pop("threshold_same_actor", None)
+    if actor_adopted:
+        out["threshold_same_actor"] = fitted["threshold_same_actor"]
+    elif in_use.get("threshold_same_actor") is not None:
+        out["threshold_same_actor"] = in_use["threshold_same_actor"]
+    out["kept"] = None if base_adopted or actor_adopted else fitted.get("kept")
     return out
 
 
@@ -709,9 +758,17 @@ def refit_cuts(db: Session) -> None:
     near_rows = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None)).all()
     near_articles = [(r.title, r.description, r.published or r.seen_at)
                      for r in db.query(FeedArticle).filter(FeedArticle.kept.is_(True))]
+    restatement_in_use = claim_layer.restatement_calibration()
+    restatement = fit_restatement_cut(
+        issues, [a[:3] for a in articles], in_use=float(restatement_in_use["threshold"]),
+        claims=claim_layer.recorded_claims(db, utcnow() - timedelta(days=RESTATEMENT_REFIT_DAYS)),
+        in_use_same_actor=restatement_in_use.get("threshold_same_actor"))
+    if restatement is not None:
+        # Its two cuts are adopted each on its own comparison.
+        merged = restatement_in_use_after(restatement, restatement_in_use)
+        restatement = merged if merged["kept"] is None else restatement
     fits = {"cluster": fit_cluster_cut(articles, issue_sources, in_use=float(cluster_calibration()["threshold"])),
-            "restatement": fit_restatement_cut(
-                issues, [a[:3] for a in articles], in_use=float(claim_layer.restatement_calibration()["threshold"])),
+            "restatement": restatement,
             "near_identical": fit_near_identical_cut(near_rows, near_articles, in_use=near_identical_cut())}
     for key, fitted in fits.items():
         if fitted is None:

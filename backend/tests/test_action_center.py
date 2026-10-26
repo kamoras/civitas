@@ -493,6 +493,50 @@ class TestCutRefit:
         assert fitted["threshold"] == round(fitted["fitted"] + ac.CUT_MARGIN, 2)
         assert fitted["in_use"] == 0.99 and "kept" in fitted
 
+    def test_one_actor_on_two_stated_days_is_two_facts(self):
+        """Two lines about one actor whose own words date them days apart
+        are two facts; with two actors, or no actor, the pair is left out."""
+        from datetime import date as d
+
+        lines = [
+            ("c0", d(2028, 3, 3), "President Quillfeather signed the order on Friday.", "President Quillfeather"),
+            ("c1", d(2028, 3, 3), "Quillfeather defended the order on Sunday.", "Quillfeather"),
+            ("c2", d(2028, 3, 3), "Senator Roe criticised the order on Sunday.", "Senator Roe"),
+            ("c3", d(2028, 3, 3), "The order drew praise on Sunday.", None),
+        ]
+        labelled = {(i, j): one for i, j, one in ac.restatement_pairs(lines)}
+        assert labelled == {(0, 1): False}
+
+    def test_the_same_actor_cut_is_fitted_and_held_out_on_its_own_pairs(self, monkeypatch):
+        """Claim lines carry their actors; pairs about one actor get a cut
+        of their own once MIN_HARD_NEGATIVES of them are two facts, held out
+        on those pairs against the cut the rule in use holds them to."""
+        from datetime import date as d
+
+        issues = [self._issue_row(f"2028-03-0{1 + i % 2}", [f"Example acted {i}."], f"m{i}") for i in range(12)]
+        claims = [(f"s{i}", d(2028, 3, 1 + i % 4), f"Quillfeather spoke on {day} {i}.", "Quillfeather")
+                  for i, day in enumerate(["Monday", "Thursday"] * 6)]
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: np.eye(len(texts)))
+        monkeypatch.setattr(ac, "MIN_HARD_NEGATIVES", 5)
+        fitted = ac.fit_restatement_cut(issues, in_use=0.99, claims=claims, in_use_same_actor=0.9)
+        assert fitted["same_actor_negatives"] >= 5 and "threshold_same_actor" in fitted
+        assert fitted["same_actor"]["in_use"] == 0.9 and "kept" in fitted["same_actor"]
+        without = ac.fit_restatement_cut(issues, in_use=0.99)
+        assert "threshold_same_actor" not in without and without["same_actor_negatives"] == 0
+
+    def test_each_restatement_cut_is_adopted_on_its_own_comparison(self):
+        in_use = {"threshold": 0.87}
+        refit = {"threshold": 0.8, "kept": "worse", "threshold_same_actor": 0.7, "same_actor": {"kept": None}}
+        after = ac.restatement_in_use_after(refit, in_use)
+        assert (after["threshold"], after["threshold_same_actor"], after["kept"]) == (0.87, 0.7, None)
+        assert after["refit"]["threshold"] == 0.8
+        refit = {"threshold": 0.8, "kept": None, "threshold_same_actor": 0.7, "same_actor": {"kept": "worse"}}
+        after = ac.restatement_in_use_after(refit, {"threshold": 0.87, "threshold_same_actor": 0.75})
+        assert (after["threshold"], after["threshold_same_actor"], after["kept"]) == (0.8, 0.75, None)
+        after = ac.restatement_in_use_after({"threshold": 0.8, "kept": "worse"}, in_use)
+        assert after["kept"] == "worse" and "threshold_same_actor" not in after
+
     def test_the_bundled_cuts_say_where_they_came_from(self):
         from app.pipeline.analyze import claims
 
