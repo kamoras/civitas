@@ -595,7 +595,7 @@ def test_the_image_goes_to_bluesky_with_its_alt_text(world, bluesky_configured, 
         seen["image"] = kw.get("image")
         return True
 
-    monkeypatch.setattr(broadcast.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     monkeypatch.setattr(broadcast, "publish_post", send)
     monkeypatch.setattr(trend_poster, "embed_kind_for", lambda db, now: "image")
     world["trends"] = [trend("Example Tariff Relief Act")]
@@ -611,7 +611,7 @@ def test_an_unreadable_image_falls_back_to_the_card_and_never_holds_the_post(wor
         raise httpx.ConnectError("down")
 
     sent = {}
-    monkeypatch.setattr(broadcast.httpx, "get", boom)
+    monkeypatch.setattr(httpx, "get", boom)
     monkeypatch.setattr(broadcast, "publish_post", lambda text, url, **kw: sent.setdefault("kw", kw) or True)
     monkeypatch.setattr(trend_poster, "embed_kind_for", lambda db, now: "image")
     world["trends"] = [trend("Example Tariff Relief Act")]
@@ -714,7 +714,7 @@ def test_get_trends_reads_rank_status_and_start(monkeypatch):
         {"topic": "", "displayName": "no topic"},
         {"topic": "def", "displayName": "Second"},
     ]}
-    monkeypatch.setattr(trending.httpx, "get", lambda *a, **k: MagicMock(json=lambda: payload, raise_for_status=lambda: None))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: MagicMock(json=lambda: payload, raise_for_status=lambda: None))
     got = trending.fetch_bluesky_trends()
     assert [(t.topic, t.rank) for t in got] == [("abc", 0), ("def", 2)]
     assert got[0].started_at == datetime(2026, 10, 14, 12) and got[0].post_count == 7
@@ -724,11 +724,11 @@ def test_get_trends_failure_is_none_and_empty_is_empty(monkeypatch):
     def boom(*a, **k):
         raise httpx.ConnectError("down")
 
-    monkeypatch.setattr(trending.httpx, "get", boom)
+    monkeypatch.setattr(httpx, "get", boom)
     assert trending.fetch_bluesky_trends() is None
-    monkeypatch.setattr(trending.httpx, "get", lambda *a, **k: MagicMock(json=lambda: {"oops": 1}, raise_for_status=lambda: None))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: MagicMock(json=lambda: {"oops": 1}, raise_for_status=lambda: None))
     assert trending.fetch_bluesky_trends() is None
-    monkeypatch.setattr(trending.httpx, "get", lambda *a, **k: MagicMock(json=lambda: {"trends": []}, raise_for_status=lambda: None))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: MagicMock(json=lambda: {"trends": []}, raise_for_status=lambda: None))
     assert trending.fetch_bluesky_trends() == []
 
 

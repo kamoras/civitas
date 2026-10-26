@@ -31,7 +31,7 @@ from pathlib import Path
 from app import web_bot_auth
 from app.config import settings
 from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, HOST_USER_AGENTS, USER_AGENT
-from app.photos import PHOTO_SOURCE_HOSTS
+from app.photo_hosts import PHOTO_SOURCE_HOSTS
 from app.site_url import SITE_DOMAIN
 
 
@@ -265,7 +265,7 @@ def pace(rps: float | None, registry: str | None = None) -> str:
     if registry:
         return f"paced by the state reader its entry in {registry} names"
     if not rps:
-        return "no rate limiter of its own"
+        return "no limiter of its own; the site's pace below applies"
     if rps < 1:
         gap = 1 / rps
         return f"1 request every {gap:g} seconds at most"

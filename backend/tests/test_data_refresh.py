@@ -12,6 +12,7 @@ from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -480,7 +481,7 @@ def test_the_district_lean_window_is_reported_once_its_next_inputs_are_published
             return Resp(items=published["vest"])
         return Resp(200 if published["medsl"] else 404)
 
-    monkeypatch.setattr(dr.httpx, "get", get)
+    monkeypatch.setattr(httpx, "get", get)
     monkeypatch.setattr(dr, "_record_try", lambda *a, **k: None)
     published = {"vest": [{"name": "2021 Precinct-Level Election Results"}], "medsl": False}
     assert dr._district_lean_stale(_ctx("district_lean.json", doc)) is None
