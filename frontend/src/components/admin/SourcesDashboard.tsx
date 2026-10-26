@@ -48,7 +48,7 @@ export function SourcesTable({ data }: { data: AdminSourceHealth }) {
               {s.reason && <span className="block text-ink-min">Recorded: {s.reason}</span>}
               <span className="block text-ink-lo">
                 Last asked {s.lastAttemptText ?? "never"} · read by{" "}
-                {s.readBy.length ? s.readBy.join(", ") : "no nightly run"}
+                {s.readBy.length ? s.readBy.join("; ") : "no run or job found in the code"}
               </span>
               {s.runs.length > 0 && (
                 <span className="block text-ink-min">Steps on record: {s.runs.join(", ")}</span>

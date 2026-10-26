@@ -2613,10 +2613,14 @@ then its terms agreement is refused): for a host a pipeline step reads, the
 last good read and "since" come from step outcomes (`SourceReadStat`, each
 row marked `failed_on_host` when the step ended on an ExpectedSourceFailure
 naming the host, and before those rows the same steps' outcomes in the runs'
-progress records); raw answers date only hosts no step reads. The runs that
-read a host come from the code (`crawler.run_readers`: the run whose module
-takes the run row, and the `app.pipeline` modules it imports), so they are
-right before any run has recorded a read; "last asked" is a request, a
+progress records); raw answers date only hosts no step reads. What reads a
+host comes from the code, so it is right before anything has recorded a
+read: the nightly runs (`crawler.run_readers`: the run whose module takes
+the run row, and the `app.pipeline` modules it imports) and the scheduler's
+jobs (`crawler.job_readers`: each `add_job` in scheduler.py, followed
+through the functions it calls, named with when it runs, "Action Center,
+every hour at :15"), and for a host neither reads, the pages that ask for it
+(`crawler.request_readers`); "last asked" is a request, a
 step, a refusal record or the registry's dated wall, and "never" only with
 none. What each host answered comes from `app/source_reads.py`: every governed request ends there (a 5xx, a 429,
 a bot wall's challenge or no answer fails the host; a 403 or 404 is an

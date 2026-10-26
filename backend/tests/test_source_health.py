@@ -142,7 +142,7 @@ class TestMap:
         assert e["state"] == "walled"
         assert e["line"] == ("Not readable since Oct 23, 2026: the site blocks automated reads. "
                              "Last good read Oct 22, 2026.")
-        assert e["readBy"] == ["Stock trades"]
+        assert "Stock trades" in e["readBy"]
 
     def test_a_step_that_fails_on_a_host_it_never_reached_is_recorded(self, db_session):
         # eFD's refusal can be known before asking (its backoff): the step
@@ -165,11 +165,31 @@ class TestMap:
         # its reader, and the registry's wall was measured on a request.
         monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
         by = {e["host"]: e for e in source_health.build(db_session)["sources"]}
-        assert by["www.ohiosos.gov"]["readBy"] == ["Election"]
+        assert "Election" in by["www.ohiosos.gov"]["readBy"]
         assert by["www.ohiosos.gov"]["lastAttempt"] == "2026-10-22"
         assert "Stock trades" in by["efdsearch.senate.gov"]["readBy"]
         # Nothing at all on record: never asked.
         assert by["thehill.com"]["lastAttempt"] is None
+
+    def test_read_by_includes_the_scheduler_jobs_named_with_when_they_run(self, db_session, monkeypatch):
+        # The national feeds are read by the hourly Action Center refresh,
+        # found from scheduler.py's add_job calls, not by a nightly run.
+        monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
+        by = {e["host"]: e for e in source_health.build(db_session)["sources"]}
+        assert "Action Center, every hour at :15" in by["thehill.com"]["readBy"]
+        assert "Agency sync, every hour at :30" in by["api.usaspending.gov"]["readBy"]
+        assert any(label.startswith("Data file refresh, ") for label in by["dataverse.harvard.edu"]["readBy"])
+        # Read only when a page asks: the API imports its reader.
+        assert by["api.regulations.gov"]["readBy"] == ["Site pages, when a reader asks"]
+        # Every source on the map is read by something the code names.
+        assert [h for h, e in by.items() if not e["readBy"]] == []
+
+    def test_every_scheduler_job_is_found(self):
+        jobs = crawler.job_readers()
+        assert set(crawler.SCHEDULE) <= set(jobs)
+        assert crawler.NIGHTLY_JOB not in jobs  # the nightly chain's runs are run_readers'
+        assert jobs["action_refresh"]["label"] == "Action Center, every hour at :15"
+        assert "app.pipeline.fetch.news_feeds" in jobs["action_refresh"]["modules"]
 
     def test_every_source_on_the_map_is_named_as_site_copy(self, db_session):
         # Who publishes it and what is taken, from the news feeds, the state

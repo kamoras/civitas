@@ -5,9 +5,10 @@ Sources tab (GET /api/admin/source-health) and the map on /about/data
 Every host comes by rule, never from a list typed here: the hosts the code
 names (app/crawler.py, the same list /about/crawler shows), its name
 (app/source_names.py), what its readers say they read (the admin's), and
-the runs that read it, from the code (crawler.run_readers: the runs whose
-modules import a reader of the host), so it is right before any run has
-recorded a read.
+the nightly runs and scheduler jobs that read it, from the code
+(crawler.run_readers, crawler.job_readers: the runs and jobs whose code
+reaches a reader of the host), so it is right before anything has recorded
+a read.
 
 **A good read is a step that got what it came for**, not a 200 on the way:
 eFD's home page loads, then its terms agreement is refused. For a host a
@@ -145,6 +146,17 @@ def _code_runs() -> dict[str, set[str]]:
             for h in crawler.hosts()}
 
 
+def _code_jobs() -> dict[str, set[str]]:
+    """host -> the scheduler jobs that read it, named with when they run
+    ("Action Center, every hour at :15"), from the code (crawler.job_readers)."""
+    by_module: dict[str, set[str]] = {}
+    for job in crawler.job_readers().values():
+        for module in job["modules"]:
+            by_module.setdefault(module, set()).add(job["label"])
+    return {h["host"]: set().union(*(by_module.get(r["module"], set()) for r in h["readers"]))
+            for h in crawler.hosts()}
+
+
 def _iso(value) -> str | None:
     if value is None:
         return None
@@ -252,6 +264,7 @@ def build(db: Session) -> dict:
     run_reads, in_latest = _run_reads(db, since_dt)
     failed_steps = _failed_steps(db, since_day)
     code_runs = _code_runs()
+    code_jobs = _code_jobs()
     events = _step_events(db, code_runs)
     kinds = _latest_kinds(db)
     labels = {m.__tablename__: label for label, m in run_tracker.run_tables().items()}
@@ -312,8 +325,13 @@ def build(db: Session) -> dict:
             # Admin only (public() drops them).
             "lastAttempt": last_asked,
             "lastAttemptText": _text(last_asked),
-            # The runs that read it, from the code; the steps that did, as recorded.
-            "readBy": sorted(labels.get(t, t) for t in code_runs.get(host, ())),
+            # The nightly runs and scheduler jobs that read it, from the code;
+            # the steps that did, as recorded.
+            "readBy": (sorted(labels.get(t, t) for t in code_runs.get(host, ()))
+                       + sorted(code_jobs.get(host, ()))
+                       # Nothing scheduled reads it, but a page asks for it.
+                       or (["Site pages, when a reader asks"] if {r["module"] for r in h["readers"]}
+                           & crawler.request_readers() else [])),
             "runs": sorted(runs.get("runs", ())),
             "requests30d": runs.get("answered", 0) + runs.get("failed", 0),
             "failedRequests30d": runs.get("failed", 0),
