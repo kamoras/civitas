@@ -31,7 +31,7 @@ flowchart TB
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b> (lexicographic, no weights)<br/>names an official · outlets reporting<br/>· officials named · civic documents · trending"]
-    RANK --> TOP["Try ranked clusters in order<br/>up to 6 (CANDIDATE_POOL)<br/>until 2 publish (MAX_ISSUES)"]
+    RANK --> TOP["Try ranked clusters in order<br/>up to 6 (CANDIDATE_POOL)<br/>until 2 new topics publish (MAX_ISSUES)"]
     TOP --> EXTRACT
 
     EXTRACT["<b>5. EXTRACT</b><br/>livestream/video pages (headline kicker by embedding margin,<br/>cut fitted daily on publishers' video sections)<br/>give no title, fact or source<br/>live blog listing several stories<br/>(kicker over disjoint items) gives no title<br/>model LOCATES spans; post_composer<br/>verifies verbatim + adjacency + clause end,<br/>then renders. no claim → no issue"]
@@ -153,11 +153,13 @@ centroid merge from 0.20 chained stories that only share a theme: on
 and facts about a nor'easter and an HIV epidemic in Fiji. What is compared is
 the headline plus the first 200 characters of the description, day-centred,
 and since 2026-10-16 the cut is refit daily from the stored articles
-(`action_center.refit_cuts`): the lowest no pair about one actor whose own
-text dates the event two or more days apart reaches, plus a stated 0.10 for
-same-day different acts (0.60 + 0.10 on 2026-09-28..10-15, where hand-judged
-pairs had put it at 0.71). Two articles whose stated days differ by two or
-more are never joined. So
+(`action_center.refit_cuts`): above the 99th percentile of pairs about one
+actor whose headline and first sentence date the event two or more days
+apart, plus a stated 0.10 for same-day different acts, adopted only under
+`precision_rule.accept` against the cut in use (0.62 + 0.10 on the four
+weeks to 2026-10-25, where hand-judged pairs merge one different-event
+pair). Two articles whose stated days differ by two or more are never
+joined. So
 clustering errs toward splitting: a split story costs source
 breadth (its second cluster is dropped as a duplicate in the same run, or
 matched to the same issue in a later one), a wrong merge publishes a chimera.

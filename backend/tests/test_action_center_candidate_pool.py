@@ -228,3 +228,48 @@ def test_a_live_blog_listing_several_stories_never_titles_an_issue(db_session, r
     assert [i.title for i in issues] == ["Story 3 headline 1", "Story 6 headline 0"]
     assert CLUSTERS[2][0].url in json.loads(issues[0].source_urls)
     assert not live & set(asked)
+
+
+def test_an_update_to_a_published_story_does_not_fill_a_new_topic_slot(db_session, refresh, monkeypatch):
+    """Only new topics count against MAX_ISSUES: cluster 3 re-matches a
+    story already published, so 5 and 6 still publish, all inside the
+    candidate pool (2026-10-22..24 replayed: the top stories' updates filled
+    both slots every hour and no new story was tried)."""
+    existing = ActionIssue(date="2026-10-24", rank=1, title="Story 3 earlier", summary="s", facts="[]",
+                           actions="[]", source_urls="[]", source_names="[]", policy_areas="[]",
+                           related_bill_ids="[]", related_explore_ids="[]", related_senators="[]",
+                           related_monitor_slugs="[]", concerned_count=0, not_priority_count=0,
+                           created_at=action_center.utcnow())
+    db_session.add(existing)
+    db_session.flush()
+    monkeypatch.setattr(action_center, "_find_matching_issue",
+                        lambda title, *a, **k: existing if title.startswith("Story 3") else None)
+    assert action_center._run_refresh(db_session) == 3
+    titles = sorted(i.title for i in db_session.query(ActionIssue).all())
+    assert titles == ["Story 3 headline 0", "Story 5 headline 0", "Story 6 headline 0"]
+
+
+def test_a_cluster_that_failed_the_claims_gates_today_is_passed_over(db_session, refresh, monkeypatch):
+    """The locate calls are cached by day, rank and source, so a cluster that
+    failed keeps failing: on 2026-10-24 and 25 the same six filled the pool
+    every hour. Later runs that day skip it and reach lower ranks; a cluster
+    an article joins is a different set and is tried again."""
+    tried = []
+    extract = action_center.claim_layer.extract_claims
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims",
+                        lambda cluster, locate: tried.append(_cluster_number(cluster)) or extract(cluster, locate))
+    action_center._run_refresh(db_session)
+    assert tried == [1, 2, 3, 4, 5]
+    tried.clear()
+    action_center._run_refresh(db_session)
+    assert tried == [3, 5]  # 1, 2 and 4 failed today; 3 and 5 fill both slots again
+    tried.clear()
+    CLUSTERS[0].append(_article(1, 9))
+    try:
+        action_center._run_refresh(db_session)
+    finally:
+        CLUSTERS[0].pop()
+    assert tried[0] == 1  # grown, it is another cluster
+    # A new day forgets.
+    assert action_center._failed_today("2999-01-01") == set()
+    assert list(action_center._failed_clusters) == ["2999-01-01"]
