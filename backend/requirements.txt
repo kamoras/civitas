@@ -85,7 +85,7 @@ sentence-transformers==6.1.0
 setuptools==84.1.0
 shellingham==1.5.4
 sqlite-vec==0.1.9
-SQLAlchemy==2.1.1
+SQLAlchemy==2.1.6
 sse-starlette==3.5.0
 starlette==1.7.0
 sympy==1.14.0
