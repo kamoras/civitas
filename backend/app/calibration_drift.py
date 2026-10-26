@@ -90,7 +90,7 @@ PARAMETERS = {
     "member_photo": ("margin", "depiction_ceiling"),
     "near_identical": ("threshold",),
     "cluster": ("threshold",),
-    "restatement": ("threshold",),
+    "restatement": ("threshold", "threshold_same_actor"),
 }
 
 # Gates that refit themselves from data-supplied labels, by the data_refresh
