@@ -15,6 +15,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.error_utils import ExpectedSourceFailure
 from app.http_client import make_async_client
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async
@@ -221,8 +222,11 @@ async def fetch_comments(
             return _failed("Request failed", retryable=True)
 
 
-class _Refused(Exception):
+class _Refused(ExpectedSourceFailure, Exception):
     """The upstream budget refused a request (fetch_comments' charge)."""
+
+    failure_kind = "refused"
+    source_host = "api.regulations.gov"
 
     def __init__(self, refusal: Exception):
         super().__init__(str(refusal))

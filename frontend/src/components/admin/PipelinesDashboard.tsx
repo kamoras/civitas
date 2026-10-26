@@ -31,6 +31,7 @@ import {
 import { RANGE_OPTIONS } from "./TrafficDashboard";
 import { dayWindow, durationPoints, runsPerDay, utcToday } from "./trends";
 import { emptyText, Panel, Segmented, StatTile } from "./widgets";
+import { SourceFailures } from "./SourceFailures";
 
 const PIPELINE_ORDER = ["senate", "house", "supplementary", "stock_trades", "election"] as const;
 
@@ -787,6 +788,8 @@ export function PipelinesDashboard({
           })}
         </div>
       </Panel>
+
+      <SourceFailures token={token} />
 
       <PhaseTimings token={token} />
 

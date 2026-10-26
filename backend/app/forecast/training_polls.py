@@ -25,6 +25,7 @@ import re
 from datetime import date, timedelta
 
 from app.election_calendar import next_election_day
+from app.error_utils import ExpectedSourceFailure
 
 PAGE_URL = "https://www.natesilver.net/p/pollster-ratings-silver-bulletin"
 ATTACHMENT_LABEL = "Rawpolls"
@@ -77,8 +78,10 @@ CORRECTIONS_MAX_SHARE = 0.005
 EXCEL_EPOCH = date(1899, 12, 30)
 
 
-class FetchFailed(Exception):
+class FetchFailed(ExpectedSourceFailure, Exception):
     """The page or its attachment couldn't be read: an outage, never "no polls"."""
+
+    source_host = "www.natesilver.net"
 
 
 def excel_date(cell: str) -> str:

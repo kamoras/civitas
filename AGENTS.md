@@ -2573,6 +2573,24 @@ roster page stops the run rather than shrink the roster (which
 `member_lifecycle` reads as departures); an FEC committee registration that
 couldn't be read keeps that member's stored funding. New fetchers follow it.
 
+**A source's refusal is a metric, not a crash** (2026-10). Every exception
+that means a source refused Civitas or couldn't be read carries the
+`error_utils.ExpectedSourceFailure` mixin (`EfdRefused`, `HostRefusing`,
+`SourceBlocked`, `CongressUnavailable`, `FecUnavailable`,
+`GovinfoUnavailable`, `SecUnavailable`, `FeedUnreadable`, `UntrustedCount`
+and the rest; `SourceUnavailable` for a step with no more specific one),
+with its `failure_kind` (walled, refused, unavailable, untrusted) and, where
+the class always means one host, its `source_host`. A run row's
+`error_detail` and every alert carry such a failure as its one line, with no
+traceback and no raising frame (`exception_summary`, `exception_detail`),
+and `record_exception` counts it in `SourceFailureCount`: one counter per
+(UTC day, run kind, step, host, kind), never per request, charted by host on
+the admin Pipelines tab ("Expected source failures", `GET
+/api/admin/source-failures`). Anything else keeps its full traceback. A step
+that wraps several failures (the scanned pages) fails as the source only
+when every one underneath was the source's. Mark a new exception of this
+kind with the mixin; never list classes in the formatter.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the

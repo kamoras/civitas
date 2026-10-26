@@ -33,15 +33,18 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TypeVar
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.error_utils import ExpectedSourceFailure, SourceUnavailable, exception_summary, failure_host
 from app.models import FinancialDisclosure, FinancialHolding
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
 from app.pipeline.fetch.house_fd import AMENDMENT_TYPE, CANDIDATE_TYPE, NEW_FILER_TYPE
+from app.pipeline.fetch.house_ptr import CLERK_BASE
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
@@ -61,7 +64,7 @@ from app.pipeline.fetch.senate_fd import (
 from app.pipeline.fetch.senate_fd import report_still_loads as senate_report_still_loads
 from app.pipeline.fetch.senate_ptr import accept_terms as senate_accept_terms
 from app.pipeline.fetch.ptr_common import normalize_date
-from app.pipeline.fetch.senate_ptr import EfdRefused, senate_filing_id
+from app.pipeline.fetch.senate_ptr import EFD_HOST, EfdRefused, senate_filing_id
 from app.pipeline.filer_matching import (
     FilerMatcher,
     current_representatives,
@@ -426,8 +429,8 @@ class _SourceHealth:
       lasts.
     """
 
-    def __init__(self, source: str) -> None:
-        self.source = source
+    def __init__(self, source: str, host: str = "") -> None:
+        self.source, self.host = source, host
         self.attempted = self.fetched = 0
         self.out_of_time = False
         self.parsed_ok = self.parser_miss = 0
@@ -467,7 +470,7 @@ class _SourceHealth:
                     "those filings, not the source", self.source, self.attempted, url,
                 )
                 return
-        raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
+        raise SourceUnavailable(f"{self.source}: {self.attempted} members tried, no report fetched", host=self.host)
 
 
 # How many stored reports to ask about before calling the source down: one
@@ -496,6 +499,10 @@ async def _within(step: Awaitable[T], budget: timedelta, what: str) -> T:
     return result
 
 
+# The House Clerk's disclosure host, which serves both indexes and reports.
+HOUSE_FD_HOST = urlparse(CLERK_BASE).hostname
+
+
 class _SkipFiling(Exception):
     """This filing can't be tried this run, for a reason that isn't the
     filing's (a session that lapsed again right after re-accepting)."""
@@ -510,6 +517,7 @@ class _Chamber:
     """What differs between the two member phases; _ingest_members does the rest."""
 
     source: str
+    host: str
     owner_key: str  # FinancialDisclosure column naming the member
     parser_version: int
     filing_id: Callable[[dict], str]
@@ -538,7 +546,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
     Returns holdings stored."""
     owner_column = getattr(FinancialDisclosure, chamber.owner_key)
     stored = _stored_reports(db, owner_column)
-    health = _SourceHealth(chamber.source)
+    health = _SourceHealth(chamber.source, chamber.host)
     deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
     inserted = 0
     order = _members_in_order(per_member, stored)
@@ -700,7 +708,7 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
             # amendments until last year's are filed in May. Either way
             # nothing fetched would look wrong, so the phase fails (and
             # alerts) instead.
-            raise RuntimeError(f"House annual-report index for {year} could not be loaded")
+            raise SourceUnavailable(f"House annual-report index for {year} could not be loaded", host=HOUSE_FD_HOST)
         indexed += len(filings)
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
@@ -768,6 +776,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     per_rep = await _within(_house_candidates(db, client), PREP_BUDGET, "House annual-report index download")
     chamber = _Chamber(
         source="House Clerk",
+        host=HOUSE_FD_HOST,
         owner_key="representative_id",
         parser_version=HOUSE_PARSER_VERSION,
         filing_id=lambda f: f["doc_id"],
@@ -945,7 +954,7 @@ def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: st
 
 async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     if await senate_accept_terms(client) is None:
-        raise RuntimeError("Could not establish a Senate eFD session")
+        raise SourceUnavailable("Could not establish a Senate eFD session", host=EFD_HOST)
     # Filed since Jan 1 of the earliest report year the House reads: that
     # covers both years' reports, and also a report filed during that year
     # itself — a new-filer report from a senator appointed then, their only
@@ -966,8 +975,11 @@ async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str
     return per_senator
 
 
-class _TermsRefused(Exception):
+class _TermsRefused(ExpectedSourceFailure, Exception):
     """eFD's terms could not be re-accepted after a lapse."""
+
+    failure_kind = "refused"
+    source_host = "efdsearch.senate.gov"
 
 
 async def _retry_after_lapse(client: httpx.AsyncClient, call: Callable[[], Awaitable[T]]) -> T:
@@ -1015,6 +1027,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     per_senator = await _within(_senate_candidates(db, client), PREP_BUDGET, "Senate eFD terms and search")
     chamber = _Chamber(
         source="Senate eFD",
+        host=EFD_HOST,
         owner_key="senator_id",
         parser_version=SENATE_PARSER_VERSION,
         filing_id=lambda f: senate_filing_id(f["report_url"]),
@@ -1075,6 +1088,10 @@ async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
     todo = [r for r in reports if not _pages_kept(r[0], r[1])]
     deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
     stored = failed = pages = 0
+    # The last failure, and whether every one was the source's (an
+    # ExpectedSourceFailure): then the step's failure is the source's too.
+    last_error: BaseException | None = None
+    all_expected = True
     for filing_id, source_url, senate in todo:
         if time.monotonic() > deadline:
             logger.info("Scan pages: time budget spent — %d filings wait for the next run", len(todo) - stored - failed)
@@ -1090,6 +1107,7 @@ async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
             manifest = await scan_pages.store_scan(filing_id, source_url, kind, blobs, timeout)
         except (scan_pages.ScanUnavailable, SessionLapsed, _TermsRefused, EfdRefused, OSError) as e:
             reason = last_reason = str(e) or type(e).__name__
+            last_error, all_expected = e, all_expected and isinstance(e, ExpectedSourceFailure)
             logger.warning("Scan pages: %s not stored: %s", source_url, reason)
             scan_pages.record_failure(filing_id, source_url, reason)
             failed += 1
@@ -1099,6 +1117,11 @@ async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
     removed = scan_pages.prune({filing_id for filing_id, _, _ in reports})
     logger.info("Scan pages: %d filings stored (%d pages), %d failed, %d removed", stored, pages, failed, removed)
     if failed and not stored:
+        if all_expected:
+            raise SourceUnavailable(
+                f"scan pages: {failed} filings tried, none could be fetched; last: {last_reason}",
+                host=failure_host(last_error), kind=last_error.failure_kind,
+            )
         raise RuntimeError(f"scan pages: {failed} filings tried, none could be fetched and rendered; last: {last_reason}")
     return pages
 
@@ -1134,8 +1157,12 @@ async def run_holdings_phases(
             counts[step] = await ingest(db, client)
             progress.complete(step, detail=f"{counts[step]} {units.get(step, 'holdings')}")
             resolve_ops_alert(f"holdings-failed-{step}")
-        except Exception:
-            logger.exception("%s ingestion failed", label)
+        except Exception as e:
+            expected = isinstance(e, ExpectedSourceFailure)
+            if expected:
+                logger.warning("%s ingestion failed: %s", label, exception_summary(e))
+            else:
+                logger.exception("%s ingestion failed", label)
             db.rollback()
             errors.append(f"{label}: failed — see the run's error detail")
             progress.fail(step)
@@ -1147,8 +1174,9 @@ async def run_holdings_phases(
                 f"The {label} phase of tonight's stock-trades run failed. Reports it stored "
                 "before failing are kept (each member is committed as it's done); every "
                 "other member's stored holdings stay as they were and will age until a "
-                "run succeeds; the next nightly run tries again. The cause and its traceback "
-                "are on the run row (admin, Pipelines).",
+                "run succeeds; the next nightly run tries again. "
+                + (f"Cause: {exception_summary(e)}." if expected
+                   else "The cause and its traceback are on the run row (admin, Pipelines)."),
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
                 condition=f"holdings-failed-{step}",
             )

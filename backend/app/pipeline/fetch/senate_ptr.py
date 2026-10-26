@@ -51,6 +51,7 @@ from sqlalchemy.orm import Session
 from app import crawl_policy
 from app.config import settings
 from app.contact import USER_AGENT
+from app.error_utils import ExpectedSourceFailure
 from app.http_client import is_bot_challenge
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -116,10 +117,13 @@ def _extract_csrf_token(html_text: str) -> str | None:
     return match.group(1) if match else None
 
 
-class EfdRefused(RuntimeError):
+class EfdRefused(ExpectedSourceFailure, RuntimeError):
     """eFD's edge refused this client outright (a bot wall's answer, not an
     outage): nothing is read past it (AGENTS.md §7). Raised rather than
     returned as None, so the failed step says which it is."""
+
+    failure_kind = "walled"
+    source_host = "efdsearch.senate.gov"
 
 
 # Since 2026-10-23 Akamai's Bot Manager answers the terms agreement's POST

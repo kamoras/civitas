@@ -35,6 +35,7 @@ from app import data_refresh, district_lean
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.election_calendar import last_certified_general
 from app.election_phase import CAMPAIGN, active_election
+from app.error_utils import ExpectedSourceFailure
 from app.forecast import model
 from app.forecast import polls as wiki
 from app.forecast import training_polls
@@ -213,8 +214,10 @@ def _national(rev: dict | None, as_of: date, cycle: int) -> dict:
             "timestamp": rev["timestamp"], "url": wiki.revision_url(rev["title"], rev["revid"])}
 
 
-class _Unreachable(Exception):
+class _Unreachable(ExpectedSourceFailure, Exception):
     """Wikipedia didn't answer (fetch_current returned None, not {})."""
+
+    source_host = "en.wikipedia.org"
 
 
 def _previous(election_day: date) -> dict:
