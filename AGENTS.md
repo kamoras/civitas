@@ -2586,7 +2586,9 @@ traceback and no raising frame (`exception_summary`, `exception_detail`),
 and `record_exception` counts it in `SourceFailureCount`: one counter per
 (UTC day, run kind, step, host, kind), never per request, charted by host on
 the admin Pipelines tab ("Expected source failures", `GET
-/api/admin/source-failures`). Anything else keeps its full traceback. A step
+/api/admin/source-failures`). A member whose prepare or score step failed
+that way is counted too, as step "member" of its chamber's run
+(`run_checks.record_member_holds`). Anything else keeps its full traceback. A step
 that wraps several failures (the scanned pages) fails as the source only
 when every one underneath was the source's. Mark a new exception of this
 kind with the mixin; never list classes in the formatter.

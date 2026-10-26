@@ -99,6 +99,24 @@ def test_an_expected_failure_is_counted_per_day_step_host_and_kind(db_session):
     assert host["mark"]["shown"] == "2 failed steps"
 
 
+def test_a_member_failed_by_its_source_is_counted_and_a_bug_is_not(db_session):
+    from app.models import Senator
+    from app.pipeline.fetch.fec import FecUnavailable
+    from app.pipeline.run_checks import record_member_holds
+
+    db_session.add(Senator(id="pat-doe", name="Pat Doe", state="WI", party="D", is_current=True))
+    db_session.commit()
+    record_member_holds(db_session, Senator, "senator", [
+        ("pat-doe", _raised(FecUnavailable("FEC answered 503"))),
+        ("lee-roe", _raised(FecUnavailable("FEC answered 503"))),
+        ("kim-poe", _raised(ValueError("a bug"))),
+    ])
+    rows = db_session.query(SourceFailureCount).all()
+    assert [(r.run_kind, r.step, r.host, r.kind, r.count) for r in rows] == [
+        ("pipeline_runs", "member", "api.open.fec.gov", "unavailable", 2),
+    ]
+
+
 def test_a_count_that_cannot_be_written_never_breaks_the_caller(db_session):
     class Broken:
         def begin_nested(self):
