@@ -31,7 +31,7 @@ from functools import lru_cache
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app import crawl_policy, crawler, source_reads
+from app import crawl_policy, crawler, source_names, source_reads
 from app.models import SourceFailureCount, SourceReadStat
 from app.pipeline.fetch import ballot_measure_pdf_sources
 from app.source_failures import run_label
@@ -47,6 +47,13 @@ STATE_LABELS = {
     "not_read": "Not read this run",
 }
 # Most in need of a look first.
+# What a failing state means, for the public line: the recorded reason
+# (a status code, a vendor's wording) stays on the admin tab.
+PLAIN_REASONS = {
+    "walled": "the site blocks automated reads",
+    "refused": "the site is turning Civitas away",
+    "unavailable": "the site did not answer, or answered with an error",
+}
 _ORDER = ("walled", "refused", "unavailable", "not_read", "ok")
 
 
@@ -128,6 +135,15 @@ def _line(state: str, since: str | None, last_good: str | None, reason: str | No
     return f"{head}: {reason}. {good}" if reason else f"{head}. {good}"
 
 
+def _count(n: int, one: str) -> str:
+    return f"{n:,} {one}{'' if n == 1 else 's'}"
+
+
+def _failures_text(steps: int, failed: int, requests: int) -> str:
+    """"1 failed step; 2 of 3 requests failed", for the admin's column."""
+    return f"{_count(steps, 'failed step')}; {failed:,} of {_count(requests, 'request')} failed"
+
+
 def build(db: Session) -> dict:
     """Every source's entry, most in need of a look first, with the admin's
     fields (runs and steps, counts, last attempt). `public` strips them."""
@@ -135,6 +151,7 @@ def build(db: Session) -> dict:
     since_dt = now - timedelta(days=WINDOW_DAYS - 1)
     since_day = since_dt.date().isoformat()
     purposes = _purposes()
+    named = source_names.names()
     refusing = crawl_policy.refusals()
     walls = ballot_measure_pdf_sources.walls()
     records = source_reads.reads()
@@ -167,21 +184,27 @@ def build(db: Session) -> dict:
         runs = run_reads.get(host, {})
         entries.append({
             "host": host,
+            "publisher": named.get(host, {}).get("publisher"),
+            "takes": named.get(host, {}).get("takes"),
+            # Admin only: what each reading module says it reads.
             "reads": sorted({purposes[r["module"]] for r in h["readers"] if r["module"] in purposes}),
             "state": state,
             "stateLabel": STATE_LABELS[state],
             "since": _day(since),
             "lastGood": _day(last_ok),
             "reason": reason,
-            "line": _line(state, _day(since), _day(last_ok), reason),
+            "plainReason": PLAIN_REASONS.get(state),
+            "line": _line(state, _day(since), _day(last_ok), PLAIN_REASONS.get(state)),
             # Admin only (public() drops them).
             "lastAttempt": rec.get("lastAttempt"),
             "runs": sorted(runs.get("runs", ())),
             "requests30d": runs.get("answered", 0) + runs.get("failed", 0),
             "failedRequests30d": runs.get("failed", 0),
             "failedSteps30d": int(failed_steps.get(host, 0)),
+            "failuresText": _failures_text(int(failed_steps.get(host, 0)), runs.get("failed", 0),
+                                           runs.get("answered", 0) + runs.get("failed", 0)),
         })
-    entries.sort(key=lambda e: (_ORDER.index(e["state"]), e["host"]))
+    entries.sort(key=lambda e: (_ORDER.index(e["state"]), (e["publisher"] or e["host"]).lower(), e["host"]))
     counts = {s: sum(1 for e in entries if e["state"] == s) for s in _ORDER}
     not_ok = counts["walled"] + counts["refused"] + counts["unavailable"]
     summary = (
@@ -194,7 +217,7 @@ def build(db: Session) -> dict:
             "counts": counts, "summary": summary, "sources": entries}
 
 
-_PUBLIC = ("host", "reads", "state", "stateLabel", "since", "lastGood", "reason", "line")
+_PUBLIC = ("host", "publisher", "takes", "state", "stateLabel", "since", "lastGood", "line")
 
 
 def public(body: dict) -> dict:

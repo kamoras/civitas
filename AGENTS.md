@@ -2597,8 +2597,12 @@ kind with the mixin; never list classes in the formatter.
 names (`crawler.hosts()`, the list /about/crawler shows; never a hand list;
 the hosts only the frontend's photo route reads are left off and counted in
 the summary, since Node fetches them outside the backend's client),
-what its readers read (each reading module's docstring, first sentence), and
-its state as of its last read: refused or walled while
+who publishes it and what is taken from it, named as site copy
+(`app/source_names.py`: a news feed's outlet name, a state registry's
+`source_name` or republishing office, else `app/data/source_ledger.json`,
+which names the rest and replaces a registry name that doesn't read as a
+publisher; a test fails while a host has no name; the admin tab adds each
+reading module's docstring), and its state as of its last read: refused or walled while
 `crawl_policy`'s backoff holds, walled where the ballot-measure registry
 documents a wall the host hasn't answered past, walled, refused or
 unavailable when its last request failed (failing since the first failure
@@ -2842,7 +2846,7 @@ the pending list).
 | Civitas-computed district lean (display only, beside Cook) | `backend/scripts/build_district_lean.py`, `backend/app/data/district_lean.json`, `backend/app/data/district_lean_corrections.json`, `backend/app/district_lean.py` |
 | Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
 | Generated data files' automatic refresh (cadence, gates, provenance, staleness alerts) | `backend/app/data_refresh.py` (`DATA_FILES`), `scheduler._data_refresh` |
-| Expected source failures (marker, one-line run rows, daily counter) and the source map (every host's state, last good read, reason) | `backend/app/error_utils.py` (`ExpectedSourceFailure`), `backend/app/source_failures.py`, `backend/app/source_reads.py`, `backend/app/source_health.py`, `frontend/src/components/admin/SourceFailures.tsx`, `SourcesDashboard.tsx`, `frontend/src/components/about/SourceHealth.tsx` |
+| Expected source failures (marker, one-line run rows, daily counter) and the source map (every host's state, last good read, reason) | `backend/app/error_utils.py` (`ExpectedSourceFailure`), `backend/app/source_failures.py`, `backend/app/source_reads.py`, `backend/app/source_health.py`, `backend/app/source_names.py`, `backend/app/data/source_ledger.json`, `frontend/src/components/admin/SourceFailures.tsx`, `SourcesDashboard.tsx`, `frontend/src/components/about/SourceHealth.tsx` |
 | Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |

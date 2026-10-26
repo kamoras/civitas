@@ -19,15 +19,16 @@ export interface SourceRow {
  *  backend/app/source_health.py). Every word and date is the backend's. */
 export interface SourceHealthEntry {
   host: string;
-  /** What Civitas reads there: a sentence per reader. */
-  reads: string[];
+  /** Who publishes it, as the source ledger names it. */
+  publisher: string | null;
+  /** What Civitas takes from it, in a line. */
+  takes: string | null;
   state: "ok" | "refused" | "walled" | "unavailable" | "not_read";
   stateLabel: string;
   /** YYYY-MM-DD: failing since, for a source that can't be read now. */
   since: string | null;
   /** YYYY-MM-DD of the last read the source answered. */
   lastGood: string | null;
-  reason: string | null;
   /** The entry's one line, a template the backend filled. */
   line: string;
 }
@@ -41,12 +42,18 @@ export interface SourceHealth {
 
 /** The admin's view adds the runs' internals. */
 export interface AdminSourceHealthEntry extends SourceHealthEntry {
+  /** What each reading module says it reads (its docstring). */
+  reads: string[];
+  /** The failure as recorded: a status code, a refusal's own words. */
+  reason: string | null;
   lastAttempt: string | null;
   /** "stock trades · senate_ptr": the runs and steps that read it. */
   runs: string[];
   requests30d: number;
   failedRequests30d: number;
   failedSteps30d: number;
+  /** The three counts in words: "1 failed step; 2 of 3 requests failed". */
+  failuresText: string;
 }
 
 export interface AdminSourceHealth extends Omit<SourceHealth, "sources"> {

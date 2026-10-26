@@ -23,57 +23,41 @@ export function SourcesTable({ data }: { data: AdminSourceHealth }) {
   return (
     <div className="space-y-3 text-small font-mono">
       <p className="text-body">{data.summary}</p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left">
-          <caption className="sr-only">Every external source and its health</caption>
-          <thead>
-            <tr className="text-ink-lo">
-              <th scope="col" className="py-1 pr-3 font-normal">
-                Source
-              </th>
-              <th scope="col" className="py-1 pr-3 font-normal">
-                State
-              </th>
-              <th scope="col" className="py-1 pr-3 font-normal">
-                Last asked
-              </th>
-              <th scope="col" className="py-1 pr-3 font-normal">
-                Runs and steps
-              </th>
-              <th scope="col" className="py-1 font-normal">
-                Failed, {data.windowDays} days
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.04] align-top">
-            {data.sources.map((s) => (
-              <tr key={s.host}>
-                <th scope="row" className="py-2 pr-3 font-normal">
-                  <span className="block text-ink [overflow-wrap:anywhere]">{s.host}</span>
-                  {s.reads.map((r) => (
-                    <span key={r} className="block text-ink-min">
-                      {r}
-                    </span>
-                  ))}
-                </th>
-                <td className="py-2 pr-3">
-                  <span className={`block ${STATE_TONE[s.state]}`}>{s.stateLabel}</span>
-                  <span className="block text-ink-lo">{s.line}</span>
-                </td>
-                <td className="py-2 pr-3 tabular-nums">
-                  {s.lastAttempt ? formatTime(s.lastAttempt) : "never"}
-                </td>
-                <td className="py-2 pr-3">{s.runs.length ? s.runs.join(", ") : "none"}</td>
-                <td className="py-2 tabular-nums">
-                  {s.failedSteps30d.toLocaleString("en-US")} steps,{" "}
-                  {s.failedRequests30d.toLocaleString("en-US")} of{" "}
-                  {s.requests30d.toLocaleString("en-US")} requests
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* A list, each source in two columns from 48rem of its own width:
+          a five-column table on a phone showed one column and scrolled. */}
+      <ul
+        aria-label="Every external source and its health"
+        className="@container divide-y divide-white/[0.04]"
+      >
+        {data.sources.map((s) => (
+          <li
+            key={s.host}
+            className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-1 py-2 @min-[48rem]:grid-cols-2"
+          >
+            <div className="min-w-0">
+              <span className="block text-ink">{s.publisher ?? "Not named"}</span>
+              <span className="block text-ink-lo [overflow-wrap:anywhere]">{s.host}</span>
+              {s.reads.map((r) => (
+                <span key={r} className="block text-ink-min">
+                  {r}
+                </span>
+              ))}
+            </div>
+            <div className="min-w-0">
+              <span className={`block ${STATE_TONE[s.state]}`}>{s.stateLabel}</span>
+              <span className="block text-ink-lo">{s.line}</span>
+              {s.reason && <span className="block text-ink-min">Recorded: {s.reason}</span>}
+              <span className="block text-ink-lo">
+                Last asked {s.lastAttempt ? formatTime(s.lastAttempt) : "never"} · read by{" "}
+                {s.runs.length ? s.runs.join(", ") : "no pipeline run"}
+              </span>
+              <span className="block text-ink-lo tabular-nums">
+                {data.windowDays} days: {s.failuresText}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

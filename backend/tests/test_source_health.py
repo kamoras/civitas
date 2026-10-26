@@ -85,7 +85,8 @@ class TestMap:
         body = source_health.build(db_session)
         by = {e["host"]: e for e in body["sources"]}
         assert by["walled.gov"]["state"] == "walled"
-        assert by["walled.gov"]["line"].startswith("Not readable since Oct 23, 2026: a bot wall's challenge")
+        assert by["walled.gov"]["line"].startswith("Not readable since Oct 23, 2026: the site blocks automated reads")
+        assert by["walled.gov"]["reason"] == "a bot wall's challenge (HTTP 403)"  # the admin's detail
         assert by["down.gov"]["state"] == "unavailable" and by["down.gov"]["failedSteps30d"] == 2
         assert by["fine.gov"]["state"] == "ok" and by["fine.gov"]["runs"] == ["stock trades · house_ptr"]
         # Not asked is not failed.
@@ -94,8 +95,8 @@ class TestMap:
         assert [e["state"] for e in body["sources"]][:2] == ["walled", "unavailable"]
         assert by["fine.gov"]["reads"]  # what its reader reads, from the module's docstring
         public = source_health.public(body)
-        assert set(public["sources"][0]) == {"host", "reads", "state", "stateLabel", "since", "lastGood",
-                                             "reason", "line"}
+        assert set(public["sources"][0]) == {"host", "publisher", "takes", "state", "stateLabel", "since",
+                                             "lastGood", "line"}
 
     def test_a_registry_wall_holds_until_the_host_answers(self, db_session, monkeypatch):
         monkeypatch.setattr(crawler, "hosts", lambda: _hosts("www.ohiosos.gov"))
@@ -104,6 +105,22 @@ class TestMap:
         assert entry["state"] == "walled" and entry["since"]
         source_reads.answered("www.ohiosos.gov", 200, False)
         assert source_health.build(db_session)["sources"][0]["state"] == "ok"
+
+    def test_every_source_on_the_map_is_named_as_site_copy(self, db_session):
+        # Who publishes it and what is taken, from the news feeds, the state
+        # registries or the source ledger; a new host fails here until named.
+        body = source_health.public(source_health.build(db_session))
+        unnamed = [e["host"] for e in body["sources"] if not (e["publisher"] and e["takes"])]
+        assert unnamed == [], f"name these in app/data/source_ledger.json: {unnamed}"
+        for e in body["sources"]:
+            for text in (e["publisher"], e["takes"], e["line"], body["summary"]):
+                assert "—" not in text and "`" not in text and ".py" not in text, text
+            assert e["takes"][0].isupper() or e["takes"][0].isdigit(), e["takes"]
+        names = {e["host"]: e["publisher"] for e in body["sources"]}
+        assert names["efdsearch.senate.gov"] == "Senate Office of Public Records (eFD)"
+        assert names["thehill.com"] == "The Hill"
+        assert names["www.eurekacountynv.gov"] == "Eureka County Clerk-Recorder"  # a republishing office
+        assert names["www.ohiosos.gov"] == "Ohio Secretary of State"  # a per-state reader
 
     def test_every_host_the_code_names_is_on_the_map(self, db_session):
         # All but the hosts only the frontend's photo route reads, which the

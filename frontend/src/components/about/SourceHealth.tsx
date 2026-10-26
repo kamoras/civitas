@@ -38,69 +38,48 @@ export function SourceHealthView({ health }: { health: Health }) {
               compact
               kicker={s.stateLabel}
               tone="deadline"
-              title={<span className="[overflow-wrap:anywhere]">{s.host}</span>}
+              title={s.publisher ?? s.host}
               dek={s.line}
-              more={
-                s.reads.length
-                  ? {
-                      label: "what we read there",
-                      children: (
-                        <ul className="space-y-1">
-                          {s.reads.map((r) => (
-                            <li key={r}>{r}</li>
-                          ))}
-                        </ul>
-                      ),
-                    }
-                  : null
-              }
+              more={{
+                label: "what we read there",
+                children: (
+                  <p>
+                    {s.takes}. <span className="[overflow-wrap:anywhere]">{s.host}</span>
+                  </p>
+                ),
+              }}
             />
           ))}
         </BoxGrid>
       )}
-      <details className="group">
+      <details className="group @container">
         <summary className="min-h-6 cursor-pointer text-body text-signal-cyan underline underline-offset-2">
           Every source ({health.sources.length.toLocaleString("en-US")})
         </summary>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-left text-small">
-            <caption className="sr-only">
-              Every source Civitas reads, and whether it answered
-            </caption>
-            <thead>
-              <tr className="text-ink-lo">
-                <th scope="col" className="py-1 pr-3 font-normal">
-                  Source
-                </th>
-                <th scope="col" className="py-1 pr-3 font-normal">
-                  State
-                </th>
-                <th scope="col" className="py-1 font-normal">
-                  Last good read
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.07] align-top">
-              {health.sources.map((s) => (
-                <tr key={s.host}>
-                  <th scope="row" className="py-2 pr-3 font-normal">
-                    <span className="block text-ink [overflow-wrap:anywhere]">{s.host}</span>
-                    {s.reads.map((r) => (
-                      <span key={r} className="block text-ink-lo">
-                        {r}
-                      </span>
-                    ))}
-                  </th>
-                  <td className="py-2 pr-3">
-                    <span className="block text-ink">{s.stateLabel}</span>
-                    {s.state !== "ok" && <span className="block text-ink-lo">{s.line}</span>}
-                  </td>
-                  <td className="py-2 tabular-nums">{s.lastGood ?? "none on record"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* A list, not a table: on a phone a three-column table left the
+            state a word wide. Each row's line already names its last good
+            read. */}
+        <ul
+          aria-label="Every source Civitas reads, and whether it answered"
+          className="mt-3 divide-y divide-white/[0.07] text-small"
+        >
+          {health.sources.map((s) => (
+            <li
+              key={s.host}
+              className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-1 py-2 @min-[36rem]:grid-cols-2"
+            >
+              <div className="min-w-0">
+                <span className="block text-ink">{s.publisher ?? s.host}</span>
+                {s.takes && <span className="block text-ink-lo">{s.takes}</span>}
+                <span className="block text-ink-min [overflow-wrap:anywhere]">{s.host}</span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-ink">{s.stateLabel}</span>
+                <span className="block text-ink-lo">{s.line}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </details>
     </>
   );
