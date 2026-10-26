@@ -17,7 +17,7 @@
 brotli==1.2.1
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
-fonttools==4.63.0
+fonttools==4.67.0
 formulaic==1.2.2
 interface-meta==2.0.1
 onnxruntime==1.31.0
