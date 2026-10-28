@@ -432,23 +432,34 @@ def upsert_senator(db: Session, data: dict) -> None:
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
 
     db.flush()
-def _record_score_snapshots(db: Session, failed: "set[str] | frozenset[str]" = frozenset()) -> None:
-    """Snapshot today's scores for all senators so we can compute trends.
+def _record_score_snapshots(
+    db: Session,
+    failed: "set[str] | frozenset[str]" = frozenset(),
+    only: "set[str] | None" = None,
+) -> None:
+    """Snapshot today's scores for the senators this run scored, so we can
+    compute trends.
 
     `failed`: ids of members this run did not score. They keep the scores
     of the last run they passed, which an older algorithm may have
     produced, so they get no snapshot today rather than one stamped with
-    this run's scoring version (and keep any earlier one from today)."""
+    this run's scoring version (and keep any earlier one from today). The
+    same holds for a member who has left office (the run scores the
+    roster, so their stored scores are their last run's) and, on a
+    filtered run, for every member outside `only`."""
     from app.pipeline.analyze.score_calculator import compute_overall_score, scoring_version
 
     today = utcnow().strftime("%Y-%m-%d")
+    senators = [
+        s for s in db.query(Senator).filter(Senator.is_current.isnot(False)).all()
+        if s.id not in failed and (only is None or s.id in only)
+    ]
     db.query(ScoreSnapshot).filter(
         ScoreSnapshot.entity_type == "senator",
         ScoreSnapshot.date == today,
-        ScoreSnapshot.entity_id.notin_(failed),
+        ScoreSnapshot.entity_id.in_([s.id for s in senators]),
     ).delete(synchronize_session=False)
 
-    senators = [s for s in db.query(Senator).all() if s.id not in failed]
     version = scoring_version()
     for s in senators:
         db.add(ScoreSnapshot(
@@ -2406,7 +2417,10 @@ async def run_senate_pipeline(
         db.commit()
 
         finalize_stored_partisan_depth(db, Senator)
-        _record_score_snapshots(db, {member_id for member_id, _ in member_failures})
+        _record_score_snapshots(
+            db, {member_id for member_id, _ in member_failures},
+            only={s["id"] for s in senators} if senator_filter else None,
+        )
 
         run_calibration_check("senator")
 
