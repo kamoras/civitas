@@ -6,7 +6,9 @@ import { SITE_URL } from "@/lib/site";
  * handler, not Next's robots.ts, because MetadataRoute.Robots can't carry
  * the Content-Signal line (contentsignals.org): every use is allowed,
  * search, AI answers that cite a page and AI training alike, since the
- * site's purpose is that people find the public record.
+ * site's purpose is that people find the public record. Lighthouse's
+ * robots-txt audit doesn't know the directive and fails it, so the
+ * Lighthouse configs skip that audit; route.test.ts checks this file instead.
  *
  * /api/ is deliberately NOT disallowed: the client-rendered pages load their
  * content from /api/* in the browser, and Googlebot's renderer honours
