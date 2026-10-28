@@ -84,8 +84,13 @@ redirect hop, so a hop to another host carries a signature over that host.
 """
 
 import asyncio
+import hashlib
+import json
 import logging
+import os
 import ssl
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import certifi
@@ -95,8 +100,10 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
+from app import crawl_policy, source_reads
+from app.atomic_write import runtime_data_path, write_text_atomic
 from app.contact import HOST_USER_AGENTS, USER_AGENT, user_agent_for
-from app.web_bot_auth import sign_request
+from app.web_bot_auth import resign, sign_request, signed_headers
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +282,28 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
         super().__init__(**kwargs)
 
     async def send(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        """Every request to a source as app/crawl_policy.py says: its host's
+        robots.txt read first for its Crawl-delay (never to block a read), a
+        host that is refusing not asked, one request at a time at the host's
+        pace, and the answer recorded."""
+        url = request.url
+        if not crawl_policy.governed(url):
+            return await self._send_completing_chain(request, **kwargs)
+        if crawl_policy.needs_robots(url):
+            await crawl_policy.ensure_robots(
+                url, lambda robots_url: self.get(robots_url, follow_redirects=True, timeout=30),
+                is_bot_challenge,
+            )
+        async with crawl_policy.slot(url):
+            try:
+                response = await self._send_completing_chain(request, **kwargs)
+            except httpx.TransportError as exc:
+                source_reads.unanswered(url.host, exc)
+                raise
+        crawl_policy.observe(url, response, is_bot_challenge(response))
+        return response
+
+    async def _send_completing_chain(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
         try:
             return await self._send_once(request, **kwargs)
         except httpx.ConnectError as exc:
@@ -353,3 +382,140 @@ def make_async_client(**kwargs: Any) -> BackstoppedAsyncClient:
     Takes the same keyword arguments as `httpx.AsyncClient`.
     """
     return BackstoppedAsyncClient(**kwargs)
+
+
+# ---- blocking reads of a source --------------------------------------------
+# The few readers that send a blocking request (the hourly news feeds and
+# trends, link checks, the data refresh's release checks, the urllib and
+# requests readers) keep the same manners as the async client: robots.txt
+# read for its Crawl-delay, a refusing host not asked, one request at a time
+# at the host's pace.
+
+def _blocking_client(follow_redirects: bool = False) -> httpx.Client:
+    """A sync client that names and signs every request, each redirect hop
+    included (web_bot_auth.resign)."""
+    return httpx.Client(verify=TLS_CONTEXT, headers={"User-Agent": USER_AGENT},
+                        follow_redirects=follow_redirects, event_hooks={"request": [resign]})
+
+
+def _read_robots_blocking(url: httpx.URL) -> None:
+    robots_url = f"{url.scheme}://{url.netloc.decode()}/robots.txt"
+    try:
+        with crawl_policy.sync_slot(robots_url), _blocking_client(True) as client:
+            response = client.get(robots_url, timeout=30)
+    except crawl_policy.HostRefusing:
+        raise
+    except httpx.HTTPError:
+        response = None
+    challenge = response is not None and is_bot_challenge(response)
+    if response is not None:
+        crawl_policy.observe(httpx.URL(robots_url), response, challenge)
+    how = crawl_policy.classify_robots(url.host.lower(), response, challenge)
+    logger.info("%s robots.txt: %s", url.host, how)
+
+
+@contextmanager
+def source_gate(url: str | httpx.URL, method: str = "GET") -> Iterator[None]:
+    """A blocking request's turn at its host (see above). Raises
+    crawl_policy.HostRefusing, sending nothing, when the host is refusing
+    or the wait would be too long. After the request,
+    pass its answer to `observe_answer`."""
+    url = httpx.URL(str(url))
+    if not crawl_policy.governed(url):
+        yield
+        return
+    if crawl_policy.needs_robots(url):
+        _read_robots_blocking(url)
+    with crawl_policy.sync_slot(url):
+        yield
+
+
+def observe_answer(url: str | httpx.URL, status: int, headers: Any, body: bytes = b"") -> None:
+    """Record a blocking request's answer (any client's) for its host."""
+    url = httpx.URL(str(url))
+    if not crawl_policy.governed(url):
+        return
+    response = httpx.Response(status, headers=dict(headers or {}), content=body[:4096])
+    crawl_policy.observe(url, response, is_bot_challenge(response))
+
+
+def observe_unanswered(url: str | httpx.URL, exc: BaseException) -> None:
+    """Record a blocking request that got no answer (any client's)."""
+    url = httpx.URL(str(url))
+    if crawl_policy.governed(url):
+        source_reads.unanswered(url.host, exc)
+
+
+def source_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    """httpx.request for a blocking read of a source: Civitas's User-Agent
+    (a caller's own wins), and the source's manners (source_gate)."""
+    headers = dict(httpx.Headers(kwargs.pop("headers", None)).items())
+    headers = {"user-agent": USER_AGENT, **headers}
+    if headers["user-agent"] == USER_AGENT:  # a refusing host's measured form
+        headers["user-agent"] = user_agent_for(httpx.URL(url).host)
+    # httpx's module functions, signed for the first hop (signed_headers'
+    # ponytail note covers a cross-host redirect), so a test can stand in
+    # for the network by patching httpx.get as it always has.
+    send = {"GET": httpx.get, "HEAD": httpx.head}.get(method.upper())
+    kwargs.setdefault("verify", TLS_CONTEXT)
+    with source_gate(url, method):
+        try:
+            if send is not None:
+                response = send(url, headers=signed_headers(url, headers), **kwargs)
+            else:
+                response = httpx.request(method, url, headers=signed_headers(url, headers), **kwargs)
+        except httpx.TransportError as exc:
+            observe_unanswered(url, exc)
+            raise
+    if crawl_policy.governed(httpx.URL(url)) and isinstance(response, httpx.Response):
+        crawl_policy.observe(httpx.URL(url), response, is_bot_challenge(response))
+    return response
+
+
+CONDITIONAL_DIR = "conditional_get"
+
+
+def conditional_get(url: str, **kwargs: Any) -> httpx.Response:
+    """source_request("GET", url) that asks only for a change: the last
+    answer's ETag and Last-Modified go out as If-None-Match and
+    If-Modified-Since, and a 304 is answered from the copy kept on the data
+    volume (CONDITIONAL_DIR, one body and one header file per address) as
+    the 200 it stands for. A host that sends neither validator is asked in
+    full every time, as before. For a source read on a schedule shorter
+    than it changes: the hourly news feeds."""
+    key = hashlib.sha256(url.encode()).hexdigest()[:32]
+    folder = runtime_data_path(CONDITIONAL_DIR)
+    meta_path, body_path = os.path.join(folder, f"{key}.json"), os.path.join(folder, f"{key}.body")
+    stored = None
+    try:
+        with open(meta_path, encoding="utf-8") as f:
+            stored = json.load(f)
+        with open(body_path, "rb") as f:
+            body = f.read()
+    except (OSError, ValueError):
+        stored = None
+    headers = httpx.Headers(kwargs.pop("headers", None))
+    if stored and stored.get("url") == url:
+        if stored.get("etag"):
+            headers["If-None-Match"] = stored["etag"]
+        if stored.get("last_modified"):
+            headers["If-Modified-Since"] = stored["last_modified"]
+    response = source_request("GET", url, headers=headers, **kwargs)
+    if not isinstance(response, httpx.Response):
+        return response
+    if response.status_code == 304 and stored and stored.get("url") == url:
+        logger.info("%s: not modified since the last read (304)", url)
+        return httpx.Response(200, content=body, headers=stored.get("headers") or {},
+                              request=httpx.Request("GET", url))
+    etag, last_modified = response.headers.get("etag"), response.headers.get("last-modified")
+    if response.status_code == 200 and (etag or last_modified):
+        try:
+            os.makedirs(folder, exist_ok=True)
+            write_text_atomic(body_path, response.content, durable=False)
+            write_text_atomic(meta_path, json.dumps({
+                "url": url, "etag": etag, "last_modified": last_modified,
+                "headers": {k: v for k, v in response.headers.items() if k.lower() == "content-type"},
+            }), durable=False)
+        except OSError:
+            logger.warning("%s: its validators could not be kept", url, exc_info=True)
+    return response

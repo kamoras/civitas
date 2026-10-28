@@ -636,6 +636,22 @@ def _fetches_do_not_wait(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _crawl_policy_off(monkeypatch):
+    """No pace, robots.txt read or refusal backoff (app/crawl_policy.py) in
+    tests: a mocked host has no robots.txt, and a test of a refusal's
+    handling is not about the backoff. tests/test_crawl_policy.py turns it
+    on, with its state reset. What a test's hosts answered (app/source_reads.py)
+    is forgotten after it, so the exit-time flush has nothing to write
+    outside the test's own data directory."""
+    from app import crawl_policy, source_reads
+
+    monkeypatch.setattr(crawl_policy, "ENABLED", False)
+    crawl_policy.reset_for_tests()
+    yield
+    source_reads.reset_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def _no_running_pipeline_chains(monkeypatch):
     """Every test starts with no pipeline chain recorded as running
     (app.pipeline_chain keeps that in the process)."""

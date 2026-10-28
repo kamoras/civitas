@@ -69,7 +69,7 @@ curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
 Pipeline problems (a failed step in a run that carries on, a skipped phase of
 the nightly chain, an overrun, stale data) go through
 `app/ops_alerts.py:send_ops_alert`. Each alert is logged at ERROR, listed in the
-admin Overview's **Ops alerts** panel (the ten newest), and pushed to
+admin's **Alerts** tab (the ten newest; Overview shows how many are open), and pushed to
 [ntfy](https://ntfy.sh) when `ALERT_NTFY_URL` is set, which is the only channel
 that reaches a phone. Container logs rotate at 30 MB, about a day, so the panel
 or ntfy is where an overnight alert is still found the next afternoon. Each

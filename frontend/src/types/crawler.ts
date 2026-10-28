@@ -16,6 +16,8 @@ export interface CrawlerReader {
 export interface CrawlerHost {
   host: string;
   readers: CrawlerReader[];
+  /** The least time between two requests to it ("1 second"). */
+  minimumGap: string;
 }
 
 export interface CrawlerFacts {
@@ -31,4 +33,14 @@ export interface CrawlerFacts {
   hostCount: number;
   readerCount: number;
   unlimitedHostCount: number;
+  /** How the crawler behaves (app/crawl_policy.py), each a worded span. */
+  manners: {
+    minimumGap: string;
+    longestWait: string;
+    firstBackoff: string;
+    longestBackoff: string;
+    robotsKept: string;
+  };
+  /** Hosts refusing the crawler now, from the fetchers' record. */
+  refusing: { host: string; reason: string; since: string; times: number; until: string }[];
 }

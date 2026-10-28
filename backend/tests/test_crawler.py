@@ -31,7 +31,7 @@ def test_a_limiter_is_read_from_its_source():
 
 def test_a_reader_without_a_limiter_says_so():
     feeds = _readers("feeds.npr.org")["app.pipeline.fetch.news_feeds"]
-    assert feeds["rps"] is None and feeds["pace"] == "no rate limiter of its own"
+    assert feeds["rps"] is None and feeds["pace"] == "no limiter of its own; the site's pace below applies"
 
 
 def test_registry_hosts_are_listed_with_their_registry():

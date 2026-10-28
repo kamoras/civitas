@@ -29,6 +29,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.contact import UNSET_CONDITION, USER_AGENT, ContactUnset, require_contact
+from app.error_utils import ExpectedSourceFailure
 from app.ops_alerts import send_ops_alert
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
@@ -47,10 +48,12 @@ _TICKERS_TTL_HOURS = 24 * 7
 _SIC_TTL_HOURS = 24 * 90
 
 
-class SecUnavailable(Exception):
+class SecUnavailable(ExpectedSourceFailure, Exception):
     """The SEC's records couldn't be read. Raised, not answered with an
     empty result: a caller relabelling stored trades from an empty answer
     would clear every label on a night the SEC was down."""
+
+    source_host = "www.sec.gov"
 
 
 def _headers() -> dict[str, str]:

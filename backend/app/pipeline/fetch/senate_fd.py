@@ -24,6 +24,7 @@ import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.fd_common import (
     UNREADABLE_SCANNED,
@@ -131,9 +132,11 @@ def _redirects_to_terms(resp) -> bool:
     return urlparse(location).path.rstrip("/") in ("/search/home", "/search")
 
 
-class SessionLapsed(Exception):
+class SessionLapsed(ExpectedSourceFailure, Exception):
     """eFD served something other than the report — its terms page or a
     redirect to it — meaning the accepted-terms session has lapsed."""
+
+    source_host = "efdsearch.senate.gov"
 
 
 def _as_doc(page):

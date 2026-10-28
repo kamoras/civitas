@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.sec_tickers import SecUnavailable, issuer_industries
 from app.pipeline.fetch.congress_legislators import (
@@ -54,11 +55,13 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
-class FecUnavailable(RuntimeError):
+class FecUnavailable(ExpectedSourceFailure, RuntimeError):
     """The FEC API could not be read (retries exhausted, 5xx, a 4xx). Raised
     rather than returning [] so an outage is never cached or saved as a
     member who raised nothing: the caller skips that member and the stored
     funding stays."""
+
+    source_host = "api.open.fec.gov"
 
 
 async def _fetch_or_raise(client: httpx.AsyncClient, url: str) -> dict:

@@ -34,8 +34,8 @@ from datetime import datetime, timedelta, timezone
 
 from defusedxml import ElementTree as SafeET
 
-import httpx
 
+from app.http_client import source_request
 from app.contact import USER_AGENT
 from app.ops_alerts import check_source_freshness
 from app.time_utils import utcnow
@@ -70,7 +70,7 @@ def _fetch_google_trends() -> list[TrendingTopic] | None:
     """
     topics: list[TrendingTopic] = []
     try:
-        resp = httpx.get(
+        resp = source_request("GET", 
             _GOOGLE_TRENDS_RSS,
             timeout=FETCH_TIMEOUT,
             follow_redirects=True,
@@ -188,7 +188,7 @@ def fetch_bluesky_trends() -> list[BlueskyTrend] | None:
     must neither drop the trends it is holding nor record an empty hour on
     it. [] only when Bluesky answered with an empty list."""
     try:
-        resp = httpx.get(
+        resp = source_request("GET", 
             _BSKY_TRENDS_URL,
             params={"limit": BSKY_TRENDS_LIMIT},
             timeout=FETCH_TIMEOUT,

@@ -48,46 +48,6 @@ function Lede({ facts, seat }: { facts: AlignmentFacts; seat: string }) {
   );
 }
 
-/** The member's break rate beside their seat's norm, on one line. Only the
- *  axis is chosen here (wide enough for both marks); both rates are the
- *  scorer's. */
-function RateScale({ rate, expected, name }: { rate: number; expected: number; name: string }) {
-  const top = Math.max(0.1, Math.ceil(Math.max(rate, expected) * 12) / 10);
-  const at = (r: number) => `${(r / top) * 100}%`;
-  return (
-    <div
-      role="img"
-      aria-label={`${name} breaks with the party on ${percentOneDecimal(rate)} of party-line votes; the average for similar seats is ${percentOneDecimal(expected)}`}
-    >
-      <div className="relative h-8" aria-hidden="true">
-        <span className="absolute inset-x-0 top-[15px] h-0.5 bg-white/[0.14]" />
-        <span
-          className="absolute top-[7px] h-[18px] w-0.5 bg-ink-lo"
-          style={{ left: at(expected) }}
-        />
-        <span
-          className="absolute top-[5px] -ml-1.5 h-[22px] w-3 bg-signal-red"
-          style={{ left: at(rate) }}
-        />
-      </div>
-      <div className="relative h-4 font-mono text-small" aria-hidden="true">
-        <span className="absolute left-0 text-ink-min">0%</span>
-        <span className="absolute right-0 text-ink-min">{Math.round(top * 100)}%</span>
-      </div>
-      <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-small" aria-hidden="true">
-        <span className="text-ink-lo">
-          <span className="mr-1 inline-block h-2.5 w-0.5 bg-ink-lo align-middle" /> seat norm{" "}
-          {percentOneDecimal(expected)}
-        </span>
-        <span className="text-signal-red">
-          <span className="mr-1 inline-block h-2.5 w-2 bg-signal-red align-middle" /> {name}{" "}
-          {percentOneDecimal(rate)}
-        </span>
-      </p>
-    </div>
-  );
-}
-
 function tally(p: { yea: number; nay: number }): string {
   return `${p.yea} yea, ${p.nay} nay`;
 }
@@ -164,7 +124,6 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
 export default function VotesBox({
   memberId,
   chamber,
-  name,
   seat,
   breaks,
   box,
@@ -173,8 +132,6 @@ export default function VotesBox({
 }: {
   memberId: string;
   chamber: "senate" | "house";
-  /** How the scale names the member. */
-  name: string;
   /** Where the norm comes from: "seats that lean like TN-2", "states that lean like Tennessee". */
   seat: string;
   /** Stored count of votes against the party (the voting record's): the
@@ -211,16 +168,18 @@ export default function VotesBox({
       id="constituent-alignment"
       label="Votes"
       box={box}
-      about="How often the member broke with the party on this Congress's party-line votes, beside how often members of the same party in seats that lean the same way do. Only breaks toward the other party count; votes against the party from its own flank are listed apart."
+      about="The member's breaks with the party on this Congress's party-line votes: what each was a vote on and how each party split. How often, beside members of the same party in similar seats, is in the strip above. Only breaks toward the other party count; votes against the party from its own flank are listed apart."
       fallback={{ kicker: "Votes", title: "Votes", dek: dimension?.finding }}
       more={{
         label: "every break and how it is counted",
         children: (
           <div className="flex flex-col gap-4">
-            {facts ? (
-              <Lede facts={facts} seat={seat} />
-            ) : (
+            {/* The rate against the seat is the peer strip's; the line
+                stands in only for a backend older than the boxes. */}
+            {!facts ? (
               <p className="text-body text-ink-lo">No party-line votes on record yet.</p>
+            ) : (
+              !box && <Lede facts={facts} seat={seat} />
             )}
             <Block label={`Votes against party (${total})`}>
               {total === 0 && (
@@ -288,10 +247,6 @@ export default function VotesBox({
           </div>
         ),
       }}
-    >
-      {facts?.breakRate != null && facts.expectedBreakRate != null && (
-        <RateScale rate={facts.breakRate} expected={facts.expectedBreakRate} name={name} />
-      )}
-    </MemberBox>
+    />
   );
 }

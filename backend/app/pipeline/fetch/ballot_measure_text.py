@@ -11,6 +11,7 @@ uses a soft (discretionary) hyphen, so the hyphen is kept, not dropped.
 
 import re
 
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
 
 _WRAPPED_HYPHEN_RE = re.compile(r"(?<=\w-)\s*\n\s*(?=\w)")
@@ -23,7 +24,7 @@ def join_lines(text: str | list[str]) -> str | None:
     return clean_text(_WRAPPED_HYPHEN_RE.sub("", text))
 
 
-class SourceBlocked(Exception):
+class SourceBlocked(ExpectedSourceFailure, Exception):
     """Raised by a state's measure reader when the state's own page could
     not be read at all — the fetch failed, or what came back is a bot
     challenge rather than the page the reader knows (Georgia's and
@@ -33,6 +34,8 @@ class SourceBlocked(Exception):
     document (ballot_measures_pdf, `republished_by` in the registry),
     because only here has the reader seen nothing it would have refused
     on. The message says what couldn't be read, for the log."""
+
+    failure_kind = "walled"
 
 
 class DocumentNotLinked(Exception):

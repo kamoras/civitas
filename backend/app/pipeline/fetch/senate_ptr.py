@@ -39,6 +39,8 @@ import asyncio
 import logging
 import re
 import time
+import weakref
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field
 
 import httpx
@@ -46,8 +48,10 @@ from lxml import html as lxml_html
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 from sqlalchemy.orm import Session
 
+from app import crawl_policy
 from app.config import settings
 from app.contact import USER_AGENT
+from app.error_utils import ExpectedSourceFailure
 from app.http_client import is_bot_challenge
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -113,10 +117,13 @@ def _extract_csrf_token(html_text: str) -> str | None:
     return match.group(1) if match else None
 
 
-class EfdRefused(RuntimeError):
+class EfdRefused(ExpectedSourceFailure, RuntimeError):
     """eFD's edge refused this client outright (a bot wall's answer, not an
     outage): nothing is read past it (AGENTS.md §7). Raised rather than
     returned as None, so the failed step says which it is."""
+
+    failure_kind = "walled"
+    source_host = "efdsearch.senate.gov"
 
 
 # Since 2026-10-23 Akamai's Bot Manager answers the terms agreement's POST
@@ -133,20 +140,55 @@ EFD_WALL_NOTE = (
 )
 
 
+EFD_HOST = "efdsearch.senate.gov"
+
+# One accepted session per client, shared by every step that reads eFD on
+# it (the stock run's trades, holdings and scanned pages use one client):
+# until 2026-10-25 each step accepted the terms again, four times in thirty
+# seconds on a night the agreement was refused.
+_sessions: "weakref.WeakKeyDictionary[httpx.AsyncClient, str]" = weakref.WeakKeyDictionary()
+
+
+def raise_if_refusing() -> None:
+    """EfdRefused, sending nothing, while eFD's refusal backoff holds
+    (app/crawl_policy.py): the first step of a night asks once, and every
+    later step, job or run waits out the backoff instead of asking again."""
+    entry = crawl_policy.refusing(EFD_HOST)
+    if entry:
+        until = datetime.fromtimestamp(entry["until"], timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        raise EfdRefused(
+            f"{EFD_WALL_NOTE} (refused {entry.get('count', 1)} time(s) in a row since {entry.get('since')}; "
+            f"not asked again before {until})."
+        )
+
+
 def _raise_if_walled(response: httpx.Response) -> None:
     if is_bot_challenge(response):
         reference = response.headers.get("x-reference-error")
         raise EfdRefused(EFD_WALL_NOTE + (f" (Akamai reference {reference})" if reference else "") + ".")
 
 
-async def accept_terms(client: httpx.AsyncClient) -> str | None:
-    """Establish a session and accept the statutory use-restriction gate.
+async def accept_terms(client: httpx.AsyncClient, *, renew: bool = False) -> str | None:
+    """Establish a session and accept the statutory use-restriction gate,
+    once per client: a later call returns the same session's token unless
+    `renew` (the session lapsed).
 
     Returns the CSRF token to use for the subsequent search request, or
     None if the gate couldn't be passed (caller should abort the run
     rather than silently searching without a valid session). Raises
-    EfdRefused when a bot wall answers instead.
+    EfdRefused when a bot wall answers instead, or while eFD's refusal
+    backoff holds (raise_if_refusing), without a request.
     """
+    raise_if_refusing()
+    if not renew and client in _sessions:
+        return _sessions[client]
+    token = await _accept(client)
+    if token is not None:
+        _sessions[client] = token
+    return token
+
+
+async def _accept(client: httpx.AsyncClient) -> str | None:
     home_resp = await _request_with_retry(client, "GET", HOME_URL, bot_challenge_ok=True)
     if home_resp is None:
         return None
@@ -276,6 +318,7 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
     _scrape_via_page, split out so that logic is unit-testable against a
     mocked page without needing a real browser.
     """
+    raise_if_refusing()  # no browser is started for a host that is refusing
     reason = ""
     for attempt in range(1, _SEARCH_ATTEMPTS + 1):
         try:
@@ -357,6 +400,7 @@ async def _scrape_via_page(
         await _click(page.locator("#agree_statement"))
         await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
         if await page.title() == "Access Denied":  # Akamai's own refusal page
+            crawl_policy.record_refusal(EFD_HOST, "Akamai's Access Denied to the terms agreement (browser)")
             raise EfdRefused(EFD_WALL_NOTE + ".")
 
     responses = await _submit_search(page, since_date, report_type, filer_type)

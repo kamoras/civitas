@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app import background, database, net_stats, ops_alerts, pipeline_chain
+from app import background, database, net_stats, ops_alerts, pipeline_chain, source_failures, source_health
 from app.api.auth import configured_token
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
@@ -655,6 +655,24 @@ def admin_api_usage(
             for (e, p, r), n in sorted(rejections.items(), key=lambda kv: -kv[1])
         ],
     }
+
+
+@router.get("/source-failures", dependencies=[Depends(require_admin)])
+def admin_source_failures(days: int = Query(30, ge=1, le=366), db: Session = Depends(get_db)) -> dict:
+    """Expected source failures by host over the last ``days`` UTC days
+    (SourceFailureCount via app/source_failures.py): steps that failed
+    because a source refused Civitas or couldn't be read, counted per host
+    and kind, never per request. Crashes are not here; their tracebacks are
+    on the run rows."""
+    return source_failures.by_host(db, days)
+
+
+@router.get("/source-health", dependencies=[Depends(require_admin)])
+def admin_source_health(db: Session = Depends(get_db)) -> dict:
+    """Every external source and its health as of the last reads
+    (app/source_health.py): state, reason, last attempt and good read, the
+    runs and steps that read it, and its failures over 30 days."""
+    return source_health.build(db)
 
 
 @router.get("/visitor-breakdown", dependencies=[Depends(require_admin)])

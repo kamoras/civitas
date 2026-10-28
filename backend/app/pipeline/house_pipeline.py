@@ -1227,11 +1227,15 @@ async def run_house_pipeline() -> dict:
 
 
 def _record_rep_snapshots(db: Session, failed: "set[str] | frozenset[str]" = frozenset()) -> None:
-    """Snapshot today's scores for all representatives, except `failed`
-    (see senate_pipeline._record_score_snapshots)."""
+    """Snapshot today's scores for the representatives this run scored:
+    serving members, except `failed` (see
+    senate_pipeline._record_score_snapshots)."""
 
     today = utcnow().date().isoformat()
-    reps = [r for r in db.query(Representative).all() if r.id not in failed]
+    reps = [
+        r for r in db.query(Representative).filter(Representative.is_current.isnot(False)).all()
+        if r.id not in failed
+    ]
     count = 0
     for r in reps:
         overall = compute_overall_score(r)

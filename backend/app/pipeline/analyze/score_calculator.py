@@ -1716,7 +1716,15 @@ def _calc_promise_persistence(
         # violating the design principle that each dimension is distinct.
         # A neutral 50 honestly signals "we don't know" without inflating
         # the score or creating spurious inter-dimension correlations.
-        base_score = 50
+        #
+        # The participation blend below qualifies kept promises ("senators
+        # who don't show up can't keep promises"); with no promise it has
+        # nothing to qualify, so the neutral prior is the whole score. Until
+        # 2026-10 it was blended in anyway, and the stored score of a
+        # dimension with no input moved with attendance (45 to 55), which
+        # the score-drift check then read as a rank shift (rho 0.508 on
+        # 2026-10-26).
+        return 50
 
     # ── Vote participation component ──
     all_votes = (voting_record.get("keyVotes") or []) + (
