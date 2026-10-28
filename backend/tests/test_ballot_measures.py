@@ -710,7 +710,8 @@ async def test_link_verification_shows_a_walled_lookup_as_unconfirmed(monkeypatc
         "MA": {"url": "https://ma.example/lookup", "label": "Where do I vote?"},
         "NH": {"url": "https://nh.example/viphome"},
     })
-    challenge = (200, None, {"x-iinfo": "1-2-3"}, b"<script src='/_Incapsula_Resource?x'></script>")
+    challenge = (200, None, {"x-iinfo": "1-2-3"}, b'<html style="height:100%"><head><META NAME="ROBOTS" '
+                 b'CONTENT="NOINDEX, NOFOLLOW"><script src="/_Incapsula_Resource?SWJIYLWA=x"></script>')
     client = _answering(**{
         "https://ma.example/lookup": challenge,
         "https://nh.example/viphome": (403, None, {}, b"<h1>Access Denied</h1>"),

@@ -17,7 +17,19 @@ def _resp(status, headers=None, body=b""):
     (_resp(403, {"cf-mitigated": "challenge"}), True),
     (_resp(403, {"x-iinfo": "1-2-3"}), True),
     (_resp(200, {"x-iinfo": "1-2-3"}, b"<html>page</html>"), False),
-    (_resp(200, {"x-iinfo": "1-2-3"}, b"<script src='/_Incapsula_Resource?x'>"), True),
+    # Imperva's challenge page (NJ, MA, 2026-10-26) against its script on
+    # the site's own page: PA's and CA's real 404 for robots.txt.
+    (_resp(200, {"x-iinfo": "1-2-3"}, b'<html style="height:100%"><head><META NAME="ROBOTS" '
+           b'CONTENT="NOINDEX, NOFOLLOW"><script src="/_Incapsula_Resource?SWJIYLWA=x"></script>'), True),
+    (_resp(200, {"x-iinfo": "1-2-3"}, b"<iframe>Request unsuccessful. Incapsula incident ID: 1</iframe>"), True),
+    (_resp(404, {"x-iinfo": "1-2-3"}, b"<title>404 - File or directory not found.</title>"
+           b'<script src="/_Incapsula_Resource?SWJIYLWA=x&ns=4" async></script>'), False),
+    (_resp(200, {"x-iinfo": "1-2-3"}, b"<p>page</p><script src='/_Incapsula_Resource?x&ns=1'>"), False),
+    # Cloudflare's header on sos.iowa.gov's real robots.txt, and its
+    # detection script on an ordinary page: not challenges. Its page is.
+    (_resp(200, {"cf-mitigated": "challenge"}, b"User-agent: *\nAllow: /\n"), False),
+    (_resp(200, {}, b"<p>page</p><script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'>"), False),
+    (_resp(200, {"cf-mitigated": "challenge"}, b"<title>Just a moment...</title>"), True),
     (_resp(403, {}, b"<title>Just a moment...</title>"), True),
     (_resp(403, {}, b"Forbidden"), False),
     (_resp(200), False),

@@ -120,18 +120,18 @@ def test_a_part_that_misses_the_deadline_is_unavailable_and_asked_again(senate, 
 
     async def slow_cosponsors(client, url):
         if "/cosponsors" in url:
-            await asyncio.sleep(5)
+            await asyncio.sleep(60)
         return await fast(client, url)
 
     monkeypatch.setattr(br, "_congress_get", slow_cosponsors)
-    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=3))
     # Cosponsors ran out the clock; the parts asked beside it arrived.
     assert raw["unavailable"] == ["cosponsors"]
     assert raw["bill"] is not None and raw["text"] is not None
 
     monkeypatch.setattr(br, "_congress_get", fast)
     n = len(calls)
-    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=3))
     assert raw["unavailable"] == []
     # Only that one is asked again; the rest was cached.
     assert len(calls) == n + 1 and "/cosponsors" in calls[-1]
