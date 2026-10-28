@@ -199,13 +199,19 @@ def is_bot_challenge(response: httpx.Response) -> bool:
     if refused and (cloudflare or imperva):
         return True
     try:
-        head = response.content[:4096]
+        body = response.content
     except httpx.ResponseNotRead:  # a stream nobody has read: headers only
         return False
+    head = body[:4096]
     if refused:
         if headers.get("server", "") == "AkamaiGHost" and _AKAMAI_DENIED in head:
             return True
-        return any(m in head for m in _CHALLENGE_BODY_MARKERS)
+        # The whole body, not its head: a site's own block page can carry
+        # its own scripts first (sosmt.gov's Cloudflare firewall page,
+        # 2026-10-27: a 403 with no cf-mitigated header, 8 KB, Cloudflare's
+        # script at byte 7,387), and a refusal is never a page worth
+        # sparing the search.
+        return any(m in body for m in _CHALLENGE_BODY_MARKERS)
     if cloudflare and _CLOUDFLARE_CHALLENGE_PAGE in head:
         return True
     return imperva and (

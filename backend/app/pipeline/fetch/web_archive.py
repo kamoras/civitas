@@ -28,6 +28,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import date
+from urllib.parse import urljoin
 
 import httpx
 
@@ -67,6 +68,12 @@ class Capture:
     def raw_url(self) -> str:
         return f"{WAYBACK}{self.timestamp}id_/{self.original}"
 
+    @property
+    def replay_url(self) -> str:
+        """The capture as the Archive replays it: decoded, no toolbar, its
+        links rewritten to captures (original_url maps them back)."""
+        return f"{WAYBACK}{self.timestamp}if_/{self.original}"
+
 
 def captured_on(url: str | None) -> date | None:
     """The capture date a Wayback page address carries, or None for any
@@ -88,6 +95,14 @@ def original_url(url: str) -> str:
     if captured_on(url) is None:
         return url
     return url[len(WAYBACK):].split("/", 1)[1]
+
+
+def resolve(capture: "Capture", href: str) -> str:
+    """A link on a replayed page (read_page) as the state's own address:
+    the replay rewrites links to captures, which map back; a link it left
+    as it was resolves against the state's page."""
+    url = urljoin(capture.replay_url, href)
+    return original_url(url) if captured_on(url) else urljoin(capture.original, href)
 
 
 def newest_from_cdx(rows: list) -> Capture | None:
@@ -127,23 +142,38 @@ def matches_digest(body: bytes, digest: str) -> bool:
     return base64.b32encode(hashlib.sha1(body).digest()).decode() == digest
 
 
-async def read_capture(client: httpx.AsyncClient, capture: Capture, *, verify: bool = True) -> bytes | None:
+async def read_capture(client: httpx.AsyncClient, capture: Capture) -> bytes | None:
     """The capture's body exactly as the state served it, or None when it
     can't be read or isn't byte for byte the body the index recorded.
 
-    `verify=False` only for a page read to find a link, never for a
-    document whose words are quoted: the index's digest is of the body as
-    the server sent it on the wire, and an HTML page served compressed
-    comes back decoded (measured 2026-10-23: Ohio's directives page never
-    matched, a PDF from the same host matched byte for byte). What such a
-    page points at is read and verified on its own."""
+    For a document whose words are quoted. The index's digest is of the
+    body as the server sent it on the wire, so a page served compressed
+    never matches (measured 2026-10-23: Ohio's directives page never did,
+    a PDF from the same host matched byte for byte): a page read only for
+    its links is read_page."""
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", capture.raw_url, log_label=f"Wayback capture {capture.page_url}",
         headers=HEADERS,
     )
     if resp is None:
         return None
-    if verify and not matches_digest(resp.content, capture.digest):
+    if not matches_digest(resp.content, capture.digest):
         logger.warning("Wayback capture %s does not match its recorded digest — refusing", capture.page_url)
         return None
     return resp.content
+
+
+async def read_page(client: httpx.AsyncClient, capture: Capture) -> bytes | None:
+    """A captured page read only to find its links, from the Archive's
+    replay rather than raw mode. Raw mode sends the body in whatever
+    encoding the state's server used, and httpx can't decode brotli here
+    (measured 2026-10-28: sosmt.gov's preview pages were captured `br`, so
+    a raw read was undecodable bytes and no link was found); the replay is
+    decoded by the Archive. Its links point at captures: resolve() maps
+    each back to the state's address. Never for a
+    document whose words are quoted: those are read_capture, verified."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", capture.replay_url, log_label=f"Wayback replay {capture.page_url}",
+        headers=HEADERS,
+    )
+    return resp.content if resp is not None else None

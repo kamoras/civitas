@@ -65,6 +65,8 @@ REFUSAL_MAX_S = 7 * 86400.0
 ROBOTS_TTL_S = 86400.0
 ROBOTS_RETRY_S = 3600.0
 STATE_FILE = "host_refusals.json"
+# The reason a challenge records: walled() reads it back.
+WALL_REASON = "a bot wall's challenge"
 
 
 class HostRefusing(ExpectedSourceFailure, httpx.TransportError):
@@ -163,6 +165,14 @@ def refusing(host: str, now: float | None = None) -> dict | None:
     return entry if entry and entry.get("until", 0) > now else None
 
 
+def walled(host: str) -> bool:
+    """Whether the host is held off because it answered with a bot wall's
+    challenge: a reader asking it now gets HostRefusing (nothing sent),
+    which is the same wall, not an outage."""
+    entry = refusing(host)
+    return bool(entry) and str(entry.get("reason", "")).startswith(WALL_REASON)
+
+
 def record_refusal(host: str, reason: str, retry_after: float | None = None) -> float:
     """A refusal: back off the host. Returns when the backoff ends."""
     host, now = host.lower(), time.time()
@@ -225,7 +235,7 @@ def observe(url: httpx.URL, response: httpx.Response, is_challenge: bool) -> Non
     source_reads.answered(host, status, is_challenge)
     retry_after = retry_after_s(response) if status in (429, 503) else None
     if is_challenge:
-        record_refusal(host, f"a bot wall's challenge (HTTP {status})", retry_after)
+        record_refusal(host, f"{WALL_REASON} (HTTP {status})", retry_after)
     elif status == 429:
         if retry_after is not None and retry_after <= MAX_WAIT_S:
             _pace_after(host, retry_after)

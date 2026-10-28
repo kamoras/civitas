@@ -280,3 +280,33 @@ async def test_efd_is_asked_once_a_night(policy, monkeypatch):
     with pytest.raises(senate_ptr.EfdRefused):
         await senate_ptr.search_filings("2026-01-01", "Annual")
     assert log == [] and started == []
+
+
+@pytest.mark.asyncio
+async def test_a_walled_host_read_again_in_its_backoff_is_still_the_wall(policy):
+    """sosmt.gov, 2026-10-27: Cloudflare's firewall page (403, no
+    cf-mitigated, Cloudflare's script past the site's own) is a wall, and a
+    second read inside the backoff, which sends nothing, raises
+    SourceBlocked too, so the archived copy is reached either way."""
+    from app.pipeline.fetch.ballot_measure_text import SourceBlocked
+    from app.pipeline.fetch.ballot_measures_state_common import get_text_unless_walled
+
+    block = (b"<head><script>" + b"x" * 7000 + b"</script></head>Firewall Event Triggered"
+             b"<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script>")
+    log = []
+    handler = _site(log=log, answer=lambda r: httpx.Response(403, headers={"server": "cloudflare"}, content=block))
+    async with _client(handler) as client:
+        with pytest.raises(SourceBlocked, match="bot challenge"):
+            await get_text_unless_walled(client, "https://walled.example.gov/a", "page")
+        n = len(log)
+        with pytest.raises(SourceBlocked, match="held off"):
+            await get_text_unless_walled(client, "https://walled.example.gov/b", "page")
+    assert len(log) == n  # nothing sent the second time
+
+
+def test_only_a_challenge_backoff_reads_as_walled(policy):
+    crawl_policy.record_refusal("busy.example.gov", "too many requests (HTTP 429)")
+    crawl_policy.record_refusal("walled.example.gov", f"{crawl_policy.WALL_REASON} (HTTP 403)")
+    assert crawl_policy.walled("walled.example.gov")
+    assert not crawl_policy.walled("busy.example.gov")
+    assert not crawl_policy.walled("open.example.gov")
