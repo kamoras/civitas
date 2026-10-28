@@ -43,3 +43,36 @@ def test_house_skips_failed(db_session, freeze_utcnow):
     _record_rep_snapshots(db_session, {"r-failed"})
 
     assert _snapshots(db_session, "representative") == {"r-ok": ALGORITHM_VERSION}
+
+
+def test_a_departed_member_gets_no_snapshot(db_session, freeze_utcnow):
+    """The run scores the roster: a member who left office keeps their last
+    run's scores, which this run's version must not be stamped on."""
+    freeze_utcnow(datetime(2026, 7, 27, 12))
+    db_session.add(Senator(id="s-ok", bioguide_id="s-ok", name="s-ok", state="CA", party="D", is_current=True))
+    db_session.add(Senator(id="s-gone", bioguide_id="s-gone", name="s-gone", state="SC", party="R",
+                           is_current=False))
+    db_session.add(Representative(id="r-ok", bioguide_id="r-ok", name="r-ok", state="CA", party="D",
+                                  district=1, is_current=True))
+    db_session.add(Representative(id="r-gone", bioguide_id="r-gone", name="r-gone", state="CA", party="D",
+                                  district=2, is_current=False))
+    db_session.commit()
+
+    _record_score_snapshots(db_session)
+    _record_rep_snapshots(db_session)
+
+    assert _snapshots(db_session, "senator") == {"s-ok": ALGORITHM_VERSION}
+    assert _snapshots(db_session, "representative") == {"r-ok": ALGORITHM_VERSION}
+
+
+def test_a_filtered_run_snapshots_only_its_members(db_session, freeze_utcnow):
+    freeze_utcnow(datetime(2026, 7, 27, 12))
+    for sid in ("s-run", "s-other"):
+        db_session.add(Senator(id=sid, bioguide_id=sid, name=sid, state="CA", party="D", is_current=True))
+    db_session.add(ScoreSnapshot(entity_type="senator", entity_id="s-other", date=TODAY,
+                                 overall_score=50, algorithm_version="earlier"))
+    db_session.commit()
+
+    _record_score_snapshots(db_session, only={"s-run"})
+
+    assert _snapshots(db_session, "senator") == {"s-run": ALGORITHM_VERSION, "s-other": "earlier"}

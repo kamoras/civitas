@@ -492,8 +492,9 @@ class TestPromisePersistence:
         score = _calc_promise_persistence({}, "D", None)
         assert 45 <= score <= 60
 
-    def test_vote_independence_fallback(self):
-        """When no promises are evaluable, voting independence is used as proxy."""
+    def test_no_promises_is_the_neutral_prior_whatever_the_votes(self):
+        """With no evaluable promise there is no input: the score is the
+        neutral prior, not moved by voting independence or attendance."""
         voting_record = {
             "keyVotes": [
                 {"votedWithParty": False, "vote": "Yea"},
@@ -502,8 +503,9 @@ class TestPromisePersistence:
                 {"votedWithParty": False, "vote": "Nay"},
             ],
         }
-        score = _calc_promise_persistence(voting_record, "D", None)
-        assert 55 <= score <= 75
+        assert _calc_promise_persistence(voting_record, "D", None) == 50
+        absent = {"keyVotes": [{"vote": "Not Voting"}] * 9 + [{"vote": "Yea"}]}
+        assert _calc_promise_persistence(absent, "D", []) == 50
 
     def test_participation_folded_in(self):
         """Low vote participation should reduce promise persistence score."""

@@ -42,7 +42,25 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** What the finding left out: the PAC share of the total, or both shares
  *  when there is no finding. The backend's words for each share. */
-function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: boolean }) {
+function Lede({
+  facts,
+  afterFinding,
+  sharesShown,
+}: {
+  facts: FundingFacts;
+  afterFinding: boolean;
+  /** The shares are the peer strips' ("Where <name> stands"), so only
+   *  what they can't say is left: why a small-gift share is missing. */
+  sharesShown: boolean;
+}) {
+  if (sharesShown) {
+    return facts.smallDonorShare == null ? (
+      <p className="text-body text-ink">
+        The campaign itemizes every gift, so its filings can&apos;t say how much came from donors
+        giving $200 or less.
+      </p>
+    ) : null;
+  }
   const expected = facts.smallDonorExpectedShare;
   const pac = capitalize(facts.shown?.pacShare ?? percent(facts.pacShare));
   if (afterFinding) {
@@ -131,14 +149,14 @@ export default function MoneyBox({
       id="funding-independence"
       label="Money"
       box={box}
-      about="Where the money for the member's most recent completed election came from, from FEC filings: the share given by PACs and the share given in gifts of $200 or less, against what is typical (for a senator, a state that size; for a representative, the House median), then the industries behind the money and the top donors. Shares are of contributions, not total receipts."
+      about="Where the money for the member's most recent completed election came from, from FEC filings: the industries behind the money and the top donors. The share given by PACs and the share given in gifts of $200 or less, beside peers, are in the strips above. Shares are of contributions, not total receipts."
       fallback={{ kicker: "Money", title: "Money", dek: dimension?.finding }}
       more={{
         label: "donors and industries",
         children: (
           <div className="flex flex-col gap-4">
             {facts ? (
-              <Lede facts={facts} afterFinding={!!dimension?.finding} />
+              <Lede facts={facts} afterFinding={!!dimension?.finding} sharesShown={!!box} />
             ) : (
               <p className="text-body text-ink-lo">No campaign finance filings on record yet.</p>
             )}
