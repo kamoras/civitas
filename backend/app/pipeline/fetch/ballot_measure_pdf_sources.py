@@ -59,6 +59,17 @@ def documented_wall(state: str, detail: str | None) -> str | None:
     return host if host and detail and host in detail else None
 
 
+def walls() -> dict[str, dict]:
+    """host -> {host, measured, evidence}: every bot wall the registry
+    documents, for the source map (app/source_health.py)."""
+    out = {}
+    for entry in (_load().get("states") or {}).values():
+        wall = entry.get("wall") if isinstance(entry, dict) else None
+        if isinstance(wall, dict) and wall.get("host"):
+            out[wall["host"].lower()] = wall
+    return out
+
+
 def unread_reason(state: str) -> str | None:
     """Why `state`'s measures are not read — the `reason` of its registry
     'unread' entry, written for a voter and shown on the state's page.

@@ -7,6 +7,7 @@ import {
 } from "@/types/senator";
 import type { CommentWindow } from "@/types/commentWindow";
 import type { ReadoutMark } from "@/types/readout";
+import type { AdminSourceHealth } from "@/types/sources";
 import type { JusticeCasePage } from "@/types/court";
 import type { AppointedJustice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
@@ -1684,6 +1685,13 @@ export async function fetchAdminSourceFailures(
   days: number = 30
 ): Promise<SourceFailures> {
   return requestJson(`${API_BASE}/admin/source-failures?days=${days}`, "Source failures failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+/** Every external source and its health (GET /api/admin/source-health). */
+export async function fetchAdminSourceHealth(token: string): Promise<AdminSourceHealth> {
+  return requestJson(`${API_BASE}/admin/source-health`, "Source health failed", {
     init: { headers: adminHeaders(token) },
   });
 }
