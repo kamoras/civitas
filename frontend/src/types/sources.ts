@@ -23,7 +23,7 @@ export interface SourceHealthEntry {
   publisher: string | null;
   /** What Civitas takes from it, in a line. */
   takes: string | null;
-  state: "ok" | "refused" | "walled" | "unavailable" | "not_read";
+  state: "ok" | "refused" | "walled" | "unavailable" | "terms" | "not_read";
   stateLabel: string;
   /** YYYY-MM-DD: failing since, for a source that can't be read now. */
   since: string | null;

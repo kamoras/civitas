@@ -89,6 +89,7 @@ import json
 import logging
 import os
 import ssl
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -419,6 +420,11 @@ def make_async_client(**kwargs: Any) -> BackstoppedAsyncClient:
 # read for its Crawl-delay, a refusing host not asked, one request at a time
 # at the host's pace.
 
+# Set while this thread holds a host's turn (source_gate, the robots.txt
+# read): a request sent in it is that turn's own.
+_turn = threading.local()
+
+
 def _blocking_client(follow_redirects: bool = False) -> httpx.Client:
     """A sync client that names and signs every request, each redirect hop
     included (web_bot_auth.resign)."""
@@ -430,7 +436,11 @@ def _read_robots_blocking(url: httpx.URL) -> None:
     robots_url = f"{url.scheme}://{url.netloc.decode()}/robots.txt"
     try:
         with crawl_policy.sync_slot(robots_url), _blocking_client(True) as client:
-            response = client.get(robots_url, timeout=30)
+            _turn.held = True  # this read is the slot's own (gate_held)
+            try:
+                response = client.get(robots_url, timeout=30)
+            finally:
+                _turn.held = False
     except crawl_policy.HostRefusing:
         raise
     except httpx.HTTPError:
@@ -442,6 +452,12 @@ def _read_robots_blocking(url: httpx.URL) -> None:
     logger.info("%s robots.txt: %s", url.host, how)
 
 
+def gate_held() -> bool:
+    """Whether this thread is inside a source_gate turn now (the request
+    being sent is that turn's own: app/script_gate.py sends it as it is)."""
+    return bool(getattr(_turn, "held", False))
+
+
 @contextmanager
 def source_gate(url: str | httpx.URL, method: str = "GET") -> Iterator[None]:
     """A blocking request's turn at its host (see above). Raises
@@ -449,13 +465,17 @@ def source_gate(url: str | httpx.URL, method: str = "GET") -> Iterator[None]:
     or the wait would be too long. After the request,
     pass its answer to `observe_answer`."""
     url = httpx.URL(str(url))
-    if not crawl_policy.governed(url):
+    if not crawl_policy.governed(url) or gate_held():
         yield
         return
     if crawl_policy.needs_robots(url):
         _read_robots_blocking(url)
     with crawl_policy.sync_slot(url):
-        yield
+        _turn.held = True
+        try:
+            yield
+        finally:
+            _turn.held = False
 
 
 def observe_answer(url: str | httpx.URL, status: int, headers: Any, body: bytes = b"") -> None:

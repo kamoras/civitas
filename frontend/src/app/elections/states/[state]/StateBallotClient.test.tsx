@@ -444,7 +444,7 @@ describe("the ballot page", () => {
     );
     const own = screen.getByRole("link", { name: /^Check your registration: my\.arizona\.vote/ });
     expect(own).toHaveAttribute("href", "https://my.arizona.vote/check_registration");
-    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(screen.getByText(/This site doesn't allow automated checks/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Check your registration through Can I Vote/ })
     ).toHaveAttribute("href", "https://www.nass.org/can-i-vote/voter-registration-status");
@@ -466,7 +466,7 @@ describe("the ballot page", () => {
 
   it("gives a verified lookup no caveat", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    expect(screen.queryAllByText(/This site blocks automated checks/)).toHaveLength(0);
+    expect(screen.queryAllByText(/This site doesn't allow automated checks/)).toHaveLength(0);
   });
 });
 

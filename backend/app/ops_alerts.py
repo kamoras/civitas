@@ -220,7 +220,7 @@ CONDITIONS = (
     "election-map-training-stale", "election-ready-calendar", "election-ready-district-lean",
     "election-ready-maps", "election-ready-poll-close", "election-source-crawl", "election-source-crawl-robots",
     "election-sync-raised", "explore-index-rebuild", "explore-index-relabel", "feedback-token-expiring",
-    "ground-truth-house", "ground-truth-senate", "holdings-failed-*", "justice-list-short",
+    "ground-truth-house", "ground-truth-senate", "holdings-failed-*", "host-terms-*", "justice-list-short",
     "justice-loyalty-unmeasured", "justice-positions-unread", "lda-down-*", "lda-title-pool-*",
     "member-failed-*", "nightly-crashed", "nightly-crashed-*", "nightly-skipped-*", "overrun-*",
     "pipeline-heartbeat-unreadable", "pipeline-service-silent", "president-ptr-empty-index-*",

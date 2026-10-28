@@ -1,0 +1,32 @@
+{
+  "_contract": "Hosts whose own terms of use forbid automated access. crawl_policy refuses every request to them before it is sent (TermsForbid), from every reader, the link check and the source crawl alike, and the source map says why. A host matches its own name and every name under it. Each entry quotes the terms, names where they were read and when, and says why the host is covered. A host leaves this file only when its terms change or its owner allows Civitas in writing (record that here). `text_sha256` is the hash of the terms page's text as reviewed (app/host_terms_check.page_text, from `reviewed_capture`); the weekly check (host_terms_check) alerts when the Internet Archive's newest capture differs or no longer holds `quote`, and the host stays unasked until the entry is reviewed.",
+  "hosts": {
+    "michigan.gov": {
+      "publisher": "State of Michigan",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "Michigan.gov's Terms of Use Policy (updated December 2021), which the Department of State's own Policies page (michigan.gov/sos/policies) points to for its websites.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    },
+    "mvic.sos.state.mi.us": {
+      "publisher": "Michigan Department of State",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "The Michigan Voter Information Center's own Policies link is the Department of State's policies page, which defers to the State of Michigan's terms of use.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    },
+    "mi-boe.entellitrak.com": {
+      "publisher": "Michigan Bureau of Elections",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "The Bureau of Elections' Candidate Listing Report, a state government information system with no terms of its own; the Department of State's policies cover the state's systems.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    }
+  }
+}

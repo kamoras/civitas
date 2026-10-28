@@ -981,7 +981,8 @@ def member_seat_race(
     marker = _ballot_marker(db, state, cycle)
     complete = _race_complete(marker, state, race.id)
     status = _member_status(_confirmed_or_all(race.candidates, state, complete), bioguide_id)
-    source = (marker or {}).get("sourceName") if complete else None
+    source = (((marker or {}).get("raceSources") or {}).get(race.id) or (marker or {}).get("sourceName")
+              if complete else None)
     return {
         "raceId": race.id, "cycleYear": cycle, "state": state, "office": office, "district": race.district,
         "redrawn": office == "H" and state in redrawn_states(cycle), "status": status,

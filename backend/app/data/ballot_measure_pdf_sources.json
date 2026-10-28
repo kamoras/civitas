@@ -179,8 +179,15 @@
     },
     "MI": {
       "source_name": "Michigan Bureau of Elections",
-      "strategy": "mi_ballot_questions",
-      "description": "The Bureau of Elections' '<year> November ballot questions' PDF, found by that link text on michigan.gov/sos/elections (its URL carries a ?rev= hash that changes on republish). Verified live 2026-09-28: Proposal 2026-1 (constitutional convention) and 2026-2 (initiated law on utility/contractor campaign contributions); bold title lines and the question read from the PDF's own fonts. michigan.gov's CDN rejects the '(+contact)' User-Agent comment (measured), so this source sends the standard headers with that comment dropped, still identifying as Civitas."
+      "strategy": "google_civic",
+      "title_authority": "Michigan Bureau of Elections",
+      "origin_when_title_says": {
+        "initiated": "Michigan voters (initiative petition)",
+        "initiative": "Michigan voters (initiative petition)",
+        "legislat": "Michigan Legislature"
+      },
+      "link_url": "https://www.michigan.gov/sos/elections",
+      "description": "Michigan's statewide proposals as the Bureau of Elections supplies them to the Voting Information Project, read through Google Civic (ballot_measures_civic.py): a referendum on every answering ballot from three congressional districts, its title and question verbatim. The Bureau's own pages are linked, never read: michigan.gov's terms of use forbid automated access (app/data/host_terms.json, 2026-10-28). Checked 2026-10-28: Proposals 2026-1 and 2026-2 read word for word as the Bureau's '2026 November ballot questions' PDF, the source until then. The PDF carries no fiscal statement or yes/no meaning, and neither does VIP. The origin is read from the title's own words ('A proposed initiated law', 'legislative'), as the PDF reader read it."
     },
     "MN": {
       "source_name": "Minnesota Secretary of State",

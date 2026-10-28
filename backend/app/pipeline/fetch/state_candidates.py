@@ -110,6 +110,7 @@ from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_cand
 from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_candidates as _fetch_certified_pdf
 from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
+from app.pipeline.fetch.state_candidates_civic import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_grouped_list_pdf import fetch_confirmed_candidates as _fetch_grouped_list_pdf
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
@@ -689,17 +690,21 @@ def _apply_ballot(
 
 def _record_ballot_basis(
     db: Session, cycle: int, state: str, source: dict, races: set[str] | None = None,
+    race_sources: dict[str, str] | None = None,
 ) -> None:
     """Say which source answered for this state tonight — see
     BALLOT_BASIS_TIER. Read by the API to decide "confirmed" (the whole
     ballot) versus "nominees" (primary results), per race: `complete`
     means every federal race here, `races` names the ones a certified
-    list covered when it did not cover them all."""
+    list covered when it did not cover them all, and `raceSources` which
+    list that was, where two lists split a state's races (the VIP ballot
+    and the state's own)."""
     api_cache_set(
         db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
         {
             "complete": bool(source.get("general_ballot_complete")),
             "races": sorted(races or ()),
+            "raceSources": dict(sorted((race_sources or {}).items())),
             "sourceName": str(source.get("source_name") or ""),
             "checkedAt": utcnow().isoformat() + "Z",
         },
@@ -1499,6 +1504,7 @@ def _sync_statewide_nominees(
 
 def _sync_state_leg_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
+    leave: frozenset = frozenset(),
 ) -> int:
     """Persist this state's legislative nominees and record that we
     looked. Returns how many were stored.
@@ -1565,6 +1571,11 @@ def _sync_state_leg_nominees(
         .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
         .all()
     ):
+        if (row.chamber, row.district) in leave:
+            # A district this source did not read tonight (the VIP ballot's
+            # unread_districts): its stored nominees stand, as their source
+            # left them.
+            continue
         if (row.chamber, row.district, row.seat, row.party,
                 row.display_name) not in keep:
             db.delete(row)
@@ -1674,6 +1685,48 @@ def _is_ballot_list(source: dict, records: list[dict]) -> bool:
     if said is not None:
         return bool(said)
     return source.get("strategy") in BALLOT_LIST_STRATEGIES
+
+
+CIVIC_SOURCE_NAME = "the Voting Information Project (the state's ballot data, via Google Civic)"
+
+
+def _civic_entry(source: dict) -> dict | None:
+    """The Google Civic source to read `source`'s state with first, or None
+    without an API key: the state's own google_civic entry where it names
+    one (main, general list or a fallback: its fixed addresses), else a
+    bare one. It carries the state's statewide_offices opt-in, since its
+    state-office rows are read with the same parsers."""
+    if not civic_is_configured():
+        return None
+    named = [e for e in (source, source.get("general_list"), source.get("fallback"),
+                         (source.get("general_list") or {}).get("fallback"))
+             if isinstance(e, dict) and e.get("strategy") == "google_civic"]
+    entry = dict(named[0]) if named else {"strategy": "google_civic"}
+    entry["source_name"] = CIVIC_SOURCE_NAME
+    entry["statewide_offices"] = bool(source.get("statewide_offices"))
+    entry["general_ballot_complete"] = False  # decided per race, by what it covered
+    return entry
+
+
+def _civic_speaks_for_state_offices(db: Session, cycle: int, state: str, configured: dict, records) -> bool:
+    """Whether the VIP ballot replaces the state's own source for its
+    statewide and legislative offices tonight: the state opts into them,
+    Civic read the statewide offices (not state_offices_incomplete) and
+    names every statewide office already on file, and every legislative
+    district on file is either read or left as stored (unread_districts), so
+    a partial read can never delete a stored nominee."""
+    if not configured.get("statewide_offices") or getattr(records, "state_offices_incomplete", False):
+        return False
+    offices = {r["office"] for r in records if r["office"] in STATEWIDE_OFFICE_LABELS}
+    districts = {(r["office"], r["district"]) for r in records if r["office"] in STATE_LEG_CHAMBER_LABELS}
+    if not offices or not districts:
+        return False
+    stored_offices = {o for (o,) in db.query(StatewideNominee.office).filter(
+        StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)}
+    stored_districts = {(c, d) for c, d in db.query(StateLegNominee.chamber, StateLegNominee.district).filter(
+        StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)}
+    left = getattr(records, "unread_districts", frozenset())
+    return stored_offices <= offices and stored_districts <= districts | left
 
 
 def _state_office_source(
@@ -1810,11 +1863,23 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "not_configured"}
             continue
 
+        # The state's VIP ballot, through Google Civic, speaks first for
+        # every race it names (owner decision 2026-10-28: where Civic has
+        # the data it takes precedence; the state's own readers are the
+        # fallback). A state with no VIP ballot loaded answers [] in a few
+        # requests and is read as before.
+        civic = _civic_entry(source)
+        civic_records = await _fetch(client, cycle, state, civic, "Google Civic") if civic else None
+        if not civic_records:
+            civic_records = None
+
         # A state's certified November list, when it has one, speaks for its
         # federal races outright (see general_list in the sources file). It
         # runs FIRST so a nominee the list has replaced is never confirmed
         # from primary results only to be unconfirmed moments later.
         general = source.get("general_list")
+        if general and general.get("strategy") == "google_civic":
+            general = None  # read above, ahead of everything
         ballot_source = general
         general_records = None
         if general:
@@ -1863,7 +1928,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                     # Its records are the spare's: never the broken entry's
                     # authority (general_ballot_complete) or attribution.
                     source = spare
-        if records is None and general_records is None:
+        if records is None and general_records is None and civic_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
         # Whether the main source said anything this run. When it failed
@@ -1905,9 +1970,12 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # no longer serves its primary at all). See _state_office_source
         # for when the main source's primary results stand in for it.
         main_records = records
-        state_source, state_records, state_answered = _state_office_source(
-            db, cycle, state, source, records, main_state_answered, general, general_records,
-        )
+        if civic_records is not None and _civic_speaks_for_state_offices(db, cycle, state, configured, civic_records):
+            state_source, state_records, state_answered = civic, civic_records, True
+        else:
+            state_source, state_records, state_answered = _state_office_source(
+                db, cycle, state, source, records, main_state_answered, general, general_records,
+            )
         statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
         if configured.get("joint_governor_ticket"):
             # One vote for governor and lieutenant governor together: the
@@ -1927,7 +1995,10 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 db, cycle, state, state_source, statewide,
                 ballot_list=_is_ballot_list(state_source, state_records),
             )
-            state_leg_count = _sync_state_leg_nominees(db, cycle, state, state_source, state_leg)
+            state_leg_count = _sync_state_leg_nominees(
+                db, cycle, state, state_source, state_leg,
+                leave=getattr(state_records, "unread_districts", frozenset()),
+            )
         judicial_source, judicial_records, judicial_answered = _judicial_source(
             db, cycle, state, source, judicial, main_state_answered, general, general_records,
         )
@@ -1944,22 +2015,38 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
         ballot_is_elsewhere = _has_general_filings(state)
-        if general_records is not None:
-            # The certified ballot answered: it alone decides every federal
-            # race it covers. Races it does not cover — a national source
-            # that only knows the districts it has a verified address for —
-            # keep what primary results say, non-authoritatively, exactly
-            # as if the list did not exist for them. (The state offices
-            # were settled above, by _state_office_source.)
-            general_federal = [r for r in general_records if r["office"] in ("S", "H")]
-            covered = {_race_id_for(db, cycle, state, r["office"], r["district"]) for r in general_federal}
+        lists = [(src, recs) for src, recs in ((civic, civic_records), (ballot_source, general_records))
+                 if recs is not None]
+        if lists and source.get("general_ballot_complete") and not ballot_is_elsewhere and records:
+            # The state's own source is itself its complete ballot (Louisiana's
+            # voter portal): it decides the races the lists before it didn't
+            # name, as the certified ballot it is, not as primary results.
+            lists.append((source, records))
+        if lists:
+            # A certified ballot answered: each decides every federal race
+            # it covers, the VIP ballot first, then the state's own list for
+            # the races Civic didn't name. Races none covers — a national
+            # source only knows the districts it read — keep what primary
+            # results say, non-authoritatively, exactly as if no list
+            # existed for them. (The state offices were settled above.)
             races_here = {
                 rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
             }
-            applied = _apply_ballot(
-                db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
-                scope=covered,
-            )
+            covered: set[str] = set()
+            race_sources: dict[str, str] = {}
+            applied = {"confirmed": 0, "unmatched": 0, "ballotOnly": 0, "unconfirmed": 0}
+            for list_source, list_records in lists:
+                federal = [r for r in list_records if r["office"] in ("S", "H")
+                           and _race_id_for(db, cycle, state, r["office"], r["district"]) not in covered]
+                these = {_race_id_for(db, cycle, state, r["office"], r["district"]) for r in federal}
+                if not these:
+                    continue
+                more = _apply_ballot(
+                    db, cycle, state, federal, keep_unlisted=True, authoritative=True, scope=these,
+                )
+                applied = {k: applied[k] + more[k] for k in applied}
+                covered |= these
+                race_sources.update({rid: str(list_source.get("source_name") or "") for rid in these & races_here})
             rest = [r for r in records if _race_id_for(db, cycle, state, r["office"], r["district"]) not in covered]
             if rest:
                 # Primary results beside a certified list never prune: a
@@ -1973,8 +2060,9 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 applied = {k: applied[k] + more[k] for k in applied}
             _record_ballot_basis(
                 db, cycle, state,
-                {**ballot_source, "general_ballot_complete": bool(races_here) and races_here <= covered},
-                races=covered & races_here,
+                {**(ballot_source if general_records is not None else civic),
+                 "general_ballot_complete": bool(races_here) and races_here <= covered},
+                races=covered & races_here, race_sources=race_sources,
             )
         else:
             # An empty answer is a ballot not published yet: it names no

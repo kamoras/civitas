@@ -11,6 +11,7 @@ import { Panel } from "./widgets";
 export const STATE_TONE: Record<SourceHealthEntry["state"], string> = {
   ok: "text-ink-lo",
   not_read: "text-signal-amber",
+  terms: "text-ink-lo",
   unavailable: "text-signal-magenta",
   refused: "text-signal-magenta",
   walled: "text-signal-magenta",

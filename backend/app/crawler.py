@@ -28,7 +28,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from app import web_bot_auth
+from app import host_terms, web_bot_auth
 from app.pipeline import run_tracker
 from app.config import settings
 from app.contact import CONTACT_EMAIL, CRAWLER_PAGE, HOST_USER_AGENTS, USER_AGENT
@@ -83,6 +83,11 @@ SCHEDULE: dict[str, dict] = {
         "name": "Agency sync",
         "cron": {"minute": "30"},
         "reads": "The Federal Register's agency list and USAspending's budgets, once a week each",
+    },
+    "host_terms_check": {
+        "name": "Terms of use check",
+        "cron": {"hour": "14", "minute": "35"},
+        "reads": "The Internet Archive's newest copy of each terms page the crawler follows, once a week each",
     },
     "nominations_sync": {
         "name": "Nominations",
@@ -554,6 +559,13 @@ def summary() -> dict:
         "userAgentExceptions": [
             {"host": host, "userAgent": ua, "reason": why}
             for host, (ua, why) in sorted(HOST_USER_AGENTS.items())
+        ],
+        # Hosts whose own terms forbid automated access: never asked
+        # (crawl_policy.TermsForbid, app/data/host_terms.json).
+        "termsHosts": [
+            {"host": host, "publisher": e.get("publisher"), "termsUrl": e.get("terms_url"),
+             "quote": e.get("quote"), "readOn": e.get("read_on")}
+            for host, e in sorted(host_terms.all_hosts().items())
         ],
         "page": CRAWLER_PAGE,
         "contact": CONTACT_EMAIL or None,

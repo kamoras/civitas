@@ -129,9 +129,13 @@ def _parse_candidate_contest(raw: dict) -> dict | None:
         "kind": "contest",
         "office": office,
         "candidates": candidates,
+        # `name` carries the number where `id` is absent, which is how
+        # live answers send it ({"name": "4th District", "scope":
+        # "congressional"}, Michigan, 2026-10-28: no `id` at all).
         "district": {
-            "id": _text(district, "id") if isinstance(district, dict) else None,
-            "scope": _text(district, "scope") if isinstance(district, dict) else None,
+            "id": _text(district, "id"),
+            "name": _text(district, "name"),
+            "scope": _text(district, "scope"),
         } if isinstance(district, dict) else None,
     }
 

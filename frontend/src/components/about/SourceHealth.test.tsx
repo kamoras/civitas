@@ -37,7 +37,7 @@ const notRead = {
 };
 const health: SourceHealth = {
   asOf: "2026-10-26T12:00",
-  counts: { ok: 1, walled: 0, refused: 1, unavailable: 0, not_read: 1 },
+  counts: { ok: 1, walled: 0, refused: 1, unavailable: 0, terms: 0, not_read: 1 },
   summary:
     "Of 3 sources, 1 answered when last asked, 1 can't be read now and 1 have no recent read on record.",
   sources: [walled, notRead, ok],

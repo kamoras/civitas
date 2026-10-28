@@ -36,6 +36,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
+from app.crawl_policy import HostRefusing
 from app.file_cache import Stamp, read_json, read_json_preferring, reload_if_moved, new_reload_lock
 from app.http_client import is_bot_challenge
 from app.pipeline.fetch.http_utils import FETCH_HEADERS
@@ -273,6 +274,12 @@ async def _check_once(client: httpx.AsyncClient, url: str) -> str | None:
         # polling-place page read as dead from 2026-10 for want of that alone.
         response = await client.get(url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
                                     headers=FETCH_HEADERS)
+    except HostRefusing:
+        # Not asked: the host is refusing Civitas (a wall's backoff) or its
+        # terms of use forbid automated access (crawl_policy). Either way
+        # the site said no to checks, not that the page is gone, so the
+        # link is shown unconfirmed, never hidden as dead.
+        return BLOCKED
     except Exception:
         return None
     if response.status_code >= 500 and not is_bot_challenge(response):

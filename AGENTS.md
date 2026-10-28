@@ -1146,6 +1146,24 @@ Corollaries that follow from the same rule, all enforced in code:
   a new fetch module is listed by its URL constants and its RateLimiter,
   and a new scheduled job that reads from outside takes its trigger from
   `crawler.SCHEDULE`.
+  **A host whose terms of use forbid automated access is never asked**
+  (owner decision, 2026-10-28): `app/data/host_terms.json` quotes each
+  host's terms, and `crawl_policy` refuses every request to it before it is
+  sent (`TermsForbid`), from the readers, the link check (shown unconfirmed),
+  the weekly crawl (`state_source_crawler.election_domains`) and the data
+  refresh's scripts, which run under `app/script_gate.py` so plain httpx,
+  requests and urllib calls keep the crawler's manners too. Each entry's
+  terms are re-read weekly from the Internet Archive's copy
+  (`app/host_terms_check.py`), and a change alerts (`host-terms-*`) while the
+  host stays unasked. Its data is read where the state shares it: Michigan's
+  ballot from the Voting Information Project.
+  **Google Civic (VIP) first** (owner decision, 2026-10-28): the candidate
+  sync reads each state's VIP ballot before its own sources
+  (`state_candidates_civic.py`, at points inside every district,
+  `app/data/civic_query_points.json`, `scripts/build_civic_query_points.py`);
+  it decides the races it names, the state's own list and results the rest
+  (`raceSources` on the ballot-basis marker), and takes the state offices
+  only when it names every one on file, leaving unread districts as stored.
   **And every request keeps the same manners** (`app/crawl_policy.py`,
   2026-10-25), applied where requests leave: `make_async_client`'s `send`,
   and `http_client.source_request` / `source_gate` for a blocking read
@@ -1169,7 +1187,7 @@ Corollaries that follow from the same rule, all enforced in code:
   page's "Your vote, step by step", one official link per task,
   `ballot_lookup.vote_steps`) the nightly link check is refused on
   (`ballot_lookup._check` → `blocked_at`) is still linked, worded as
-  unconfirmed ("This site blocks automated checks, so we can't confirm
+  unconfirmed ("This site doesn't allow automated checks, so we can't confirm
   it's up") with the task's fallback beside it (vote.gov, NASS's Can I
   Vote, USAGov's directory); only a link that answers 404, or lands on its
   site's homepage, falls back alone. That

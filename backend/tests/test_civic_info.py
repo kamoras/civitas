@@ -105,7 +105,15 @@ def test_district_scope_and_id_are_captured_when_present():
         "candidates": [{"name": "Jane Doe"}],
     }
     parsed = civic_info._parse_candidate_contest(raw)
-    assert parsed["district"] == {"id": "12", "scope": "congressional"}
+    assert parsed["district"] == {"id": "12", "name": "Congressional District 12", "scope": "congressional"}
+
+
+def test_district_name_is_kept_when_there_is_no_id():
+    """The live shape (Michigan, 2026-10-28): the number is in the name."""
+    raw = {"office": "Representative in Congress", "district": {"name": "4th District", "scope": "congressional"},
+           "candidates": [{"name": "Jane Doe"}]}
+    assert civic_info._parse_candidate_contest(raw)["district"] == {
+        "id": None, "name": "4th District", "scope": "congressional"}
 
 
 def test_district_is_none_when_absent_or_malformed():

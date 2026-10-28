@@ -1,0 +1,42 @@
+{
+ "_note": "The Michigan entry as it stood until 2026-10-28, when the state was moved to the VIP ballot (michigan.gov terms of use; app/data/host_terms.json). Kept so the certified-table adapter knobs it alone used (report_grid, slate_complete, seats_regex) stay tested.",
+ "source": {
+  "source_name": "Michigan Department of State (Official Candidate Listing, general election)",
+  "strategy": "certified_table",
+  "general_ballot_complete": true,
+  "statewide_offices": true,
+  "statewide_omits": [
+   "Michigan State University trustees",
+   "Wayne State University governors"
+  ],
+  "runoff_threshold_pct": null,
+  "discovery": {
+   "url": "https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do?page=page.miboePublicReport&electionType=GEN&electionYear={year}",
+   "year_regex": "November \\d{1,2}, {year}"
+  },
+  "format": {
+   "report_grid": true,
+   "office_column": "heading",
+   "office_regex": "^(.+?)\\s+\\d+\\s+Year\\s+Terms?\\b",
+   "office_parse": true,
+   "party_column": "Party / Incumbent",
+   "name_columns": [
+    "Candidate Name"
+   ],
+   "name_last_first": true,
+   "status_column": "Status",
+   "status_values": [
+    ""
+   ],
+   "seats_regex": "\\((\\d+)\\)\\s+Positions?\\b",
+   "slate_complete": {
+    "office": "governor",
+    "requires": [
+     "secretary_of_state",
+     "attorney_general"
+    ]
+   }
+  },
+  "description": "The Department of State's Official Candidate Listing for the general election, 'All State and Judicial Offices' (a JasperReports page on the Bureau of Elections' own candidate system, mi-boe.entellitrak.com, which michigan.gov/sos/elections/election-results-and-data links as 'Candidate listing' for each election; mielections.us, its old host, no longer answers). One grid-laid report: an office heading ('1st District Representative in Congress 2 Year Term (1) Position', 'Governor / Lt. Governor ...'), then a row per candidate with Status, party, 'Last, First' name (a joint ticket as 'Benson, Jocelyn / Brinks, Winnie'), filing date and method. It is the November ballot: primary winners, the parties' CONVENTION nominees (Michigan's Attorney General and Secretary of State, nominated 2026-08-24 and 08-31, and every minor party's slate) and petition-filed independents, with DISQ and WITHD rows marked in Status and dropped (status_values). Verified live from a plain fetch on 2026-09-28: the U.S. Senate race (Abdul El-Sayed D, Mike Rogers R, Lydia Christensen L, Tim Long U.S. Taxpayers, Douglas P. Marsh G, Walter P. Kristy Natural Law) and all 13 House districts (62 candidates; e.g. Jack Bergman R and Callie Barr D in the 1st, Rashida Tlaib D in the 12th, Donavan McKinney D in the 13th), plus Governor (the Benson/Brinks and James/DeBoyer tickets), Secretary of State (Garlin Gilchrist II D, Anthony G. Forlini R), Attorney General (Eli Savit D, Doug Lloyd R), the State Board of Education and University of Michigan Regents (two at-large seats each), all 38 Senate and 110 House districts. The address names the year; the report exists for the whole cycle and fills in as candidates file, so the list itself says when it is the ballot: while any office holds more of one party's candidates than its printed seat count ('(1) Position', seats_regex) it is still the filings before the primary settles them, and nothing is read (answered [] -- not yet, not a failure); and until every party with a Governor ticket also has its Secretary of State and Attorney General (slate_complete -- both are nominated at party conventions weeks after the primary: 2026-08-24 and 08-31), only the federal rows are read and the state offices wait. Michigan State University trustees and Wayne State University governors are elected statewide on the same list but no shared office code names them (the university gate refuses them, so 'Governor of Wayne State University' is never read as the governor): statewide_omits says so. Michigan nominates by plurality. Replaced Google Civic as the main source on 2026-09-28; that entry stays as the general_list, which takes over the races it covers once Google has data."
+ }
+}

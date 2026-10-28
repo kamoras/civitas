@@ -51,8 +51,8 @@ function Unconfirmed({ step, className }: { step: VoteStep; className: string })
   if (!step.unconfirmed || !fallbackHref || !step.fallback) return null;
   return (
     <p className={`${className} wrap-anywhere`}>
-      This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it doesn&apos;t
-      open, use{" "}
+      This site doesn&apos;t allow automated checks, so we can&apos;t confirm it&apos;s up. If it
+      doesn&apos;t open, use{" "}
       <a
         href={fallbackHref}
         target="_blank"

@@ -320,7 +320,7 @@ describe("VoterCalendar: registering", () => {
       })
     ).toHaveAttribute("href", "https://vote.gov/");
     expect(
-      wide().getByText("This site blocks automated checks, so we can't confirm it's up.")
+      wide().getByText("This site doesn't allow automated checks, so we can't confirm it's up.")
     ).toBeInTheDocument();
   });
 });
