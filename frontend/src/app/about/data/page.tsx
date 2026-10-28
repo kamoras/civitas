@@ -2,6 +2,7 @@ import { GITHUB_REPO_URL, pageMetadata } from "@/lib/site";
 import ComputedLeanData from "@/components/about/ComputedLeanData";
 import DataLicense from "@/components/about/DataLicense";
 import SourceLedger from "@/components/about/SourceLedger";
+import SourceHealth from "@/components/about/SourceHealth";
 import {
   AboutPage,
   Summary,
@@ -67,6 +68,7 @@ export default function DataChapter() {
 
       <Section id="sources" title="Where the data comes from">
         <SourceLedger />
+        <SourceHealth />
         <Boxes>
           <Box
             title="Congress"

@@ -22,6 +22,7 @@ import { formatDuration } from "@/components/admin/format";
 import { finishedSince, type FinishedRun, type WatchedPipeline } from "@/components/admin/trends";
 import { OverviewDashboard } from "@/components/admin/OverviewDashboard";
 import { OpsAlerts } from "@/components/admin/OpsAlerts";
+import { SourcesDashboard } from "@/components/admin/SourcesDashboard";
 import { Panel } from "@/components/admin/widgets";
 import { PipelinesDashboard } from "@/components/admin/PipelinesDashboard";
 import { SystemDashboard } from "@/components/admin/SystemDashboard";
@@ -37,7 +38,8 @@ const TOKEN_KEY = "civitas_admin_token";
 // The dashboard used to be one ~20-panel column. Each tab is now one
 // question an operator comes with: what is wrong right now (Alerts), who is
 // using the site and how fast is it (Traffic), are the nightly runs healthy
-// and which sources refused them (Pipelines), is the hourly news
+// and which sources refused them (Pipelines), can each source be read now
+// (Sources), is the hourly news
 // refresh publishing or suppressing (Action Center), are the trend posts
 // party-balanced and what did each candidate get (Trends), what is in the stores
 // (Data & ML), is the box itself OK (System), and the one write action
@@ -48,6 +50,7 @@ const TABS = [
   { id: "traffic", label: "Traffic" },
   { id: "api", label: "API" },
   { id: "pipelines", label: "Pipelines" },
+  { id: "sources", label: "Sources" },
   { id: "action", label: "Action Center" },
   { id: "trends", label: "Trends" },
   { id: "data", label: "Data & ML" },
@@ -530,6 +533,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               onChanged={pollStatus}
             />
           )}
+          {tab === "sources" && <SourcesDashboard token={token} />}
           {tab === "action" && (
             <ActionCenterDashboard
               token={token}
