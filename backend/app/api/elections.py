@@ -67,7 +67,7 @@ from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
 from app.pipeline.fetch.web_archive import captured_on
-from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
+from app.pipeline.fetch.ballot_measure_pdf_sources import terms_block, unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
 from app.retractions import withdrawn_coverage_urls
@@ -1743,6 +1743,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # site blocks automated access, or it publishes no list),
             # written for a voter; null for a state Civitas reads.
             "unreadReason": unread_reason(state),
+            # Why the list is no longer re-read, when the state's site's
+            # terms of use forbid automated access (the registry's `terms`):
+            # the measures shown are from the last read, dated by checkedAt.
+            "termsBlock": terms_block(state),
         },
         "officialLookup": lookup_for_state(state),
         # Registration, early voting and mail-ballot deadlines, each with

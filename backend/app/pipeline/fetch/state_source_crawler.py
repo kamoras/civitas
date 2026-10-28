@@ -114,10 +114,12 @@ ELECTION_DOMAINS = {
 }
 
 def election_domains(state: str) -> list[str]:
-    """`state`'s election domains the crawler may ask: none whose terms of
-    use forbid automated access (crawl_policy.terms_forbid; Michigan's,
-    2026-10-28), which are left out rather than asked and refused."""
-    return [d for d in ELECTION_DOMAINS.get(state.upper(), []) if not crawl_policy.terms_forbid(d)]
+    """`state`'s election domains the crawler may look under: none whose
+    terms of use forbid automated access to every name under it
+    (crawl_policy.terms_forbid; Michigan's, 2026-10-28), which is left out
+    rather than asked and refused. A domain whose terms name only some of
+    its hosts (Minnesota's) stays, and each host is checked on its own."""
+    return [d for d in ELECTION_DOMAINS.get(state.upper(), []) if not crawl_policy.terms_forbid(f"any.{d}")]
 
 
 # Subdomain shapes an election-results host actually takes. Probed against
@@ -304,7 +306,7 @@ def _hosts_for(state: str) -> list[str]:
     for domain in election_domains(state):
         for prefix in _RESULTS_PREFIXES:
             host = f"{prefix}.{domain}" if prefix else domain
-            if host not in hosts:
+            if host not in hosts and not crawl_policy.terms_forbid(host):
                 hosts.append(host)
     return hosts
 
@@ -564,7 +566,8 @@ async def _probe_pages(
         await scan(root, 2)
 
     for domain in election_domains(state):
-        await scan_root(f"https://{domain}/")
+        if not crawl_policy.terms_forbid(domain):
+            await scan_root(f"https://{domain}/")
     # This cycle's files first, and results before anything else that
     # happened to be linked beside them.
     found.sort(key=lambda pair: (

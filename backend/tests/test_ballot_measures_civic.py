@@ -29,6 +29,16 @@ def test_only_what_every_district_s_ballot_carries_is_statewide():
     assert all(p["yes_means"] is None and p["fiscal_impact"] is None for p in parsed)
 
 
+def test_a_one_line_title_takes_its_subtitle_as_its_heading():
+    mn = {"kind": "measure", "title": "CONSTITUTIONAL AMENDMENT 1", "subtitle": "Increasing funding to school districts",
+          "text": "Shall the Minnesota Constitution be amended ...?"}
+    (parsed,) = m.parse_referenda([[mn], [mn], [mn]], {})
+    assert parsed["number"] == "1" and parsed["title"] == "Increasing funding to school districts"
+    assert parsed["official_title"] is None
+    (mi,) = m.parse_referenda([[P1], [P1], [P1]], SOURCE)
+    assert mi["title"].startswith("A proposal to convene")  # "PROPOSAL" is the title's own word
+
+
 def test_too_few_answers_say_nothing():
     assert m.parse_referenda([[P1], [P1]], SOURCE) == []
 

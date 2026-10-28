@@ -50,6 +50,7 @@ import unicodedata
 import httpx
 from sqlalchemy.orm import Session
 
+from app.crawl_policy import TermsForbid
 from app.models import (
     BALLOT_ONLY_ID_PREFIX,
     Candidate,
@@ -1275,6 +1276,12 @@ async def _fetch(
         return None
     try:
         return await strategy(client, cycle, state, source)
+    except TermsForbid as refused:
+        # The source's own terms forbid automated access (host_terms.json):
+        # not asked, by choice, and no failure to report. The rows on file
+        # stand; the VIP ballot, read first, answers where it can.
+        logger.info("%s for %s not read: %s", what, state, refused)
+        return None
     except Exception:
         if report:
             _note_raise(state, f"{what} fetch")

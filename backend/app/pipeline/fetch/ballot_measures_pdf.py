@@ -74,7 +74,6 @@ from app.pipeline.fetch.ballot_measures_il import fetch_measures as il_fetch_mea
 from app.pipeline.fetch.ballot_measures_in import fetch_measures as in_fetch_measures
 from app.pipeline.fetch.ballot_measures_ks import fetch_measures as ks_fetch_measures
 from app.pipeline.fetch.ballot_measures_civic import fetch_measures as civic_fetch_measures
-from app.pipeline.fetch.ballot_measures_mn import fetch_measures as mn_fetch_measures
 from app.pipeline.fetch.ballot_measures_nd import fetch_measures as nd_fetch_measures
 from app.pipeline.fetch.ballot_measures_ne import fetch_measures as ne_fetch_measures
 from app.pipeline.fetch.ballot_measures_ok import fetch_measures as ok_fetch_measures
@@ -282,7 +281,6 @@ MULTI_DOCUMENT_STRATEGIES = {
     "il_voters_guide_questions": il_fetch_measures,
     "in_legislation_summary": in_fetch_measures,
     "ks_proposed_amendments": ks_fetch_measures,
-    "mn_constitutional_amendments": mn_fetch_measures,
     "nd_measures_on_ballot": nd_fetch_measures,
     "ne_ballot_measures": ne_fetch_measures,
     "ok_state_questions": ok_fetch_measures,

@@ -1454,6 +1454,34 @@ describe("ballot measures", () => {
     expect(drawer.getByText(/we have not checked this state yet/)).toBeInTheDocument();
   });
 
+  it("says a list is no longer re-read because the state's terms forbid it, never that a read failed", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered",
+            sourceName: measure.sourceName,
+            checkedAt: "2026-10-28T12:31:00Z",
+            lastAttemptAt: "2026-10-29T12:31:00Z",
+            termsBlock: {
+              host: "elections.example.gov",
+              publisher: "State of Example",
+              terms_url: "https://example.gov/terms",
+            },
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/election site is no longer read automatically/)).toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: /terms of use/ })).toHaveAttribute(
+      "href",
+      "https://example.gov/terms"
+    );
+    expect(drawer.queryByText(/attempt to re-read .* failed/)).not.toBeInTheDocument();
+  });
+
   it("gives an unread state's own reason, with the official lookup", async () => {
     const reason = "Civitas does not read Ohio's official measure list automatically yet.";
     render(

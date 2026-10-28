@@ -68,11 +68,16 @@ def parse_referenda(answers: list[list[dict]], source: dict) -> list[dict]:
     for title in (t for t in titles(answering[0]) if t in common):
         measure = titles(answering[0])[title]
         first, rest = _split_title(title)
+        # A heading VIP carries as the subtitle (Minnesota's "Increasing
+        # funding to school districts") names a one-line title; a subtitle
+        # that is only the title's own word (Michigan's "PROPOSAL") doesn't.
+        subtitle = (measure.get("subtitle") or "").strip()
+        heading = subtitle if subtitle and subtitle.lower() not in first.lower() else None
         number = _NUMBER_RE.search(first)
         out.append({
             "number": number.group(1) if number else first,
             "id_key": None if number else first,
-            "title": rest or first,
+            "title": rest or heading or first,
             "official_title": rest,
             "official_summary": measure.get("text"),
             "fiscal_impact": None,

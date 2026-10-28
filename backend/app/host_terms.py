@@ -17,11 +17,14 @@ def all_hosts() -> dict[str, dict]:
 
 
 def forbid(host: str) -> dict | None:
-    """The entry covering `host` (its own name or a name above it), or None."""
-    parts = (host or "").lower().rstrip(".").split(".")
+    """The entry covering `host` (its own name, or a name above it unless
+    that entry sets "subdomains": false), or None."""
+    host = (host or "").lower().rstrip(".")
+    parts = host.split(".")
     terms = all_hosts()
     for i in range(len(parts) - 1):
-        entry = terms.get(".".join(parts[i:]))
-        if entry:
+        name = ".".join(parts[i:])
+        entry = terms.get(name)
+        if entry and (name == host or entry.get("subdomains", True)):
             return entry
     return None

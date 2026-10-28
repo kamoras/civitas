@@ -81,7 +81,10 @@ async def test_a_link_on_a_host_that_refuses_checks_is_shown_unconfirmed_never_h
 def test_the_weekly_crawl_leaves_out_a_state_s_terms_hosts():
     assert state_source_crawler.election_domains("MI") == []
     assert state_source_crawler._hosts_for("MI") == []
+    # Minnesota's terms name only some of its hosts: the rest are still probed.
     assert state_source_crawler.election_domains("MN") == ["sos.mn.gov"]
+    assert "sos.mn.gov" not in state_source_crawler._hosts_for("MN")
+    assert "results.sos.mn.gov" in state_source_crawler._hosts_for("MN")
 
 
 def test_the_crawler_page_lists_them():
@@ -152,3 +155,42 @@ async def test_a_changed_page_alerts_and_the_host_stays_unasked(db_session, monk
     assert sent[0][1]["condition"] == "host-terms-michigan.gov"
     assert host_terms.forbid("michigan.gov")  # unasked until the entry is reviewed
 
+
+
+def test_an_exact_entry_covers_its_own_name_only():
+    # Minnesota's terms name www.sos.mn.gov and mblsportal.sos.mn.gov; its
+    # results files and voter tools are other hosts.
+    assert host_terms.forbid("www.sos.mn.gov") and host_terms.forbid("sos.mn.gov")
+    assert host_terms.forbid("electionresultsfiles.sos.mn.gov") is None
+    # Nebraska's portal policies are adopted by the Secretary of State's site.
+    assert host_terms.forbid("sos.nebraska.gov") and host_terms.forbid("www.nebraska.gov")
+    assert host_terms.forbid("electionresults.nebraska.gov") is None
+    # Hawaii's terms define the site as any address containing hawaii.gov.
+    assert host_terms.forbid("elections.hawaii.gov") and host_terms.forbid("olvr.hawaii.gov")
+    # SC.GOV's terms govern SC.GOV, not the Election Commission's sites.
+    assert host_terms.forbid("vrems.scvotes.sc.gov") is None and host_terms.forbid("scvotes.gov") is None
+
+
+def test_every_measure_registry_terms_entry_names_a_forbidden_host():
+    from app.pipeline.fetch import ballot_measure_pdf_sources as registry
+    named = {s: e["terms"]["host"] for s, e in (registry._load().get("states") or {}).items() if e.get("terms")}
+    assert named == {"HI": "elections.hawaii.gov", "NE": "sos.nebraska.gov"}
+    assert all(registry.terms_block(s) for s in named)
+
+
+@pytest.mark.asyncio
+async def test_a_terms_blocked_state_s_reader_is_never_called_and_its_measures_stand(db_session, monkeypatch):
+    from app.models import MeasureCoverage
+    from app.pipeline import election_pipeline as ep
+
+    async def never(*a, **kw):
+        raise AssertionError("the reader was called")
+
+    monkeypatch.setattr(ep, "_fetch_with_reasons", never)
+    db_session.add(MeasureCoverage(state="HI", election_date="2026-11-03", status=MeasureCoverage.COVERED,
+                                   measure_count=2, source_name="Hawaii Office of Elections"))
+    db_session.commit()
+    await ep._sync_pdf_measures(db_session, None, "2026-11-03", states=["HI"])
+    row = db_session.query(MeasureCoverage).filter_by(state="HI").one()
+    assert row.status == MeasureCoverage.COVERED and row.measure_count == 2
+    assert "terms of use forbid automated access" in row.error_detail

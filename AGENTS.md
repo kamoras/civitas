@@ -1155,8 +1155,15 @@ Corollaries that follow from the same rule, all enforced in code:
   requests and urllib calls keep the crawler's manners too. Each entry's
   terms are re-read weekly from the Internet Archive's copy
   (`app/host_terms_check.py`), and a change alerts (`host-terms-*`) while the
-  host stays unasked. Its data is read where the state shares it: Michigan's
-  ballot from the Voting Information Project.
+  host stays unasked. A host is listed only where its terms explicitly
+  forbid automated access to it (owner rule; vetted 2026-10-28 from the
+  Internet Archive's copies: Michigan, Hawaii, Colorado's Secretary of State,
+  www.sos.mn.gov, Nebraska's Secretary of State and portal, SC.GOV); an entry
+  with `"subdomains": false` covers its own name only, for terms that name
+  exact sites. Its data is read where the state shares it (Michigan's and
+  Minnesota's from the Voting Information Project); a measures registry
+  entry naming such a host (`terms`) is not read, its stored measures stand,
+  and its page says why (`termsBlock`).
   **Google Civic (VIP) first** (owner decision, 2026-10-28): the candidate
   sync reads each state's VIP ballot before its own sources
   (`state_candidates_civic.py`, at points inside every district,

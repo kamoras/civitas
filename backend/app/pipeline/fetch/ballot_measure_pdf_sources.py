@@ -10,6 +10,7 @@ import logging
 import os
 from typing import Any
 
+from app import host_terms
 from app.file_cache import load_json_once
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,20 @@ def documented_wall(state: str, detail: str | None) -> str | None:
     wall = (source_for_state(state) or {}).get("wall")
     host = wall.get("host") if isinstance(wall, dict) else None
     return host if host and detail and host in detail else None
+
+
+def terms_block(state: str) -> dict | None:
+    """{host, publisher, terms_url} when `state`'s registry entry names a
+    host (`terms`: {host}) whose terms of use forbid automated access
+    (app/host_terms.py): its reader is not called, its stored measures
+    stand, and its page says why. None otherwise, including for an entry
+    whose host's terms no longer forbid it."""
+    terms = (source_for_state(state) or {}).get("terms")
+    host = terms.get("host") if isinstance(terms, dict) else None
+    entry = host_terms.forbid(host) if host else None
+    if not entry:
+        return None
+    return {"host": host, "publisher": entry.get("publisher"), "terms_url": entry.get("terms_url")}
 
 
 def walls() -> dict[str, dict]:
