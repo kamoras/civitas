@@ -24,16 +24,71 @@ def test_certified_section_only():
 
 
 def test_pamphlet_link_is_the_english_pdf():
-    url = sd.pamphlet_url(FIXTURE["page"], 2026)
-    assert url.endswith("/2026%20BQ/2026GeneralBQPamphletFINAL.pdf")
+    url = sd.pamphlet_url(FIXTURE["page"], 2026, PAGE)
+    assert url == (
+        "https://sdsos.gov/elections-voting/upcoming-elections/general-information/"
+        "2026%20Ballot%20Question%20Information/2026%20Ballot%20Question%20Files/2026%20BQ/2026GeneralBQPamphletFINAL.pdf"
+    )
     assert " " not in url
 
 
-def test_page_url_encodes_the_years_folder():
-    assert sd.page_url(2026) == (
-        "https://sdsos.gov/elections-voting/upcoming-elections/general-information/"
-        "2026%20Election%20Information/2026-ballot-questions.aspx"
+# The landing page's links as served on 2026-10-28: the old address
+# (now a redirect to the 404 page), a dead "<year>/" variant, and the page.
+LANDING = """<html><body>
+<a href="https://sdsos.gov/elections-voting/upcoming-elections/general-information/2026 Election Information/2026-ballot-questions.aspx">old</a>
+<a href="/elections-voting/upcoming-elections/general-information/2026-ballot-questions.aspx">2026 Ballot Questions</a>
+<a href="/elections-voting/upcoming-elections/general-information/2026 Ballot Question Information/challenging-statewide-ballot-question.aspx">other</a>
+<a href="https://example.org/2026-ballot-questions.aspx">off site</a>
+</body></html>"""
+OLD = (
+    "https://sdsos.gov/elections-voting/upcoming-elections/general-information/"
+    "2026%20Election%20Information/2026-ballot-questions.aspx"
+)
+PAGE = "https://sdsos.gov/elections-voting/upcoming-elections/general-information/2026-ballot-questions.aspx"
+NOT_FOUND = "<html><body><h2>Page not found</h2></body></html>"
+
+
+def test_page_candidates_from_the_landing_page():
+    assert sd.page_candidates(LANDING, 2026) == [OLD, PAGE]
+    assert sd.page_candidates(LANDING, 2028) == []
+
+
+def _fake_fetches(monkeypatch, pages):
+    fetched = []
+
+    async def fake_text(client, limiter, url, label, **kw):
+        fetched.append(url)
+        return pages[url]
+
+    async def fake_bytes(client, limiter, url, label, **kw):
+        return b"pdf"
+
+    monkeypatch.setattr(sd, "fetch_text_with_retry", fake_text)
+    monkeypatch.setattr(sd, "fetch_bytes_with_retry", fake_bytes)
+    monkeypatch.setattr(sd, "_pdf_pages", lambda raw: FIXTURE["pamphlet_pages"])
+    return fetched
+
+
+async def test_reads_the_linked_page_past_a_moved_one(monkeypatch):
+    fetched = _fake_fetches(monkeypatch, {sd.LANDING_URL: LANDING, OLD: NOT_FOUND, PAGE: FIXTURE["page"]})
+    measures = await sd.fetch_measures(None, 2026)
+    assert fetched == [sd.LANDING_URL, OLD, PAGE]
+    assert [m["number"] for m, _ in measures] == ["I", "J", "K", "L"]
+    assert measures[0][1].startswith(
+        "https://sdsos.gov/elections-voting/upcoming-elections/general-information/2026%20Ballot%20Question%20Information/"
     )
+
+
+async def test_no_page_with_the_section_says_why(monkeypatch, caplog):
+    _fake_fetches(monkeypatch, {sd.LANDING_URL: LANDING, OLD: NOT_FOUND, PAGE: NOT_FOUND})
+    assert await sd.fetch_measures(None, 2026) is None
+    assert "2026 General Election Ballot Measures" in caplog.text
+
+
+async def test_no_link_says_why(monkeypatch, caplog):
+    _fake_fetches(monkeypatch, {sd.LANDING_URL: "<html><body></body></html>"})
+    assert await sd.fetch_measures(None, 2026) is None
+    assert "links no 2026 ballot questions page" in caplog.text
 
 
 def test_real_pamphlet_four_amendments():
