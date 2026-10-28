@@ -4,8 +4,8 @@ Pamphlet it links (one of MULTI_DOCUMENT_STRATEGIES in
 ballot_measures_pdf.py: two documents are read together and
 cross-checked, which the single-PDF STRATEGIES shape can't express).
 
-The page (sdsos.gov/.../<year> Election Information/<year>-ballot-
-questions.aspx) separates what is ON the ballot from what is merely
+The page (sdsos.gov/.../<year>-ballot-questions.aspx, found from the
+Upcoming Elections page's links) separates what is ON the ballot from what is merely
 circulating: under the heading "<year> General Election Ballot Measures"
 each certified question is listed with its sponsor and the letter or
 number the Secretary of State assigned it; petitions still gathering
@@ -47,7 +47,7 @@ that is present and lists nothing reads as [].
 import io
 import logging
 import re
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
 import pdfplumber
@@ -59,10 +59,12 @@ from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-PAGE_URL_PATTERN = (
-    "https://sdsos.gov/elections-voting/upcoming-elections/general-information/"
-    "{year} Election Information/{year}-ballot-questions.aspx"
-)
+# The page is found from the Upcoming Elections page's own links, never
+# typed: it moved on 2026-10-27 from ".../general-information/<year>
+# Election Information/<year>-ballot-questions.aspx" (now a redirect to the
+# site's 404 page) to ".../general-information/<year>-ballot-questions.aspx",
+# and the landing page still links both.
+LANDING_URL = "https://sdsos.gov/elections-voting/upcoming-elections/default.aspx"
 TITLE_AUTHORITY = "South Dakota Attorney General"
 
 _rate_limiter = RateLimiter(rps=1.0)
@@ -77,8 +79,20 @@ _FISCAL_RE = re.compile(r"^Fiscal Note:\s*(.*)$")
 _END_RE = re.compile(r"^(The text of this .* is |Pro – )")
 
 
-def page_url(year: int) -> str:
-    return quote(PAGE_URL_PATTERN.format(year=year), safe=":/")
+def page_candidates(landing_html: str, year: int) -> list[str]:
+    """Every distinct sdsos.gov link on the landing page to a
+    "<year>-ballot-questions.aspx" page, in the page's order, encoded."""
+    tree = lxml_html.fromstring(landing_html)
+    found: list[str] = []
+    for a in tree.xpath("//a[@href]"):
+        url = urljoin(LANDING_URL, a.get("href").strip())
+        parts = urlsplit(url)
+        if parts.hostname != "sdsos.gov" or not unquote(parts.path).lower().endswith(f"/{year}-ballot-questions.aspx"):
+            continue
+        encoded = quote(unquote(url), safe=":/")
+        if encoded not in found:
+            found.append(encoded)
+    return found
 
 
 def _section_after(tree, heading_text: str) -> list:
@@ -126,7 +140,7 @@ def certified_questions(page_html: str, year: int) -> dict[str, str | None] | No
     return questions
 
 
-def pamphlet_url(page_html: str, year: int) -> str | None:
+def pamphlet_url(page_html: str, year: int, page: str) -> str | None:
     tree = lxml_html.fromstring(page_html)
     section = _section_after(tree, f"{year} Ballot Question Information") or []
     hrefs = {
@@ -139,7 +153,7 @@ def pamphlet_url(page_html: str, year: int) -> str | None:
     }
     if len(hrefs) != 1:
         return None
-    return quote(urljoin(page_url(year), hrefs.pop()), safe=":/%")
+    return quote(urljoin(page, hrefs.pop()), safe=":/%")
 
 
 def parse_pamphlet_page(text: str) -> dict | None:
@@ -232,20 +246,34 @@ def _pdf_pages(raw: bytes) -> list[str]:
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
-    url = page_url(year)
-    page_html = await fetch_text_with_retry(client, _rate_limiter, url, "SD ballot questions page")
-    if page_html is None:
+    landing = await fetch_text_with_retry(client, _rate_limiter, LANDING_URL, "SD upcoming elections page")
+    if landing is None:
         return None
-    try:
-        certified = certified_questions(page_html, year)
-    except Exception:
-        logger.exception("SD ballot questions page was not parseable")
+    candidates = page_candidates(landing, year)
+    if not candidates:
+        logger.warning("SD: the upcoming elections page links no %d ballot questions page", year)
         return None
+    page_html = certified = url = None
+    for url in candidates:
+        page_html = await fetch_text_with_retry(client, _rate_limiter, url, "SD ballot questions page")
+        if page_html is None:
+            return None
+        try:
+            certified = certified_questions(page_html, year)
+        except Exception:
+            logger.exception("SD ballot questions page was not parseable")
+            return None
+        if certified is not None:
+            break
     if certified is None:
+        logger.warning(
+            "SD: no page the upcoming elections page links has a '%d General Election Ballot Measures' section (%s)",
+            year, ", ".join(candidates),
+        )
         return None
     if not certified:
         return []
-    pdf_url = pamphlet_url(page_html, year)
+    pdf_url = pamphlet_url(page_html, year, url)
     if pdf_url is None:
         logger.warning("SD: no single pro/con pamphlet link for %d", year)
         return None
@@ -258,6 +286,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.exception("SD pamphlet parse failed")
         return None
     if pamphlet is None:
+        logger.warning("SD: a page of the %d pamphlet did not parse as a ballot question (%s)", year, pdf_url)
         return None
     combined = combine(certified, pamphlet)
     if combined is None:

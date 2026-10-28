@@ -205,7 +205,7 @@
     "SD": {
       "source_name": "South Dakota Secretary of State",
       "strategy": "sd_ballot_questions",
-      "description": "The Secretary of State's '<year> Ballot Questions' page ('2026 General Election Ballot Measures' section: Constitutional Amendments I, J, K, L, each 'Proposed and passed by the 2025 South Dakota Legislature') cross-checked against the Ballot Question Pro/Con Pamphlet, which prints the Attorney General's title, explanation and 'Vote “Yes”/“No” ...' recitation for each. Verified live 2026-09-28: 4/4. Circulating petitions, listed under separate headings on the same page, are never read."
+      "description": "The Secretary of State's '<year> Ballot Questions' page, found from the Upcoming Elections page's links (it moved on 2026-10-27) ('2026 General Election Ballot Measures' section: Constitutional Amendments I, J, K, L, each 'Proposed and passed by the 2025 South Dakota Legislature') cross-checked against the Ballot Question Pro/Con Pamphlet, which prints the Attorney General's title, explanation and 'Vote “Yes”/“No” ...' recitation for each. Verified live 2026-09-28: 4/4. Circulating petitions, listed under separate headings on the same page, are never read."
     },
     "AK": {
       "url_pattern": "https://www.elections.alaska.gov/election/{year}/General/SampleBallots/HD1-JD1.pdf",
