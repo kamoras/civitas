@@ -235,7 +235,7 @@
     "MT": {
       "source_name": "Montana Secretary of State",
       "strategy": "mt_qualified_ballot_issues",
-      "description": "sosmt.gov/elections/ballot_issues/proposed-{year}-ballot-issues/ (verified 2022, 2024, 2026): the 'Issues Qualified for the {year} General Election Ballot' section, each issue's text read from its linked 'BALLOT LANGUAGE FOR ...' PDF (the page's own subjects may be paraphrased, by its own footnote). Verified live 2026-09-28: CI-132, CI-133, I-194. See ballot_measures_mt.py."
+      "description": "sosmt.gov/elections/ballot_issues/proposed-{year}-ballot-issues/ (verified 2022, 2024, 2026): the 'Issues Qualified for the {year} General Election Ballot' section, each issue's text read from its linked 'BALLOT LANGUAGE FOR ...' PDF (the page's own subjects may be paraphrased, by its own footnote). Verified live 2026-09-28: CI-132, CI-133, I-194. Walled by Cloudflare from 2026-10-27; read since from the Internet Archive's captures of the page and statements (verified 2026-10-28, same text). See ballot_measures_mt.py."
     },
     "NM": {
       "source_name": "New Mexico Secretary of State",

@@ -1,9 +1,12 @@
 """The Internet Archive route for a walled state's own document
-(web_archive.py, ballot_measures_oh.fetch_archived). Index answers are the
-Archive's real ones (fixtures_web_archive_cdx.json); the Archive holds no
-capture of Ohio's 2026 sample ballot, so the path that reads one serves the
-state's real sample-ballot pages (fixtures_oh_sample_ballots.json) as the
-capture's parsed body, under a digest computed here."""
+(web_archive.py, ballot_measures_oh.fetch_archived,
+ballot_measures_mt.fetch_archived). Index answers are the Archive's real
+ones (fixtures_web_archive_cdx.json); the Archive holds no capture of Ohio's
+2026 sample ballot, so the path that reads one serves the state's real
+sample-ballot pages (fixtures_oh_sample_ballots.json) as the capture's
+parsed body, under a digest computed here. Montana's are served from its
+real page and statements (fixtures_mt_*), the page's links rewritten to
+captures the way the Archive's replay rewrites them."""
 
 import base64
 import hashlib
@@ -15,6 +18,7 @@ from urllib.parse import urlparse
 import httpx
 import pytest
 
+from app.pipeline.fetch import ballot_measures_mt as mt
 from app.pipeline.fetch import ballot_measures_oh as oh
 from app.pipeline.fetch import web_archive
 
@@ -56,7 +60,7 @@ def _archive(rows_by_url: dict, bodies: dict, seen: list):
         assert "Civitas/1.0" in request.headers["user-agent"]
         if request.url.path == "/cdx/search/cdx":
             return httpx.Response(200, json=rows_by_url.get(request.url.params["url"], []))
-        return httpx.Response(200, content=bodies[str(request.url)])
+        return httpx.Response(200, content=bodies[str(httpx.URL(str(request.url)))])
     return httpx.AsyncClient(transport=httpx.MockTransport(answer))
 
 
@@ -119,9 +123,91 @@ async def test_the_ballot_is_found_from_an_archived_directives_page(ballot_pages
         BALLOT: _row(BALLOT, b"%PDF ballot"),
     }
     bodies = {
-        f"https://web.archive.org/web/{page}id_/{oh.DIRECTIVES_URL}": OH["directives_page"].encode(),
+        f"https://web.archive.org/web/{page}if_/{oh.DIRECTIVES_URL}": OH["directives_page"].encode(),
         f"https://web.archive.org/web/20261021090000id_/{BALLOT}": b"%PDF ballot",
     }
     async with _archive(rows, bodies, []) as client:
         ((three, url),) = await oh.fetch_archived(client, 2026, [])
     assert three["number"] == "3" and url.endswith(BALLOT)
+
+
+MT_PAGE = (HERE / "fixtures_mt_proposed_ballot_issues_2026.html").read_text()
+MT_LANGUAGE = json.loads((HERE / "fixtures_mt_ballot_language_2026.json").read_text())
+MT_FILES = {"CI-132": "72919", "CI-133": "73545", "I-194": "73640"}
+MT_PAGE_STAMP, MT_STAMP = "20261019182544", "20261003010815"
+
+
+def _key(url: str) -> str:
+    return str(httpx.URL(url))
+
+
+def _mt_archive(*, pdf_body=lambda issue: f"%PDF-{issue}".encode(), pdf_host="https://sosmt.gov/"):
+    """Index rows and bodies for Montana's page, its three preview
+    wrappers (replayed, links rewritten) and their statement PDFs (raw)."""
+    page_url = mt.URL_PATTERN.format(year=2026)
+    page = web_archive.Capture(MT_PAGE_STAMP, page_url, "NOTTHEDECODEDBODY")
+    rewritten = MT_PAGE.replace('href="https://sosmt.gov/', f'href="/web/{MT_PAGE_STAMP}/https://sosmt.gov/')
+    rows = {page_url: [["timestamp", "original", "statuscode", "digest"], [page.timestamp, page_url, "200", page.digest]]}
+    bodies = {_key(page.replay_url): rewritten.encode()}
+    for issue, file_id in MT_FILES.items():
+        wrapper_url = next(h for i, h in mt.qualified_issues(MT_PAGE, 2026) if i == issue)
+        wrapper = web_archive.Capture(MT_STAMP, wrapper_url, "NOTTHEDECODEDBODY")
+        pdf_url = f"{pdf_host}wp-content/uploads/wpfd/preview_files/{issue}(abc).pdf"
+        rows[wrapper_url] = [["timestamp", "original", "statuscode", "digest"],
+                             [MT_STAMP, wrapper_url, "200", wrapper.digest]]
+        bodies[_key(wrapper.replay_url)] = (
+            f'<html><body><iframe src="https://web.archive.org/web/{MT_STAMP}if_/{pdf_url}" '
+            f'type="application/pdf"></iframe></body></html>'
+        ).encode()
+        rows[pdf_url] = _row(pdf_url, f"%PDF-{issue}".encode(), MT_STAMP)
+        bodies[_key(f"https://web.archive.org/web/{MT_STAMP}id_/{pdf_url}")] = pdf_body(issue)
+    return rows, bodies
+
+
+@pytest.fixture
+def mt_statements(monkeypatch):
+    monkeypatch.setattr(mt, "_first_page_text", lambda raw: MT_LANGUAGE[raw[len(b"%PDF-"):].decode()])
+
+
+@pytest.mark.asyncio
+async def test_montana_is_read_from_its_archived_page_and_statements(mt_statements):
+    seen = []
+    rows, bodies = _mt_archive()
+    async with _archive(rows, bodies, seen) as client:
+        pairs = await mt.fetch_archived(client, 2026, [])
+    assert [p["number"] for p, _ in pairs] == ["CI-132", "CI-133", "I-194"]
+    for parsed, url in pairs:
+        # The same statement, word for word, as the state's own copy gives.
+        assert parsed == mt.parse_ballot_language(MT_LANGUAGE[parsed["number"]], parsed["number"])
+        assert url == (f"https://web.archive.org/web/{MT_STAMP}/https://sosmt.gov/wp-content/uploads/wpfd/"
+                       f"preview_files/{parsed['number']}(abc).pdf")
+    assert not any("save" in u for u in seen)
+    # Pages are read from the replay; the quoted PDFs raw, digest-checked.
+    assert all("if_/" in u for u in seen if "admin-ajax" in u and "/cdx/" not in u)
+    assert sum("id_/" in u for u in seen) == 3
+
+
+@pytest.mark.asyncio
+async def test_montana_fails_whole_when_one_statement_is_not_the_recorded_capture(mt_statements):
+    rows, bodies = _mt_archive(pdf_body=lambda issue: b"%PDF-CI-132" if issue == "CI-133" else f"%PDF-{issue}".encode())
+    async with _archive(rows, bodies, []) as client:
+        assert await mt.fetch_archived(client, 2026, []) is None
+
+
+@pytest.mark.asyncio
+async def test_montana_statement_off_the_state_host_is_no_copy(mt_statements):
+    rows, bodies = _mt_archive(pdf_host="https://mirror.example.org/")
+    async with _archive(rows, bodies, []) as client:
+        assert await mt.fetch_archived(client, 2026, []) is None
+
+
+def test_montana_is_an_archived_strategy():
+    from app.pipeline.fetch import ballot_measures_pdf as pdf
+
+    assert pdf.ARCHIVED_STRATEGIES["mt_qualified_ballot_issues"] is mt.fetch_archived
+
+
+@pytest.mark.asyncio
+async def test_montana_without_a_capture_of_its_page_is_no_copy(mt_statements):
+    async with _archive({}, {}, []) as client:
+        assert await mt.fetch_archived(client, 2026, []) is None

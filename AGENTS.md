@@ -1117,7 +1117,7 @@ Corollaries that follow from the same rule, all enforced in code:
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
   past the wall itself is not an option: it is the state saying no.
   The Internet Archive's capture of the state's own URL is the same kind
-  of republication (`web_archive.py`, `ARCHIVED_STRATEGIES`; Ohio, 2026-10):
+  of republication (`web_archive.py`, `ARCHIVED_STRATEGIES`; Ohio and Montana, 2026-10):
   the Archive's crawler copied the state's document on the date it
   records, on its own schedule and before Civitas asked, and publishes
   that copy to everyone; reading it from archive.org sends nothing to the

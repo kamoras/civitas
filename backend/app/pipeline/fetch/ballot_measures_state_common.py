@@ -30,6 +30,7 @@ import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
+from app import crawl_policy
 from app.election_calendar import next_election_day
 from app.http_client import is_bot_challenge
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
@@ -120,12 +121,25 @@ async def get_bytes(client: httpx.AsyncClient, url: str, label: str, **kwargs) -
     return await fetch_bytes_with_retry(client, _rate_limiter, url, label, **kwargs)
 
 
+def _raise_if_held_off_by_wall(url: str, label: str) -> None:
+    """A host held off after a wall's challenge is sent nothing
+    (crawl_policy: the request ends in HostRefusing, which reads as a failed
+    fetch). That is still the wall, so it raises SourceBlocked as the
+    challenge did: otherwise a walled host read again inside its backoff
+    (sosmt.gov, 2026-10-28) reads as an outage and never reaches the
+    republished or archived copy."""
+    host = urlparse(url).hostname or ""
+    if crawl_policy.walled(host):
+        raise SourceBlocked(f"{label}: {host} is held off after a bot wall's challenge")
+
+
 async def get_bytes_unless_walled(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
     """get_bytes, except that a bot wall's challenge raises SourceBlocked
     instead of reading as a failed fetch: a state whose page answered but
     whose document behind it is walled (sos.ga.gov's Cloudflare lets some
     requests through, 2026-10-14) is a source that can't be read, not one
     that was read and refused. Any other failure is still None."""
+    _raise_if_held_off_by_wall(url, label)
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS, bot_challenge_ok=True,
     )
@@ -139,6 +153,7 @@ async def get_bytes_unless_walled(client: httpx.AsyncClient, url: str, label: st
 async def get_text_unless_walled(client: httpx.AsyncClient, url: str, label: str) -> str | None:
     """get_text, except that a bot wall's challenge raises SourceBlocked
     (the text counterpart of get_bytes_unless_walled)."""
+    _raise_if_held_off_by_wall(url, label)
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", url, log_label=label, headers=FETCH_HEADERS, bot_challenge_ok=True,
     )

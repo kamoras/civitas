@@ -62,7 +62,7 @@ def _fake_network(monkeypatch, missing=None):
         issue = next(v for k, v in by_file.items() if k in href)
         return None if issue == missing else (issue.encode(), f"https://sosmt.gov/{issue}.pdf")
 
-    monkeypatch.setattr(mt, "fetch_text_with_retry", fake_text)
+    monkeypatch.setattr(mt, "get_text_unless_walled", fake_text)
     monkeypatch.setattr(mt, "_resolve_pdf", fake_resolve)
     monkeypatch.setattr(mt, "_first_page_text", lambda b: LANGUAGE[b.decode()])
 

@@ -32,6 +32,10 @@ def _resp(status, headers=None, body=b""):
     (_resp(200, {"cf-mitigated": "challenge"}, b"<title>Just a moment...</title>"), True),
     (_resp(403, {}, b"<title>Just a moment...</title>"), True),
     (_resp(403, {}, b"Forbidden"), False),
+    # sosmt.gov's Cloudflare firewall page (2026-10-27): no cf-mitigated
+    # header, the site's own script first, Cloudflare's past 4 KB.
+    (_resp(403, {"server": "cloudflare"}, b"<head><script>" + b"x" * 7000 + b"</script></head>"
+           b"Firewall Event Triggered<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'>"), True),
     (_resp(200), False),
     # Akamai's edge answering for the origin (Senate eFD, 2026-10-23).
     (_resp(403, {"server": "AkamaiGHost"}, b"<HTML><HEAD>\n<TITLE>Access Denied</TITLE>"), True),

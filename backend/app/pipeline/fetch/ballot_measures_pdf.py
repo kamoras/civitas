@@ -91,6 +91,7 @@ from app.pipeline.fetch.ballot_measures_ms import fetch_measures as ms_fetch_mea
 from app.pipeline.fetch.ballot_measures_nh import fetch_measures as nh_fetch_measures
 from app.pipeline.fetch.ballot_measures_nv import fetch_measures as nv_fetch_measures
 from app.pipeline.fetch.ballot_measures_nv import fetch_republished as nv_fetch_republished
+from app.pipeline.fetch.ballot_measures_mt import fetch_archived as mt_fetch_archived
 from app.pipeline.fetch.ballot_measures_oh import fetch_archived as oh_fetch_archived
 from app.pipeline.fetch.ballot_measures_oh import fetch_measures as oh_fetch_measures
 from app.pipeline.fetch.ballot_measures_state_common import same_site
@@ -325,6 +326,7 @@ REPUBLISHED_STRATEGIES = {
 # host (_agrees_with_stored).
 ARCHIVED_STRATEGIES = {
     "oh_official_sample_ballot": oh_fetch_archived,
+    "mt_qualified_ballot_issues": mt_fetch_archived,
 }
 # The fields a capture must reproduce exactly: the ballot's words.
 _QUOTED_FIELDS = ("number", "official_title", "official_summary", "yes_means", "no_means")

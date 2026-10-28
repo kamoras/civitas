@@ -181,10 +181,11 @@ _FOOTER_KINDS = {
 }
 
 
-def find_sample_ballot_url(page_html: str, year: int) -> tuple[str | None, bool]:
-    """(url, page_ok): the one sample-ballot link for `year`'s general.
-    page_ok False when it isn't the directives page or the link is
-    ambiguous."""
+def find_sample_ballot_url(page_html: str, year: int, resolve=None) -> tuple[str | None, bool]:
+    """(url, page_ok): the one sample-ballot link for `year`'s general,
+    resolved against the directives page (or by `resolve`, for its Archive
+    replay). page_ok False when it isn't the directives page or the link
+    is ambiguous."""
     tree = lxml_html.fromstring(page_html)
     title = " ".join(" ".join(t.text_content().split()) for t in tree.xpath("//title"))
     if "Directives" not in title:
@@ -198,7 +199,7 @@ def find_sample_ballot_url(page_html: str, year: int) -> tuple[str | None, bool]
             ".pdf" in href.lower() and "sample ballot" in text and "general election" in text
             and date_text in text and not text.startswith("directive")
         ):
-            hrefs.add(urljoin(DIRECTIVES_URL, href))
+            hrefs.add(resolve(href) if resolve else urljoin(DIRECTIVES_URL, href))
     if len(hrefs) > 1:
         return None, False
     return (hrefs.pop() if hrefs else None), True
@@ -483,15 +484,18 @@ async def fetch_archived(
     capture says nothing about Ohio's ballot."""
     candidates: list[str] = []
     page = await web_archive.newest_capture(client, DIRECTIVES_URL)
-    page_raw = await web_archive.read_capture(client, page, verify=False) if page else None
+    page_raw = await web_archive.read_page(client, page) if page else None
     if page_raw is not None:
         try:
-            url, page_ok = find_sample_ballot_url(page_raw.decode("utf-8", "replace"), year)
+            url, page_ok = find_sample_ballot_url(
+                page_raw.decode("utf-8", "replace"), year, lambda href: web_archive.resolve(page, href),
+            )
         except Exception:
             url, page_ok = None, False
         if page_ok and url:
             candidates.append(url)
-    candidates += [u for u in known_urls if u.startswith(_STATE_ASSETS) and u not in candidates]
+    candidates += [u for u in known_urls if u not in candidates]
+    candidates = [u for u in candidates if u.startswith(_STATE_ASSETS)]
     for url in candidates:
         capture = await web_archive.newest_capture(client, url)
         raw = await web_archive.read_capture(client, capture) if capture else None
