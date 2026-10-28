@@ -17,7 +17,7 @@ from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app import environmental
+from app import environmental, source_health
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.config import settings
 from app.database import get_db
@@ -117,6 +117,14 @@ def source_ledger(db: Session) -> list[dict]:
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)) -> JSONResponse:
     return cached_json({"sources": source_ledger(db)}, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/sources/health")
+def sources_health(db: Session = Depends(get_db)) -> JSONResponse:
+    """Every external source and whether Civitas can read it now, for
+    /about/data (app/source_health.py): its state, last good read and the
+    plain reason, without the runs' internals."""
+    return cached_json(source_health.public(source_health.build(db)), max_age=CACHE_TTL_LIST_S)
 
 
 @router.get("/environmental")

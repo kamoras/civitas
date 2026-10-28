@@ -2,6 +2,13 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "source-health-map",
+      "date": "2026-10-26",
+      "title": "Which sources can be read now",
+      "summary": "The data page now lists every source the site reads, whether it answered when last asked, its last good read, and since when and why any source can't be read.",
+      "url": "/about/data#source-health"
+    },
+    {
       "id": "crawler-page",
       "date": "2026-10-25",
       "title": "A page for site owners about the Civitas crawler",
