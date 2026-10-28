@@ -552,6 +552,63 @@ describe("MemberScorecard", () => {
     expect(within(column).queryByText(/Electing a Member/)).not.toBeInTheDocument();
   });
 
+  it("doesn't list the bill the box's headline names again under it", async () => {
+    const config = {
+      industries: {},
+      platformCategories: {},
+      policyAreas: [],
+      billStages: {
+        REFERRED: { name: "Referred to Committee", color: "", order: 2 },
+        PASSED_CHAMBER: { name: "Passed Chamber", color: "", order: 6 },
+        IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "", order: 7 },
+      },
+      substantiveBillTypes: ["HJRES", "HR", "S", "SJRES"],
+    } as AppConfig;
+    const withTwo = {
+      ...member,
+      sponsoredBills: [
+        ...(member.sponsoredBills ?? []),
+        {
+          ...member.sponsoredBills![0],
+          billId: "HR.2",
+          title: "Second Bill Act",
+          stage: "PASSED_CHAMBER",
+        },
+      ],
+    };
+    const boxes = {
+      committees: { count: 0, line: "No committee seats on file", posts: [], items: [] },
+      bills: {
+        kicker: "Bills · this Congress",
+        headline: "H.R. 1373 passed the House",
+        dek: "Tennessee Valley Authority Transparency Act of 2025. Latest action June 1, 2025.",
+        figure: null,
+        billId: "HR.1373",
+      },
+    } as unknown as MemberBoxes;
+    render(
+      <ConfigProvider value={config}>
+        <main>
+          <MemberScorecard
+            member={withTwo}
+            chamber="house"
+            breakdown={breakdown}
+            district={2}
+            committees={[]}
+            boxes={boxes}
+          />
+        </main>
+      </ConfigProvider>
+    );
+    const column = document.getElementById("legislative-effectiveness")!;
+    expect(within(column).getByText("Next furthest along")).toBeInTheDocument();
+    expect(within(column).getByText("Second Bill Act")).toBeInTheDocument();
+    // Named once: in the box's line, not again in the list.
+    expect(within(column).getAllByText(/Tennessee Valley Authority Transparency Act/)).toHaveLength(
+      1
+    );
+  });
+
   it("leads each column with the API's finding, with no 0 to 100 score behind it", async () => {
     const withFindings = {
       fundingIndependence: {
@@ -680,13 +737,13 @@ describe("MemberScorecard", () => {
       },
       fundingElectionYear: 2024,
       money: line("Money · 2024 election", "$1.2M", "in contributions", "Money line."),
-      votes: line(
-        "Votes · this Congress",
-        "6 of 76",
-        "party-line votes against the party",
-        "Votes line."
-      ),
-      bills: line("Bills · this Congress", "4 of 65", "passed the House", "Bills line."),
+      votes: line("Votes · this Congress", "4", "breaks were on nominations", "Votes line."),
+      bills: {
+        kicker: "Bills · this Congress",
+        headline: "H.R. 12 passed the House",
+        dek: "Bills line.",
+        figure: null,
+      },
       president: null,
       approval: null,
       holdings: null,
@@ -724,8 +781,15 @@ describe("MemberScorecard", () => {
     expect(within(money).getByText("$1.2M")).toBeInTheDocument();
     expect(within(money).getByText("Money line.")).toBeInTheDocument();
     expect(
-      within(document.getElementById("legislative-effectiveness")!).getByText("passed the House")
+      within(document.getElementById("legislative-effectiveness")!).getByText(
+        "H.R. 12 passed the House"
+      )
     ).toBeInTheDocument();
+    // Each fact once: the rates and shares are the peer strips', so the
+    // boxes don't restate them (no seat-norm scale, no share sentences).
+    expect(screen.queryByText(/seat norm/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Voted against most Republicans/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/came from PACs/)).not.toBeInTheDocument();
     // No box for what the backend says isn't on record.
     expect(document.getElementById("with-the-president")).toBeNull();
     expect(document.getElementById("approval")).toBeNull();

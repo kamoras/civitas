@@ -6,6 +6,8 @@ import {
   Senator,
 } from "@/types/senator";
 import type { CommentWindow } from "@/types/commentWindow";
+import type { ReadoutMark } from "@/types/readout";
+import type { AdminSourceHealth } from "@/types/sources";
 import type { JusticeCasePage } from "@/types/court";
 import type { AppointedJustice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
@@ -1652,6 +1654,44 @@ export interface ApiUsage {
 
 export async function fetchAdminApiUsage(token: string, days: number = 30): Promise<ApiUsage> {
   return requestJson(`${API_BASE}/admin/api-usage?days=${days}`, "API usage failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+/** Expected source failures by host (GET /api/admin/source-failures):
+ *  steps that failed because a source refused Civitas or couldn't be read,
+ *  counted per host and kind. Every figure and word is the backend's. */
+export interface SourceFailureHost {
+  host: string;
+  total: number;
+  byKind: Record<string, number>;
+  /** "stock trades · senate_ptr": the runs and steps that met it. */
+  steps: string[];
+  lastDate: string;
+  /** The bar's length against the host with the most, 0-100. */
+  barPct: number;
+  mark: ReadoutMark;
+}
+
+export interface SourceFailures {
+  days: number;
+  since: string;
+  total: number;
+  hosts: SourceFailureHost[];
+}
+
+export async function fetchAdminSourceFailures(
+  token: string,
+  days: number = 30
+): Promise<SourceFailures> {
+  return requestJson(`${API_BASE}/admin/source-failures?days=${days}`, "Source failures failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+/** Every external source and its health (GET /api/admin/source-health). */
+export async function fetchAdminSourceHealth(token: string): Promise<AdminSourceHealth> {
+  return requestJson(`${API_BASE}/admin/source-health`, "Source health failed", {
     init: { headers: adminHeaders(token) },
   });
 }

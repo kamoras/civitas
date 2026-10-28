@@ -84,6 +84,19 @@ describe("admin dashboard load", () => {
     expect(within(system).queryByText("0 B")).not.toBeInTheDocument();
   });
 
+  it("keeps one line about alerts on Overview, linking to the Alerts tab with the list", async () => {
+    stubBackend("/nothing-fails");
+    render(<AdminPage />);
+    const line = await screen.findByRole("button", { name: "1 open alert →" });
+    expect(screen.queryByText("Stale news feed: Roll Call")).not.toBeInTheDocument();
+    fireEvent.click(line);
+    const alerts = screen.getByRole("tabpanel");
+    expect(screen.getByRole("tab", { name: "Alerts" })).toHaveAttribute("aria-selected", "true");
+    expect(within(alerts).getByRole("region", { name: "Active alerts" })).toHaveTextContent(
+      "Stale news feed: Roll Call"
+    );
+  });
+
   // The same shape in the tabs' own requests: a failure became an empty
   // list, which read as "no visits" and "0 runs, 0 failed".
   it("says a tab's own request failed rather than showing nothing found", async () => {

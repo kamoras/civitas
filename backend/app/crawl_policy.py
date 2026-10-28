@@ -49,8 +49,9 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from app import crawler
+from app import crawler, source_reads
 from app.atomic_write import runtime_data_path, write_text_atomic
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.fetch import robots
 from app.site_url import SITE_DOMAIN
 
@@ -66,9 +67,11 @@ ROBOTS_RETRY_S = 3600.0
 STATE_FILE = "host_refusals.json"
 
 
-class HostRefusing(httpx.TransportError):
+class HostRefusing(ExpectedSourceFailure, httpx.TransportError):
     """No request was sent: the host is refusing Civitas, or its pace would
     make the request wait too long."""
+
+    failure_kind = "refused"
 
     def __init__(self, host: str, reason: str, until: float | None = None):
         self.host, self.reason, self.until = host, reason, until
@@ -219,6 +222,7 @@ def observe(url: httpx.URL, response: httpx.Response, is_challenge: bool) -> Non
     """What the host's answer means for the next request to it."""
     host = url.host.lower()
     status = response.status_code
+    source_reads.answered(host, status, is_challenge)
     retry_after = retry_after_s(response) if status in (429, 503) else None
     if is_challenge:
         record_refusal(host, f"a bot wall's challenge (HTTP {status})", retry_after)
@@ -289,6 +293,7 @@ def _release(host: str) -> None:
 def _check(host: str) -> None:
     entry = refusing(host)
     if entry:
+        source_reads.held_off(host, entry.get("reason") or "")
         raise HostRefusing(host, f"refusing Civitas ({entry.get('reason')})", entry.get("until"))
 
 

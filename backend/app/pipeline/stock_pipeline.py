@@ -30,7 +30,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.error_utils import record_exception
+from app.error_utils import SourceUnavailable, record_exception
 from app.http_client import make_async_client
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.models import (
@@ -55,6 +55,7 @@ from app.pipeline.filer_matching import match_representative as _match_represent
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_fd import is_senator_filing
 from app.pipeline.fetch.senate_ptr import (
+    EFD_HOST,
     SearchUnavailable,
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
@@ -443,7 +444,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     # A session or a search that fails raises, failing the step with its
     # cause: returning 0 here read an outage as a night with no new trades.
     if await senate_accept_terms(client) is None:
-        raise RuntimeError("Could not establish a Senate eFD session")
+        raise SourceUnavailable("Could not establish a Senate eFD session", host=EFD_HOST)
 
     filings = await _with_missing_originals(db, await search_ptr_filings(since_date))
     inserted = 0

@@ -26,8 +26,18 @@ string and the server log, and a deploy replaces the container and its log:
 a failed Senate run's cause could not be recovered the same day.
 """
 
+import logging
 import re
 import traceback
+
+import httpx
+from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.orm import object_session
+
+from app.models import SourceFailureCount
+from app.time_utils import utcnow
+
+logger = logging.getLogger(__name__)
 
 _SENSITIVE_QUERY_PARAM_RE = re.compile(
     r"([?&](?:api[_-]?key|token|secret|password)=)[^&\s]*", re.IGNORECASE
@@ -45,11 +55,81 @@ def redact_sensitive_params(text: str) -> str:
 TRACEBACK_CHARS = 4096
 
 
+class ExpectedSourceFailure:
+    """Marks an exception that means a source refused Civitas or could not
+    be read: a bot wall, an outage, a feed that isn't this election's count.
+    The raiser already explains it, so a run row and an alert carry its one
+    line and no traceback or raising frame, which would read as a crash.
+    Mix it in ahead of the exception base (``class EfdRefused(
+    ExpectedSourceFailure, RuntimeError)``); any exception without it keeps
+    its traceback.
+
+    ``failure_kind`` is what the source did, for the daily counter
+    (SourceFailureCount): walled (a bot wall's challenge), refused (a
+    host's refusal or a refused session), unavailable (an outage or an
+    unreadable answer), untrusted (an answer that isn't the record asked
+    for). ``source_host`` names the host where the class always means one;
+    an instance's ``host`` attribute, or the request of the httpx error it
+    was raised from, wins over it."""
+
+    failure_kind = "unavailable"
+    source_host = ""
+
+
+class SourceUnavailable(ExpectedSourceFailure, RuntimeError):
+    """A step found its source refusing or unreachable and has no more
+    specific exception to raise."""
+
+    def __init__(self, message: str, *, host: str = "", kind: str = "unavailable"):
+        super().__init__(message)
+        self.host, self.failure_kind = host, kind
+
+
+def failure_host(exc: BaseException) -> str:
+    """The host an expected failure is about: the exception's own ``host``,
+    else the request of an httpx error in its chain, else its class's
+    ``source_host``, else "unknown"."""
+    if host := getattr(exc, "host", None):
+        return str(host)
+    seen, link = set(), exc
+    while link is not None and id(link) not in seen:
+        seen.add(id(link))
+        if isinstance(link, httpx.HTTPError):
+            try:
+                return link.request.url.host
+            except RuntimeError:  # an httpx error built without its request
+                pass
+        link = link.__cause__ or link.__context__
+    return getattr(exc, "source_host", "") or "unknown"
+
+
+def count_source_failure(db, run_kind: str, step: str | None, exc: BaseException) -> None:
+    """One more expected source failure today for (run kind, step, host,
+    kind). Added to ``db``'s transaction in a savepoint, for the caller to
+    commit; a failed write is logged and never disturbs the caller's."""
+    if not isinstance(exc, ExpectedSourceFailure):
+        return
+    row = {
+        "date": utcnow().date().isoformat(), "run_kind": run_kind[:64], "step": (step or "")[:64],
+        "host": failure_host(exc)[:128], "kind": exc.failure_kind, "count": 1,
+    }
+    try:
+        with db.begin_nested():
+            db.execute(
+                insert(SourceFailureCount).values(**row).on_conflict_do_update(
+                    index_elements=["date", "run_kind", "step", "host", "kind"],
+                    set_={"count": SourceFailureCount.count + 1},
+                )
+            )
+    except Exception:
+        logger.warning("Source failure count not recorded for %s/%s", run_kind, step, exc_info=True)
+
+
 def exception_summary(exc: BaseException, where: str | None = None) -> str:
     """One line: ``where: Type: message (file:line in function)``, the
     innermost frame being where it raised, credential parameters redacted.
-    What an alert carries."""
-    frames = traceback.extract_tb(exc.__traceback__)
+    What an alert carries. An ExpectedSourceFailure gives no frame."""
+    frames = [] if isinstance(exc, ExpectedSourceFailure) else traceback.extract_tb(exc.__traceback__)
     at = f" ({frames[-1].filename.rsplit('/', 1)[-1]}:{frames[-1].lineno} in {frames[-1].name})" if frames else ""
     message = " ".join(str(exc).split())[:500]
     return redact_sensitive_params(
@@ -59,7 +139,10 @@ def exception_summary(exc: BaseException, where: str | None = None) -> str:
 
 def exception_detail(exc: BaseException, where: str | None = None) -> str:
     """exception_summary's line, then the last TRACEBACK_CHARS of the
-    traceback, credential parameters redacted."""
+    traceback, credential parameters redacted. An ExpectedSourceFailure is
+    its line alone."""
+    if isinstance(exc, ExpectedSourceFailure):
+        return exception_summary(exc, where)
     trace = "".join(traceback.format_exception(exc))
     if len(trace) > TRACEBACK_CHARS:
         trace = "…" + trace[-TRACEBACK_CHARS:]
@@ -69,8 +152,11 @@ def exception_detail(exc: BaseException, where: str | None = None) -> str:
 def record_exception(run, exc: BaseException, where: str | None = None) -> str:
     """Add ``exc`` to ``run.error_detail`` (after anything earlier in the
     same run, such as a step that failed before it) and return its summary
-    line. The caller commits."""
+    line, and counts an ExpectedSourceFailure (count_source_failure). The
+    caller commits."""
     detail = exception_detail(exc, where)
+    if isinstance(exc, ExpectedSourceFailure) and (db := object_session(run)) is not None:
+        count_source_failure(db, getattr(run, "__tablename__", type(run).__name__), where, exc)
     earlier = getattr(run, "error_detail", None)
     run.error_detail = f"{earlier}\n\n{detail}" if earlier else detail
     return detail.split("\n", 1)[0]

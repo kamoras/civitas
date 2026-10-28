@@ -167,7 +167,8 @@ export interface MemberBoxes {
   fundingElectionYear: number | null;
   money: MemberBox;
   votes: MemberBox;
-  bills: MemberBox;
+  /** `billId`: the bill the headline names. */
+  bills: MemberBox & { billId?: string | null };
   president: (MemberBox & { finding: string; verdict: string | null }) | null;
   approval: MemberBox | null;
   holdings: MemberBox | null;

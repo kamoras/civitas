@@ -2474,6 +2474,53 @@ class PipelineRateLimitStat(Base):
     )
 
 
+class SourceReadStat(Base):
+    """Which hosts one pipeline step read, how many of its requests each
+    answered or failed, and whether the step failed on the host (app/source_reads.py, diffed over the step's
+    window by ProgressTracker, as PipelineRateLimitStat is). What the
+    source map (app/source_health.py) reads for the runs and steps that
+    read a host and whether the latest run read it at all. Same caveat as
+    the rate-limit rows: the hourly Action Center refresh runs beside the
+    chain, and its requests in a step's window are counted to that step."""
+    __tablename__ = "source_read_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    host: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The step failed on this host: it ended on an ExpectedSourceFailure
+    # naming it (a bot wall, a refusal, an outage). What tells a good read,
+    # a step that got what it came for, from a 200 on the way to a refusal
+    # (eFD's home page loads, then its terms agreement is refused).
+    failed_on_host: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("run_kind", "run_id", "step_key", "host", name="uq_source_read_stat_run_step_host"),
+    )
+
+
+class SourceFailureCount(Base):
+    """Expected source failures, as daily counters: a step that failed
+    because its source refused Civitas or could not be read
+    (error_utils.ExpectedSourceFailure: a bot wall, a host's refusal, an
+    outage, a feed that isn't this election's count). One counter per
+    (UTC day, run kind, step, host, kind), never per request: the run row
+    and the alert carry the one-line reason, and this says how often and
+    where. A crash is not counted here; its traceback is on the run row."""
+    __tablename__ = "source_failure_counts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    run_kind: Mapped[str] = mapped_column(String(64), primary_key=True)  # the run table's name
+    step: Mapped[str] = mapped_column(String(64), primary_key=True)  # "" when the run named none
+    host: Mapped[str] = mapped_column(String(128), primary_key=True)  # "unknown" when nothing names it
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)  # walled | refused | unavailable | untrusted
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class MemberIdAlias(Base):
     """A member id that was renamed (app/member_ids.py), and the id it
     became: posts and search engines still hold URLs under the old one, so

@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.error_utils import ExpectedSourceFailure
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -23,10 +24,12 @@ _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 _STALE_TEXT_HOURS = 24 * 365 * 2
 
 
-class GovinfoUnavailable(RuntimeError):
+class GovinfoUnavailable(ExpectedSourceFailure, RuntimeError):
     """GovInfo could not be read for a bill (not a 404) and nothing earlier
     is cached: the caller names the bill rather than classify it as one with
     no text published."""
+
+    source_host = "api.govinfo.gov"
 
 
 async def fetch_bill_package(

@@ -22,8 +22,9 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.error_utils import record_exception
+from app.error_utils import ExpectedSourceFailure, failure_host, record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app import source_reads
 from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
 
@@ -50,6 +51,7 @@ class ProgressTracker:
         # Rate-limiter counter snapshots taken at each step's begin(), so a
         # terminal transition can persist the delta over that step's window.
         self._rl_baselines: dict[str, dict] = {}
+        self._read_baselines: dict[str, dict] = {}
         self._last_heartbeat = 0.0
         for key, phase, label in steps:
             self._steps[key] = {
@@ -73,6 +75,7 @@ class ProgressTracker:
         # rather than at terminal time so the delta covers exactly the
         # step's own window.
         self._rl_baselines[key] = rate_limiter.snapshot()
+        self._read_baselines[key] = source_reads.counts()
         self._flush()
 
     def update(self, key: str, *, done: int | None = None, detail: str | None = None) -> None:
@@ -161,7 +164,8 @@ class ProgressTracker:
         error = sys.exception()
         cause = record_exception(self._run, error, key) if error is not None else None
         self._flush()
-        self._record_timing(step)
+        # The host a source failure names: the step failed on that host.
+        self._record_timing(step, failed_host=failure_host(error) if isinstance(error, ExpectedSourceFailure) else None)
         # Every caller logs the exception and carries on, and the run still
         # ends "completed" — so without this a failed step is visible only
         # to someone reading that night's logs. Supplementary's justice step
@@ -172,7 +176,10 @@ class ProgressTracker:
             f"{pipeline}: step {key} failed",
             f"{pipeline} step '{key}' failed and the run continued without it"
             + (f": {detail}" if detail else "") + "."
-            + (f" Cause: {cause}. The traceback is on the run row (admin, Pipelines)." if cause else ""),
+            # A cause that ends a sentence of its own (EfdRefused's) keeps one full stop.
+            + (f" Cause: {cause.rstrip('.')}." if cause else "")
+            + (" The traceback is on the run row (admin, Pipelines)."
+               if cause and not isinstance(error, ExpectedSourceFailure) else ""),
             dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
             condition=self._failed_condition(key),
         )
@@ -201,7 +208,7 @@ class ProgressTracker:
             logger.debug("Progress commit failed, rolling back", exc_info=True)
             self._db.rollback()
 
-    def _record_timing(self, step: dict) -> None:
+    def _record_timing(self, step: dict, failed_host: str | None = None) -> None:
         """Persist one durable timing row for a step that just reached a
         terminal state.
 
@@ -259,6 +266,7 @@ class ProgressTracker:
                 logger.debug("Phase timing rollback failed", exc_info=True)
 
         self._record_rate_limit_stats(step, run_kind, run_id)
+        self._record_source_reads(step, run_kind, run_id, failed_host)
 
     def _record_rate_limit_stats(self, step: dict, run_kind: str, run_id: int) -> None:
         """Persist how much of this step was spent blocked on each source's
@@ -311,6 +319,47 @@ class ProgressTracker:
                 self._db.rollback()
             except Exception:
                 logger.debug("Rate limit stat rollback failed", exc_info=True)
+
+
+    def _record_source_reads(
+        self, step: dict, run_kind: str, run_id: int, failed_host: str | None = None,
+    ) -> None:
+        """Persist which hosts this step read, how many of its requests each
+        answered or failed (app/source_reads.py), and the host the step
+        failed on (`failed_host`, from its ExpectedSourceFailure: a row of
+        its own when no request reached it, as when eFD's refusal is known
+        before asking), then write the process's host records so the source
+        map is current as of the step.
+        Same posture as the rate-limit rows: its own commit, every failure
+        swallowed."""
+        from app.models import SourceReadStat
+
+        baseline = self._read_baselines.pop(step["key"], None)
+        if baseline is None:
+            return
+        try:
+            reads = source_reads.diff(baseline, source_reads.counts())
+            if failed_host and failed_host != "unknown":
+                reads.setdefault(failed_host, (0, 0))
+            for host, (answered, failed) in reads.items():
+                row = (
+                    self._db.query(SourceReadStat)
+                    .filter_by(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
+                    .one_or_none()
+                )
+                if row is None:
+                    row = SourceReadStat(run_kind=run_kind, run_id=run_id, step_key=step["key"], host=host)
+                    self._db.add(row)
+                row.answered, row.failed, row.recorded_at = answered, failed, utcnow()
+                row.failed_on_host = host == failed_host
+            self._db.commit()
+        except Exception:
+            logger.debug("Source read write failed for %s/%s", run_kind, step.get("key"), exc_info=True)
+            try:
+                self._db.rollback()
+            except Exception:
+                logger.debug("Source read rollback failed", exc_info=True)
+        source_reads.flush()
 
 
 def _parse_iso(value) -> "datetime | None":
