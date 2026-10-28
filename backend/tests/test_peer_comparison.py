@@ -238,3 +238,13 @@ def test_votes_with_the_president_is_the_fifth_row_with_its_own_rule(monkeypatch
     monkeypatch.setattr(pc, "support_chamber_view", lambda db, chamber: None)
     out = pc.chamber_measures(None, "senate")
     assert len(out["measures"]) == 4 and out["members"][0]["presidentVotes"] is None
+
+
+def test_the_breaks_sentence_states_the_rate_in_the_ticks_unit(monkeypatch):
+    """The strip's tick is the seat's average rate, so the sentence gives
+    the member's own rate beside the count (16 of 499 is 3.2%)."""
+    peers = [_member(f"d{i}", breaks=i, votes=499) for i in range(25)]
+    me = _member("me", breaks=16, votes=499)
+    _rows(monkeypatch, peers + [me])
+    breaks = {m["key"]: m for m in pc.peer_comparison(None, "senate", "me")["measures"]}["breaks"]
+    assert breaks["sentence"].startswith("Broke with the party on 16 of 499 party-line votes (3.2%). ")

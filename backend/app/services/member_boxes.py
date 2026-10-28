@@ -19,11 +19,15 @@ from sqlalchemy.orm import Session
 from app.election_calendar import class_up, senator_class
 from app.election_phase import active_election
 from app.live_results.sync import elected_congress_sits
+from app.config_definitions import BILL_STAGES
 from app.models import PresidentialSupport
 from app.peer_comparison import SUPPORT_RULE
+from app.pipeline.analyze.score_calculator import SUBSTANTIVE_BILL_TYPES
 from app.readout import compact_money, seat_name
 from app.score_display import shown_share
+from app.services.congress_service import bill_label
 from app.services.constituent_survey import survey_year
+from app.services.record_cards import long_date
 from app.services.presidential_support_service import summary as support_summary
 
 _PLURAL = {"D": "Democrats", "R": "Republicans", "I": "independents"}
@@ -37,6 +41,9 @@ VERDICT = {
     "more": "more often than expected",
     "less": "less often than expected",
 }
+# Top donors that aren't donors to the member: the member's own committee
+# and self-funding (the Money box's donor list leaves them out too).
+_NOT_DONORS = {"CandidateAffiliated", "Self-Funded"}
 # A Senate seat comes up every six years: three cycles of two.
 _SENATE_TERM_CYCLES = 3
 
@@ -47,6 +54,13 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
 
 def _stat(value: float, text: str, caption: str) -> dict:
     return {"type": "stat", "value": value, "text": text, "caption": caption}
+
+
+def _dated(what: str, iso: str | None) -> str:
+    """"Newest on October 9, 2026.": a date in the site's wording, or "" when
+    there is none to state."""
+    day = long_date(iso)
+    return f"{what} {day}." if day else ""
 
 
 def short_committee(name: str) -> str:
@@ -109,49 +123,125 @@ def ballot_line(db: Session, branch: str, entity, on_ballot: dict | None, seat_r
             "raceId": None}
 
 
-def money_box(funding: dict | None, election_year: int | None, dimension: dict | None) -> dict:
+def money_box(funding: dict | None, election_year: int | None) -> dict:
+    """The money's total and its largest donor. The PAC and small-gift
+    shares are "Where <name> stands"'s strips, so the box states neither
+    (each fact once on the page); its line names who gave, the record
+    behind those shares."""
     when = f"{election_year} election" if election_year else "most recent completed election"
     total = (funding or {}).get("totalContributions") or (funding or {}).get("totalRaised") or 0
-    box = {"kicker": f"Money · {when}", "dek": (dimension or {}).get("finding")}
+    donor = next((d for d in (funding or {}).get("topDonors") or []
+                  if d.get("type") not in _NOT_DONORS and (d.get("total") or 0) > 0), None)
+    # An employer's line is its employees' gifts, as the donor list says.
+    who = f"{donor['name']} employees" if donor and donor.get("type") == "Org/Employees" else (donor or {}).get("name")
+    dek = f"Largest donor: {who}, ${donor['total']:,.0f}." if donor else None
+    box = {"kicker": f"Money · {when}", "dek": dek}
     if total <= 0:
         return {**box, "headline": "No contributions on file", "figure": None}
     shown = compact_money(total)
     return {**box, "headline": f"{shown} in contributions", "figure": _stat(total, shown, "in contributions")}
 
 
+# What a break was a vote on, one and many, in the order a tie is told.
+_BREAK_KINDS = {
+    "nominations": ("a nomination", "nominations"),
+    "amendments": ("an amendment", "amendments"),
+    "bills": ("a bill or resolution", "bills and resolutions"),
+    "other": ("another question", "other questions"),
+}
+
+
+def _break_kind(vote: dict) -> str:
+    """What a break was a vote on, from the roll call's own fields."""
+    rc = vote.get("rollCall") or {}
+    if rc.get("nominationVote"):
+        return "nominations"
+    if rc.get("amendment"):
+        return "amendments"
+    return "bills" if rc.get("billId") else "other"
+
+
 def votes_box(dimension: dict | None) -> dict:
+    """What the member's breaks with the party were votes on. How many
+    there were, against the seat and the peers, is "Where <name> stands"'s
+    strip, so the box leads with the breaks themselves: the kind most of
+    them were (nominations, bills), the rest, and the newest one's date."""
     facts = (dimension or {}).get("facts") or {}
-    box = {"kicker": "Votes · this Congress", "dek": (dimension or {}).get("finding")}
-    votes, breaks = facts.get("partyVotes") or 0, facts.get("breaks")
-    if not votes:
-        return {**box, "headline": "No party-line votes on record yet", "figure": None}
-    if breaks is None:
-        return {**box, "headline": f"{_plural(votes, 'party-line vote')} on record", "figure": None}
-    text = f"{breaks:,} of {votes:,}"
-    caption = "party-line votes against the party" if votes != 1 else "party-line vote against the party"
-    return {**box, "headline": f"{text} {caption}", "figure": _stat(breaks, text, caption)}
+    box = {"kicker": "Votes · this Congress", "dek": None, "figure": None}
+    listed = facts.get("breakVotes")
+    if not facts.get("partyVotes"):
+        return {**box, "headline": "No party-line votes on record yet"}
+    if listed is None:
+        # Before the whole-Congress record is measured, the list behind
+        # More is the stored votes; the count is the strip's.
+        return {**box, "headline": "Votes against the party, as recorded"}
+    if not listed:
+        flank = len(facts.get("flankBreakVotes") or [])
+        if not flank:
+            return {**box, "headline": "No votes against the party to list"}
+        text = f"{flank:,}"
+        caption = ("vote against the party from its flank, not counted" if flank == 1
+                   else "votes against the party from its flank, not counted")
+        return {**box, "headline": f"{text} {caption}", "figure": _stat(flank, text, caption)}
+    counts = {k: 0 for k in _BREAK_KINDS}
+    for v in listed:
+        counts[_break_kind(v)] += 1
+    kinds = sorted((k for k in counts if counts[k]), key=lambda k: -counts[k])
+    lead, n = kinds[0], counts[kinds[0]]
+    dates = [d for d in ((v.get("rollCall") or {}).get("date") for v in listed) if d]
+    newest = _dated("Newest on", max(dates)) if dates else ""
+    if len(kinds) == 1:
+        # One kind: its count would be the strip's count again, so no figure.
+        headline = (f"The break was on {_BREAK_KINDS[lead][0]}" if n == 1
+                    else f"Every break was on {_BREAK_KINDS[lead][1]}")
+        return {**box, "headline": headline, "dek": newest or None}
+    text = f"{n:,}"
+    caption = f"break was on {_BREAK_KINDS[lead][0]}" if n == 1 else f"breaks were on {_BREAK_KINDS[lead][1]}"
+    rest = ", ".join(f"{counts[k]:,} on {_BREAK_KINDS[k][0 if counts[k] == 1 else 1]}" for k in kinds[1:])
+    dek = " ".join(p for p in (f"{rest[0].upper()}{rest[1:]}.", newest) if p)
+    return {**box, "headline": f"{text} {caption}", "dek": dek, "figure": _stat(n, text, caption)}
 
 
-def bills_box(dimension: dict | None, branch: str) -> dict:
-    """How far the member's bills got, by the same stages and the same
-    precedence as the finding beneath it (score_findings.effectiveness_finding)."""
-    facts = (dimension or {}).get("facts") or {}
-    box = {"kicker": "Bills · this Congress", "dek": (dimension or {}).get("finding")}
-    bills = facts.get("bills")
-    stages = facts.get("billsByStage")
-    if not bills or not stages:
-        return {**box, "headline": "No bills sponsored this Congress", "figure": None}
-    _, committee, beyond, passed, law = stages
-    if law:
-        count, caption = law, "became law"
-    elif passed:
-        count, caption = passed, f"passed {_CHAMBER[branch]}"
-    elif committee + beyond:
-        count, caption = committee + beyond, "got committee action"
+# A sponsored bill's furthest stage as the box says it, by BILL_STAGES code.
+_STAGE_PHRASE = {
+    "ENACTED": "became law",
+    "VETOED": "was vetoed",
+    "TO_PRESIDENT": "went to the president",
+    "PASSED_BOTH": "passed both chambers",
+    "IN_OTHER_CHAMBER": "passed {chamber}",
+    "PASSED_CHAMBER": "passed {chamber}",
+    "ON_FLOOR": "reached the floor",
+    "REPORTED": "was reported by committee",
+    "IN_COMMITTEE": "got committee action",
+}
+
+
+def bills_box(bills: list[dict] | None, branch: str) -> dict:
+    """The member's bill furthest along, named, with its title and latest
+    action. How many bills got how far is "Where <name> stands"'s strip and
+    the box's stage chart, so the box names the bill. With none past
+    referral, the newest bill. Bills and joint resolutions only, as the
+    counts take them."""
+    box = {"kicker": "Bills · this Congress", "figure": None}
+    own = [b for b in bills or []
+           if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES and bill_label(b.get("billId"))]
+    if not own:
+        return {**box, "headline": "No bills sponsored this Congress", "dek": None, "billId": None}
+    top = max(own, key=lambda b: ((BILL_STAGES.get(b.get("stage") or "") or {}).get("order", 0),
+                                  b.get("latestActionDate") or "", b.get("introducedDate") or ""))
+    phrase = _STAGE_PHRASE.get(top.get("stage") or "")
+    if phrase:
+        headline = f"{bill_label(top['billId'])} {phrase.format(chamber=_CHAMBER[branch])}"
+        when = _dated("Latest action", top.get("latestActionDate"))
     else:
-        count, caption = 0, "moved past introduction"
-    text = f"{count:,} of {bills:,}"
-    return {**box, "headline": f"{text} {caption}", "figure": _stat(count, text, caption)}
+        top = max(own, key=lambda b: b.get("introducedDate") or "")
+        headline = f"Newest bill: {bill_label(top['billId'])}"
+        when = _dated("Introduced", top.get("introducedDate"))
+    title = (top.get("title") or "").rstrip(".")
+    # The bill named, so its More can list the others without it again.
+    return {**box, "headline": headline, "billId": top["billId"],
+            "dek": " ".join(p for p in (f"{title}." if title else "", when) if p)
+            or None}
 
 
 def president_box(db: Session, member_id: str) -> dict | None:
@@ -207,7 +297,7 @@ def holdings_box(holdings) -> dict | None:
     if holdings is None or not holdings.available:
         return None
     kicker = f"Holdings · {holdings.report_label}" if holdings.report_label else "Holdings"
-    filed = f"Filed {holdings.filed_date}." if holdings.filed_date else None
+    filed = _dated("Filed", holdings.filed_date) or None
     if not holdings.parsed:
         return {"kicker": kicker, "headline": "Report on file could not be read", "dek": filed, "figure": None}
     n = holdings.holdings_count
@@ -267,10 +357,9 @@ def boxes(db: Session, branch: str, entity, identity: dict, scorecard: dict | No
         "committees": committees_box(identity.get("committees") or []),
         "ballot": ballot_line(db, branch, entity, on_ballot, seat_race),
         "fundingElectionYear": getattr(entity, "funding_election_year", None),
-        "money": money_box(scorecard.get("funding"), getattr(entity, "funding_election_year", None),
-                           breakdown.get("fundingIndependence")),
+        "money": money_box(scorecard.get("funding"), getattr(entity, "funding_election_year", None)),
         "votes": votes_box(breakdown.get("constituentAlignment")),
-        "bills": bills_box(breakdown.get("legislativeEffectiveness"), branch),
+        "bills": bills_box(scorecard.get("sponsoredBills"), branch),
         "president": president_box(db, entity.id),
         "approval": approval_box(scorecard.get("constituentApproval"), party, identity.get("stateName") or "",
                                  district),
