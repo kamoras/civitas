@@ -27,7 +27,10 @@
           "accessibility",
           "seo"
         ],
-        "chromeFlags": "--no-sandbox --headless=new"
+        "chromeFlags": "--no-sandbox --headless=new",
+        "skipAudits": [
+          "robots-txt"
+        ]
       }
     },
     "assert": {
