@@ -100,7 +100,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
-from app import crawl_policy
+from app import crawl_policy, source_reads
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.contact import HOST_USER_AGENTS, USER_AGENT, user_agent_for
 from app.web_bot_auth import resign, sign_request, signed_headers
@@ -295,7 +295,11 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
                 is_bot_challenge,
             )
         async with crawl_policy.slot(url):
-            response = await self._send_completing_chain(request, **kwargs)
+            try:
+                response = await self._send_completing_chain(request, **kwargs)
+            except httpx.TransportError as exc:
+                source_reads.unanswered(url.host, exc)
+                raise
         crawl_policy.observe(url, response, is_bot_challenge(response))
         return response
 
@@ -435,6 +439,13 @@ def observe_answer(url: str | httpx.URL, status: int, headers: Any, body: bytes 
     crawl_policy.observe(url, response, is_bot_challenge(response))
 
 
+def observe_unanswered(url: str | httpx.URL, exc: BaseException) -> None:
+    """Record a blocking request that got no answer (any client's)."""
+    url = httpx.URL(str(url))
+    if crawl_policy.governed(url):
+        source_reads.unanswered(url.host, exc)
+
+
 def source_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
     """httpx.request for a blocking read of a source: Civitas's User-Agent
     (a caller's own wins), and the source's manners (source_gate)."""
@@ -448,10 +459,14 @@ def source_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
     send = {"GET": httpx.get, "HEAD": httpx.head}.get(method.upper())
     kwargs.setdefault("verify", TLS_CONTEXT)
     with source_gate(url, method):
-        if send is not None:
-            response = send(url, headers=signed_headers(url, headers), **kwargs)
-        else:
-            response = httpx.request(method, url, headers=signed_headers(url, headers), **kwargs)
+        try:
+            if send is not None:
+                response = send(url, headers=signed_headers(url, headers), **kwargs)
+            else:
+                response = httpx.request(method, url, headers=signed_headers(url, headers), **kwargs)
+        except httpx.TransportError as exc:
+            observe_unanswered(url, exc)
+            raise
     if crawl_policy.governed(httpx.URL(url)) and isinstance(response, httpx.Response):
         crawl_policy.observe(httpx.URL(url), response, is_bot_challenge(response))
     return response

@@ -221,6 +221,12 @@ class TestSameMethodDrift:
     def test_ordinary_nights_stay_quiet(self):
         assert score_calibration.detect_drift(_dist(1.0), _dist(0.97)) == []
 
+    def test_a_dimension_with_no_input_is_not_drift(self):
+        # One value for every member (Promise Persistence since promise
+        # tracking was removed): nothing to rank, whichever date holds it.
+        assert score_calibration.detect_drift(_dist(0.05), _dist(0.0)) == []
+        assert score_calibration.detect_drift(_dist(0.0), _dist(0.0)) == []
+
     def test_an_incident_raises_an_ops_alert(self):
         report = {
             "from_date": "2026-10-13", "to_date": "2026-10-14",

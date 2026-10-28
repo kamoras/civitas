@@ -267,6 +267,13 @@ def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
 
         if prev_mean is None or curr_mean is None:
             continue  # insufficient data in one snapshot
+        if prev_stdev == 0 or curr_stdev == 0:
+            # Every member holds one value on that date: the dimension had no
+            # input to measure (Promise Persistence since promise tracking was
+            # removed), so there is no rank order or spread to compare. A
+            # measured dimension collapsing to a point is
+            # ground_truth.check_score_distribution's alert, not drift.
+            continue
 
         # Mean shift (relative to previous mean; guard div-by-zero)
         if prev_mean != 0:
