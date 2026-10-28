@@ -83,8 +83,8 @@ def test_the_weekly_crawl_leaves_out_a_state_s_terms_hosts():
     assert state_source_crawler._hosts_for("MI") == []
     # Minnesota's terms name only some of its hosts: the rest are still probed.
     assert state_source_crawler.election_domains("MN") == ["sos.mn.gov"]
-    assert "sos.mn.gov" not in state_source_crawler._hosts_for("MN")
-    assert "results.sos.mn.gov" in state_source_crawler._hosts_for("MN")
+    probed = set(state_source_crawler._hosts_for("MN"))
+    assert probed.isdisjoint({"sos.mn.gov"}) and probed >= {"results.sos.mn.gov"}
 
 
 def test_the_crawler_page_lists_them():
