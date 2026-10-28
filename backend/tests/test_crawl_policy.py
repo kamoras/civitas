@@ -209,6 +209,28 @@ async def test_fetch_with_retry_reads_a_refusal_as_a_failure_without_retrying(po
     assert log == []
 
 
+@pytest.mark.asyncio
+async def test_a_gzipped_requests_answer_is_read(policy, monkeypatch):
+    """requests has decoded the body, and its headers still say gzip: the
+    observed copy must not be decoded again (2026-10-26: every Wikipedia
+    read for the election map failed with a DecodingError)."""
+    import requests
+
+    from app.pipeline.fetch import http_utils
+
+    def request(method, url, **kw):
+        resp = requests.Response()
+        resp.status_code, resp.url, resp._content = 200, url, b'{"ok": 1}'
+        resp.headers.update({"Content-Encoding": "gzip", "Content-Length": "29"})
+        return resp
+
+    monkeypatch.setattr(http_utils.requests, "request", request)
+    crawl_policy._robots["w.example"] = (None, time.monotonic() + 999, "read")
+    resp = await http_utils.fetch_with_retry_requests(
+        RateLimiter(1000, name="t-gz"), "GET", "https://w.example/api", retries=1, backoff_s=0)
+    assert resp is not None and resp.json() == {"ok": 1}
+
+
 def test_conditional_get_asks_only_for_a_change(monkeypatch):
     sent = []
     answers = [

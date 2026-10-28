@@ -111,8 +111,11 @@ def resolve_key(url: str, known: dict, client: httpx.Client) -> str | None:
         return key
     try:
         resp = client.head(url)
-    except httpx.HTTPError:
-        logger.info("Engagement: link %s could not be followed", url, exc_info=True)
+    except httpx.HTTPError as e:
+        # One line, no traceback: an expected source failure (#1310). With
+        # exc_info this was every traceback the pipeline logged on
+        # 2026-10-27 (74, each a shortener's read timeout).
+        logger.info("Engagement: link %s could not be followed (%s)", url, type(e).__name__)
         return None
     if resp.status_code == 429 or resp.status_code >= 500:
         logger.info("Engagement: link %s answered %d; tried again next run", url, resp.status_code)

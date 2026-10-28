@@ -96,6 +96,20 @@ HOST_USER_AGENTS: dict[str, tuple[str, str]] = {
     "mm.nh.gov": (_BARE_FORM, _BARE_WHY + " (New Hampshire's document host)"),
     "goelect.txelections.civixapps.com": (_EMAIL_FORM, _EMAIL_WHY + " (Texas's Civix API)"),
     "mqscores.wustl.edu": (_EMAIL_FORM, _EMAIL_WHY + " (Cloudflare's challenge otherwise)"),
+    # Measured 2026-10-26 from production, one GET per form: four forms
+    # each (Civitas's own, the browser form sent before 2026-10-25, the bare
+    # and the email-only forms); every other host the day's refusals named
+    # answered all four alike.
+    "michigan.gov": (_BARE_FORM, _BARE_WHY + " (Michigan's apex, as www.michigan.gov)"),
+    "indianavoters.in.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Indiana's voter portal, a challenge otherwise)"),
+    "myvote.wi.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Wisconsin's voter portal, a challenge otherwise)"),
+    "voteroutreach.sos.mo.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Missouri's voter portal, a challenge otherwise)"),
+    "voterlookup.elections.ny.gov": (
+        _BROWSER_FORM,
+        "refuses (403, a challenge) Civitas's own User-Agent, the bare \"Civitas/1.0\" and the "
+        "email-only form; a browser's with \"Civitas/1.0 (+contact)\" appended is served "
+        "(New York's voter lookup)",
+    ),
 }
 
 
