@@ -1125,12 +1125,21 @@ Corollaries that follow from the same rule, all enforced in code:
   (the Archive fetching the walled host on our request) is never used: that
   would be a proxy past the wall. Only a 200 capture is read (a capture of
   the wall's own 403 is not a copy), its bytes must match the capture's
-  recorded digest, the reader's every check applies, the text must equal
-  what is stored from the state's own read, it is tried only on
-  `SourceBlocked` after the `republished_by` offices, and the card says
-  "as archived by the Internet Archive on <date>". A wall that also turns
-  the Archive's crawler away (Ohio's did) leaves no copy, and the state
-  stays ingest_failed.
+  recorded digest (over the body as sent or as decoded: the index records
+  either), the reader's every check applies, the text must equal
+  what is stored from the state's own read, and the card says
+  "as archived by the Internet Archive on <date>". It is every measures
+  reader's fallback (2026-10-29, `ballot_measures_pdf._read_archived`):
+  when a state's own read fails for any reason, the same reader runs again
+  on a client whose transport answers each request from the newest
+  verified capture of its URL (`web_archive.ArchiveTransport`), and only a
+  read that finds measures is used, since a capture can't speak for a page
+  the state has since changed. The per-state archived readers
+  (`ARCHIVED_STRATEGIES`) stay for the documents whose address only the
+  stored reads know. A wall that also turns the Archive's crawler away
+  (Ohio's did) leaves no copy, and the state stays ingest_failed; so does a
+  page whose newest capture is another election's at the same address
+  (California's Prop 3 page, 2026-10-29: the reader refuses it).
   **Every request names Civitas, the same way** (2026-10-25): the one
   User-Agent `Civitas/1.0 (+<SITE_URL>/about/crawler; <CONTACT_EMAIL>)`
   (`app/contact.USER_AGENT`; `make_async_client` sends it by default, the
