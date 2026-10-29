@@ -40,7 +40,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measure_pdf_sources import terms_block, source_for_state
 from app.models import BallotMeasure
 from app.pipeline.fetch import web_archive
 from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked, NotYetPublished, SourceBlocked
@@ -54,6 +54,7 @@ from app.pipeline.fetch.ballot_measures_fl import fetch_measures as fl_fetch_mea
 from app.pipeline.fetch.ballot_measures_ky import fetch_measures as ky_fetch_measures
 from app.pipeline.fetch.ballot_measures_ak import parse_document as parse_ak_document
 from app.pipeline.fetch.ballot_measures_hi import fetch_measures as hi_fetch_measures
+from app.pipeline.fetch.ballot_measures_hi import fetch_archived as hi_fetch_archived
 from app.pipeline.fetch.ballot_measures_id import parse_document as parse_id_document
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
@@ -324,6 +325,7 @@ REPUBLISHED_STRATEGIES = {
 ARCHIVED_STRATEGIES = {
     "oh_official_sample_ballot": oh_fetch_archived,
     "mt_qualified_ballot_issues": mt_fetch_archived,
+    "hi_proposed_amendments": hi_fetch_archived,
 }
 # The fields a capture must reproduce exactly: the ballot's words.
 _QUOTED_FIELDS = ("number", "official_title", "official_summary", "yes_means", "no_means")
@@ -587,6 +589,16 @@ async def fetch_state_measures_pdf(
     cached = api_cache_get(db, CACHE_TIER, cache_key, max_age_hours=CACHE_TTL_HOURS)
     if isinstance(cached, list):
         return cached
+
+    blocked = terms_block(state)
+    if blocked and blocked.get("archive"):
+        # The state's own host is never asked (its terms of use forbid
+        # automated access): its document is read from the Internet
+        # Archive's capture of it, with every check, or not at all.
+        pairs = await _from_archive(client, db, state, strategy_key, year, election_date)
+        if pairs is None:
+            return None
+        return _finish(db, state, year, [_to_measure(state, parsed, election_date, url) for parsed, url in pairs])
 
     if national is not None:
         try:

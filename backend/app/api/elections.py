@@ -432,6 +432,13 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
 _PRIMARY_NOMINATING_PARTIES = frozenset({"DEM", "REP"})
 
 
+def _shown_terms_block(state: str) -> dict | None:
+    """The measures' terms block, unless the state is read from the
+    Internet Archive's copy instead (its cards credit the capture)."""
+    blocked = terms_block(state)
+    return blocked if blocked and not blocked["archive"] else None
+
+
 def _ballot_basis_markers(db: Session, cycle: int) -> dict[str, dict]:
     """{state: its ballot-basis marker} for `cycle`, in one query — see
     BALLOT_BASIS_TIER."""
@@ -1746,7 +1753,9 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # Why the list is no longer re-read, when the state's site's
             # terms of use forbid automated access (the registry's `terms`):
             # the measures shown are from the last read, dated by checkedAt.
-            "termsBlock": terms_block(state),
+            # Not for a state read from the Internet Archive's copy: its
+            # cards say so, dated by the capture.
+            "termsBlock": _shown_terms_block(state),
         },
         "officialLookup": lookup_for_state(state),
         # Registration, early voting and mail-ballot deadlines, each with

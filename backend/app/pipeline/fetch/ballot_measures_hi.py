@@ -36,6 +36,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch import web_archive
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -92,6 +93,26 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     count and no "none", so an empty read can't be a checked answer."""
     url = URL_PATTERN.format(year=year)
     page_html = await fetch_text_with_retry(client, _rate_limiter, url, f"HI amendments {year}")
+    return _read(page_html, year, url)
+
+
+async def fetch_archived(client: httpx.AsyncClient, year: int, known_urls: list[str]) -> list[tuple[dict, str]] | None:
+    """The same page as the Internet Archive captured it: Hawaii's terms of
+    use forbid automated access to hawaii.gov (app/data/host_terms.json),
+    and reading the Archive's copy sends the state nothing. The newest
+    capture is read raw and must match its recorded digest (the words are
+    quoted), then gets every check the state's own copy gets; each measure
+    credits the capture (web_archive: "as archived by the Internet Archive
+    on <date>"). `known_urls` is unused: the page's address is the year's."""
+    capture = await web_archive.newest_capture(client, URL_PATTERN.format(year=year))
+    raw = await web_archive.read_capture(client, capture) if capture else None
+    if raw is None:
+        logger.warning("HI %d: no verified Internet Archive capture of the amendments page", year)
+        return None
+    return _read(raw.decode("utf-8", "replace"), year, capture.page_url)
+
+
+def _read(page_html: str | None, year: int, url: str) -> list[tuple[dict, str]] | None:
     if page_html is None:
         return None
     try:

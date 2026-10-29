@@ -1163,7 +1163,11 @@ Corollaries that follow from the same rule, all enforced in code:
   exact sites. Its data is read where the state shares it (Michigan's and
   Minnesota's from the Voting Information Project); a measures registry
   entry naming such a host (`terms`) is not read, its stored measures stand,
-  and its page says why (`termsBlock`).
+  and its page says why (`termsBlock`); with `"archive": true` (owner's
+  go-ahead per state: Hawaii, whose terms restrict only access and
+  commercial use) its document is read from the Internet Archive's capture
+  instead, under §7's archive rules. Not Colorado or Nebraska, whose terms
+  reach the information itself (data mining of it; republishing it).
   **Google Civic (VIP) first** (owner decision, 2026-10-28): the candidate
   sync reads each state's VIP ballot before its own sources
   (`state_candidates_civic.py`, at points inside every district,

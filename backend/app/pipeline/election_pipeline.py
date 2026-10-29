@@ -1104,7 +1104,7 @@ async def _sync_pdf_measures(
         source = ballot_measure_pdf_sources.source_for_state(state)
         source_name = source["source_name"]
         blocked = ballot_measure_pdf_sources.terms_block(state)
-        if blocked:
+        if blocked and not blocked["archive"]:
             # The state's site is not read: its terms of use forbid
             # automated access. The measures on file stand as last read
             # (their coverage status unchanged); the page says why.

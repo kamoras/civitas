@@ -654,9 +654,9 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
     ])
     @pytest.mark.asyncio
     async def test_a_general_list_that_does_not_answer(self, db_session, monkeypatch, tmp_path, tonight):
-        src = self._setup(monkeypatch, tmp_path, "CO")
-        _race(db_session, "2026-SEN-CO", "CO", office="S")
-        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
+        src = self._setup(monkeypatch, tmp_path, "IA")
+        _race(db_session, "2026-SEN-IA", "IA", office="S")
+        _candidate(db_session, "A", "2026-SEN-IA", "HICK, JOHN", party="DEM")
         db_session.commit()
         rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
         green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
