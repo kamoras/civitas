@@ -97,9 +97,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
 
 
 async def fetch_archived(client: httpx.AsyncClient, year: int, known_urls: list[str]) -> list[tuple[dict, str]] | None:
-    """The same page as the Internet Archive captured it: Hawaii's terms of
-    use forbid automated access to hawaii.gov (app/data/host_terms.json),
-    and reading the Archive's copy sends the state nothing. The newest
+    """The same page as the Internet Archive captured it, for when the
+    state's host is walled (SourceBlocked) or a registry `terms` entry says
+    to read the Archive: reading the Archive's copy sends the state nothing. The newest
     capture is read raw and must match its recorded digest (the words are
     quoted), then gets every check the state's own copy gets; each measure
     credits the capture (web_archive: "as archived by the Internet Archive

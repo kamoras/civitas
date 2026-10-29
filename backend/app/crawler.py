@@ -560,11 +560,11 @@ def summary() -> dict:
             {"host": host, "userAgent": ua, "reason": why}
             for host, (ua, why) in sorted(HOST_USER_AGENTS.items())
         ],
-        # Hosts whose own terms forbid automated access: never asked
+        # Hosts whose owner asked Civitas not to read them: never asked
         # (crawl_policy.TermsForbid, app/data/host_terms.json).
         "termsHosts": [
             {"host": host, "publisher": e.get("publisher"), "termsUrl": e.get("terms_url"),
-             "quote": e.get("quote"), "readOn": e.get("read_on")}
+             "quote": e.get("quote"), "readOn": e.get("read_on"), "asked": e.get("asked")}
             for host, e in sorted(host_terms.all_hosts().items())
         ],
         "page": CRAWLER_PAGE,

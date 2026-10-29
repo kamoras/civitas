@@ -1105,10 +1105,10 @@ async def _sync_pdf_measures(
         source_name = source["source_name"]
         blocked = ballot_measure_pdf_sources.terms_block(state)
         if blocked and not blocked["archive"]:
-            # The state's site is not read: its terms of use forbid
-            # automated access. The measures on file stand as last read
+            # The state's site is not read: its owner asked Civitas not to
+            # (host_terms.json). The measures on file stand as last read
             # (their coverage status unchanged); the page says why.
-            note = f"not read: {blocked['host']}'s terms of use forbid automated access ({blocked['terms_url']})"
+            note = f"not read: {blocked['host']} asked Civitas not to read it automatically ({blocked['terms_url']})"
             row = _coverage_row(db, state, election_day)
             if row is None:
                 _set_coverage(db, state, election_day, MeasureCoverage.NOT_YET_COVERED, count=0,

@@ -22,9 +22,9 @@ date only hosts no step reads (the hourly feeds).
 
 Its state, in this order:
 
-0. **terms**: the host's own terms of use forbid automated access
+0. **terms**: the host's owner asked Civitas not to read it automatically
    (app/data/host_terms.json): it is never asked (crawl_policy.TermsForbid),
-   and that is Civitas following its terms, not the host failing.
+   and that is Civitas honouring the request, not the host failing.
 1. **refused / walled**: the host's refusal backoff holds now
    (crawl_policy.refusals: a bot wall's challenge is walled, a 429 refused).
 2. **walled**: a wall written up in the ballot-measure registry (`wall`:
@@ -69,7 +69,7 @@ STATE_LABELS = {
     "walled": "Behind a bot wall",
     "unavailable": "Not answering",
     "not_read": "Not read this run",
-    "terms": "Not read: its terms forbid it",
+    "terms": "Not read: asked us not to",
 }
 # Most in need of a look first.
 # What a failing state means, for the public line: the recorded reason
@@ -265,8 +265,8 @@ def _line(state: str, since: str | None, last_good: str | None, reason: str | No
     if state == "not_read":
         return f"Not asked in its latest run. {good}" if last_good else "No read on record yet."
     if state == "terms":
-        return (f"Not read automatically since {_text(since)}: its terms of use forbid automated "
-                f"access, so what it publishes is read where it shares it. {good}")
+        return (f"Not read automatically since {_text(since)}: its owner asked Civitas not to, so what "
+                f"it publishes is read where it shares it. {good}")
     head = f"Not readable since {_text(since)}" if since else "Not readable now"
     return f"{head}: {reason}. {good}" if reason else f"{head}. {good}"
 
@@ -335,8 +335,8 @@ def build(db: Session) -> dict:
         reason, since = None, None
         terms = crawl_policy.terms_forbid(host)
         if terms:
-            # Our choice to follow the host's terms (host_terms.json), not a
-            # failure: listed apart from walls and refusals.
+            # The host's owner asked us to stop (host_terms.json): our
+            # choice, not a failure, listed apart from walls and refusals.
             state, reason, since = "terms", f"terms of use: {terms.get('terms_url')}", terms.get("read_on")
         elif ref is not None:
             state = "walled" if "bot wall" in (ref.get("reason") or "") else "refused"
@@ -397,7 +397,7 @@ def build(db: Session) -> dict:
         f"Of {len(entries):,} sources, {counts['ok']:,} answered when last asked, "
         f"{not_ok:,} can't be read now and {counts['not_read']:,} have no recent read on record."
         + (f" {_count(counts['terms'], 'source')} {'is' if counts['terms'] == 1 else 'are'} not read "
-           f"automatically because {'its' if counts['terms'] == 1 else 'their'} terms of use forbid it."
+           f"automatically because {'its owner' if counts['terms'] == 1 else 'their owners'} asked us not to."
            if counts["terms"] else "")
         + (f" The {len(photo_only):,} photo hosts the site's photo route reads are not tracked here."
            if photo_only else "")

@@ -84,8 +84,8 @@ async def test_a_page_with_no_question_heading_is_a_failure_never_none(monkeypat
     assert await hi.fetch_measures(None, 2026) is None
 
 
-# ── read from the Internet Archive's copy (hawaii.gov's terms forbid
-# automated access: app/data/host_terms.json) ──
+# ── read from the Internet Archive's copy: when hawaii.gov is walled
+# (SourceBlocked), or a registry `terms` entry says to ──
 
 from app.pipeline.fetch import web_archive  # noqa: E402
 from app.pipeline.fetch.web_archive import Capture  # noqa: E402
@@ -123,8 +123,13 @@ async def test_a_capture_that_fails_its_digest_reads_nothing(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_hawaii_is_read_from_the_archive_and_its_own_host_never(db_session, monkeypatch):
+async def test_a_refused_state_with_archive_set_is_read_from_the_archive_and_its_host_never(db_session, monkeypatch):
+    """A state whose host asked Civitas to stop, with the registry's
+    `terms: {archive: true}`: its document comes from the Internet Archive's
+    capture, its own host never asked."""
     from app.pipeline.fetch import ballot_measures_pdf as pdf
+
+    monkeypatch.setattr(pdf, "terms_block", lambda state: {"host": "elections.hawaii.gov", "archive": True})
 
     async def never(*a, **kw):
         raise AssertionError("elections.hawaii.gov was asked")

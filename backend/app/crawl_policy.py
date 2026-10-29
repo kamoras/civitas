@@ -33,11 +33,14 @@ sources (`sync_gate` / `sync_observe`).
   A plain 403 is not a host's refusal (Akamai NetStorage answers 403 for a
   file that isn't there: www.senate.gov's floor logs for days without a
   session, measured 2026-10-25), and is not retried.
-- **Terms of use** (`terms_forbid`): a host whose own terms forbid
-  automated access (app/data/host_terms.json, each entry quoting them) is
-  never asked at all: TermsForbid, a HostRefusing, before anything is sent.
-  Michigan's Department of State sites, 2026-10-28 (owner decision: their
-  terms are respected, and the data is read where they share it, VIP).
+- **Asked to stop** (`terms_forbid`): a host whose owner told Civitas
+  directly not to read it (app/data/host_terms.json, each entry saying who
+  and when, and quoting its terms) is never asked at all: TermsForbid, a
+  HostRefusing, before anything is sent. Owner policy, 2026-10-29: notice
+  and stop. Public election records are read openly elsewhere, whatever a
+  site's boilerplate says; Michigan's Department of State sites, which
+  refused Civitas's written request, are read where Michigan shares them
+  (VIP).
 """
 
 import asyncio
@@ -87,11 +90,12 @@ class HostRefusing(ExpectedSourceFailure, httpx.TransportError):
 
 
 class TermsForbid(HostRefusing):
-    """No request was sent: the host's terms of use forbid automated access."""
+    """No request was sent: the host's owner asked Civitas not to read it
+    automatically (app/data/host_terms.json)."""
 
     def __init__(self, host: str, terms: dict):
         self.terms = terms
-        super().__init__(host, f"its terms of use forbid automated access ({terms.get('terms_url')})")
+        super().__init__(host, f"its owner asked Civitas not to read it automatically ({terms.get('terms_url')})")
 
 
 def terms_forbid(host: str) -> dict | None:

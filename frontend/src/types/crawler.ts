@@ -31,6 +31,8 @@ export interface CrawlerFacts {
     termsUrl: string;
     quote: string;
     readOn: string;
+    /** Who asked Civitas not to read the site, and when. */
+    asked: string;
     /** When the weekly check last found the terms as reviewed (an Internet Archive capture date). */
     confirmedOn: string;
   }[];

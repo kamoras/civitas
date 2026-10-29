@@ -197,7 +197,7 @@
         "constitutional amendment": "Minnesota Legislature"
       },
       "link_url": "https://www.sos.mn.gov/elections-voting/whats-on-my-ballot/constitutional-amendments/",
-      "description": "Minnesota's statewide questions as the Secretary of State supplies them to the Voting Information Project, read through Google Civic (ballot_measures_civic.py). The Office's own site (www.sos.mn.gov) is linked, never read: its terms prohibit 'headless, programmatic, unattended, or automated browsers' (app/data/host_terms.json, 2026-10-28). Checked 2026-10-28: Constitutional Amendment 1's question reads word for word as the Office's 'Constitutional amendments' page did, the source until then, and VIP's subtitle is that page's heading. Minnesota's constitution is amended only by the Legislature's proposal (no initiative), which the origin rule states."
+      "description": "Minnesota's statewide questions as the Secretary of State supplies them to the Voting Information Project, read through Google Civic (ballot_measures_civic.py; VIP first, owner decision 2026-10-28). Checked 2026-10-28: Constitutional Amendment 1's question reads word for word as the Office's 'Constitutional amendments' page did, the source until then, and VIP's subtitle is that page's heading. Minnesota's constitution is amended only by the Legislature's proposal (no initiative), which the origin rule states."
     },
     "ND": {
       "source_name": "North Dakota Secretary of State",
@@ -207,10 +207,7 @@
     "NE": {
       "source_name": "Nebraska Secretary of State",
       "strategy": "ne_ballot_measures",
-      "description": "sos.nebraska.gov/elections lists the general-election measures: 'Initiative Nos. 440-442' (read from the Informational Pamphlet's 'Ballot Title and Text' pages — the question plus the state's own 'A vote “FOR”/“AGAINST” ...' framing) and the legislature-referred LR19CA (its ballot statement is a scanned image, so the Legislature's own enrolled resolution, linked from the same page, supplies its 'ballot language' instead). Verified live 2026-09-28: 4 measures; the page's initiative range must equal what the pamphlet yields.",
-      "terms": {
-        "host": "sos.nebraska.gov"
-      }
+      "description": "sos.nebraska.gov/elections lists the general-election measures: 'Initiative Nos. 440-442' (read from the Informational Pamphlet's 'Ballot Title and Text' pages — the question plus the state's own 'A vote “FOR”/“AGAINST” ...' framing) and the legislature-referred LR19CA (its ballot statement is a scanned image, so the Legislature's own enrolled resolution, linked from the same page, supplies its 'ballot language' instead). Verified live 2026-09-28: 4 measures; the page's initiative range must equal what the pamphlet yields."
     },
     "OK": {
       "source_name": "Oklahoma Secretary of State",
@@ -232,11 +229,7 @@
     "HI": {
       "source_name": "Hawaii Office of Elections",
       "strategy": "hi_proposed_amendments",
-      "description": "HTML page elections.hawaii.gov/voting/{year}-proposed-amendments-to-the-hawaii-state-constitution/ (verified 2024 and 2026). Each 'QUESTION #N: title' paired with the blockquoted ballot question. Verified live 2026-09-28: 2 questions. Hawaii has no initiative/referendum, so every question is legislature-referred; no yes/no framing or fiscal statement is published. See ballot_measures_hi.py. Since 2026-10-29 read only from the Internet Archive's capture of the page (hawaii.gov's terms of use forbid automated access, app/data/host_terms.json; owner's go-ahead): the newest capture, matched to its recorded digest, every check the state's copy gets, and the text must equal what was stored from the state's own read. Verified 2026-10-29 on the 2026-10-25 capture: both questions identical.",
-      "terms": {
-        "host": "elections.hawaii.gov",
-        "archive": true
-      }
+      "description": "HTML page elections.hawaii.gov/voting/{year}-proposed-amendments-to-the-hawaii-state-constitution/ (verified 2024 and 2026). Each 'QUESTION #N: title' paired with the blockquoted ballot question. Verified live 2026-09-28: 2 questions. Hawaii has no initiative/referendum, so every question is legislature-referred; no yes/no framing or fiscal statement is published. See ballot_measures_hi.py."
     },
     "ID": {
       "landing_page_url": "https://voteidaho.gov/idaho-general-election/",

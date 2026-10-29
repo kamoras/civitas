@@ -691,7 +691,8 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             <p className="text-body text-signal-amber">
               {measureCoverage.termsBlock ? (
                 <>
-                  {state}&apos;s election site is no longer read automatically: its{" "}
+                  {state}&apos;s election site is no longer read automatically, at the state&apos;s
+                  request: see its{" "}
                   <a
                     href={measureCoverage.termsBlock.terms_url ?? lookupHref}
                     target="_blank"
@@ -699,8 +700,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                     className={INLINE_LINK}
                   >
                     terms of use ↗
-                  </a>{" "}
-                  forbid it
+                  </a>
                 </>
               ) : measureCoverage.status === "ingest_failed" ? (
                 `Our latest attempt to re-read ${state}'s measures failed`
@@ -799,7 +799,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
   // reason. Never imply zero.
   const failed = measureCoverage.status === "ingest_failed";
   const why = measureCoverage.termsBlock
-    ? "the state's election site's terms of use forbid reading it automatically, and the Voting Information Project has no list for it yet."
+    ? "the state asked Civitas not to read its election site automatically, and the Voting Information Project has no list for it yet."
     : failed
       ? "our last attempt to load them failed."
       : measureCoverage.unreadReason

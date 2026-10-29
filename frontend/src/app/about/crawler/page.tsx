@@ -71,14 +71,15 @@ function Identity({ facts }: { facts: CrawlerFacts }) {
         <Box
           id="terms"
           title="Sites it never asks"
-          dek={`${facts.termsHosts.length} sites' terms of use forbid automated access, so the crawler sends them no request at all. What they publish is read where they share it.`}
-          more="each site and its terms"
+          dek={`${facts.termsHosts.length} sites asked Civitas not to read them automatically, so the crawler sends them no request at all. What they publish is read where they share it.`}
+          more="each site, who asked and its terms"
         >
           <Facts>
             {facts.termsHosts.map((t) => (
               <Fact key={t.host} label={t.host}>
+                <span className="block">{t.asked}</span>
                 <span className="block">
-                  {t.publisher}: &ldquo;{t.quote}&rdquo;
+                  {t.publisher}&apos;s terms: &ldquo;{t.quote}&rdquo;
                 </span>
                 <span className="block">
                   <A href={t.termsUrl}>Its terms</A>, last confirmed unchanged {t.confirmedOn}.
