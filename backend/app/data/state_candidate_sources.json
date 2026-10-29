@@ -1560,6 +1560,14 @@
       "locality_label": "cities and towns",
       "source_name": "Rhode Island Board of Elections (Enhanced Voting results API)",
       "strategy": "enhanced_voting",
+      "general_list": {
+        "source_name": "Rhode Island Board of Elections (results portal: the staged November ballot)",
+        "strategy": "enhanced_voting_ballot",
+        "statewide_offices": true,
+        "base_url": "https://electionresults.ri.gov/results/public",
+        "jurisdiction": "rhodeisland",
+        "description": "The November general as the Board of Elections stages it on the results portal before any vote is counted (enhanced_voting_ballot), found by the general election's date in the portal's own index, never by id. Checked 2026-10-29 against the staged '2026StatewideGeneralElection' (production data): both House seats and the Senate race with their independents, every statewide office, and all 38 Senate and 75 House districts of the General Assembly. Write-in lines are never read."
+      },
       "runoff_threshold_pct": null,
       "base_url": "https://electionresults.ri.gov/results/public",
       "jurisdiction": "rhodeisland",
