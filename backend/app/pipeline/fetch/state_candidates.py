@@ -120,6 +120,7 @@ from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidat
 from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
     fetch_confirmed_candidates as _fetch_enhanced_voting,
+    fetch_staged_ballot as _fetch_enhanced_voting_ballot,
 )
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
 from app.pipeline.fetch.state_candidates_ks import fetch_confirmed_candidates as _fetch_ks
@@ -181,6 +182,7 @@ STRATEGIES = {
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
+    "enhanced_voting_ballot": _fetch_enhanced_voting_ballot,
     "oh_canvass_xlsx": _fetch_oh,
 }
 

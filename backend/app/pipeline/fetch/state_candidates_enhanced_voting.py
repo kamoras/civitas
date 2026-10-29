@@ -100,8 +100,12 @@ from datetime import datetime
 
 import httpx
 
+from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    SourceRecords,
+    ballot_list_party,
+    federal_record,
     runoff_threshold,
     clean_display_name,
     is_not_a_person,
@@ -515,9 +519,13 @@ async def _one_election_listed_twice(
     return entry, payload
 
 
-async def fetch_general_results(
+async def _staged_general(
     client: httpx.AsyncClient, election_day, state: str, source: dict,
-) -> StateCount | None:
+) -> tuple[str, dict, str] | None:
+    """(election id, payload, public page url) of the general held on
+    `election_day`, None while the state's index lists none; FeedUnreadable
+    for a request that failed, UntrustedCount for test data, a demo, or
+    entries that can't be told apart."""
     endpoints = _endpoints(source)
     if endpoints is None:
         return None
@@ -563,9 +571,20 @@ async def fetch_general_results(
         raise UntrustedCount(f"{state} Enhanced Voting election {eid} is not production data")
     if not str(meta.get("electionDate") or "").startswith(day):
         raise UntrustedCount(f"{state} Enhanced Voting answered for {meta.get('electionDate')!r}, not {day}")
+    return eid, payload, page_url.format(id=eid)
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    picked = await _staged_general(client, election_day, state, source)
+    if picked is None:
+        return None
+    eid, payload, page = picked
+    meta = payload.get("election") or {}
     return StateCount(
         source_name=source.get("source_name") or f"{state} election results",
-        page_url=page_url.format(id=eid),
+        page_url=page,
         official=bool(meta.get("isOfficialResults")),
         unit_label=_unit_label(payload, source),
         # A locality counts as reporting once it has posted any results:
@@ -581,3 +600,86 @@ async def fetch_general_results(
         # gone back for as long as that gap. No lastUpdated: no time guard.
         source_updated=parse_utc(meta.get("lastUpdated")),
     )
+
+
+# --- The staged November ballot as a certified list ------------------------
+
+async def fetch_staged_ballot(
+    client: httpx.AsyncClient, year: int, state: str, source: dict,
+) -> list[dict] | None:
+    """The November ballot from the state's own election-night system, staged
+    before any vote is counted: every contest with its printed candidates
+    (Georgia's, Utah's and Washington's 2026 generals, staged by 2026-10-23,
+    list each one, independents and minor parties included). The
+    `enhanced_voting_ballot` strategy, read as a general_list, the way
+    voterportal reads Louisiana's staged ballot.
+
+    The general is the one held on the statutory general election day, found
+    in the state's own index (_staged_general, with the live count's test
+    and demo gates). The state offices are read only where the entry sets
+    statewide_offices, which says the state's system holds every one of
+    them: Utah's lists only the legislative districts that cross a county
+    line, the rest being on each county's own. Not staged yet, or staged as
+    test data, is [] (the
+    list names nothing yet), never "nobody is running"; a failed request is
+    None. A write-in line is never a ballot name, qualified or not: the
+    ballot prints only its candidates. A staged general with no federal
+    contest the reader can place is a changed layout, None."""
+    try:
+        picked = await _staged_general(client, general_election_day(year), state, source)
+    except FeedUnreadable:
+        return None
+    except UntrustedCount as refused:
+        logger.info("%s staged ballot not read: %s", state, refused)
+        return []
+    if picked is None:
+        logger.info("%s has not staged its %d general yet", state, year)
+        return []
+    _, payload, _ = picked
+    house_patterns = _house_patterns(source)
+    with_state = bool(source.get("statewide_offices"))
+    records: list[dict] = []
+    for item in payload.get("ballotItems") or []:
+        if not isinstance(item, dict) or item.get("contestType") != "Candidate":
+            continue
+        label = _text(item.get("name"))
+        federal = _office(label, house_patterns)
+        statewide = leg = None
+        if federal is None and with_state:
+            statewide = parse_statewide_office(label)
+            leg = None if statewide else parse_state_leg_office(label)
+        if federal is None and statewide is None and leg is None:
+            continue
+        for option in (item.get("summaryResults") or {}).get("ballotOptions") or []:
+            if not isinstance(option, dict) or option.get("isWriteIn") or option.get("isQualifiedWriteIn"):
+                continue
+            name = _text(option.get("name"))
+            if not name or is_not_a_person(name):
+                continue
+            # Georgia and Washington print the party's abbreviation, Utah
+            # only its name ("Constitution", abbreviation null).
+            party_entry = option.get("party") or {}
+            printed = str(party_entry.get("abbreviation") or _text(party_entry.get("name")) or "")
+            if federal:
+                record = federal_record(*federal, normalize_party(printed, ballot_list=True), name)
+                if record and printed:
+                    record["party_label"] = printed
+            else:
+                party = ballot_list_party(printed) if printed else None
+                if party is None:
+                    continue
+                code, label_printed = party
+                where = statewide or leg
+                record = {"office": where[0], "district": where[1], "party": code,
+                          "last_name": clean_display_name(name)}
+                if leg and leg[2] is not None:
+                    record["seat"] = leg[2]
+                if label_printed:
+                    record["party_label"] = label_printed
+            if record:
+                records.append(record)
+    if not any(r["office"] in ("S", "H") for r in records):
+        logger.warning("%s staged general carries no federal contest this reader can place", state)
+        return None
+    logger.info("%s staged ballot: %d candidates", state, len(records))
+    return SourceRecords(records, ballot_list=True)
