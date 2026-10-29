@@ -1214,3 +1214,32 @@ async def test_civic_never_takes_state_offices_missing_one_already_on_file(db_se
     await sc.sync_confirmed_candidates(db_session, None, 2026)
 
     assert [r.display_name for r in db_session.query(StatewideNominee)] == ["Julie Blaha"]
+
+
+@pytest.mark.asyncio
+async def test_a_certified_list_refused_by_its_terms_is_held_not_downgraded(db_session, only):
+    """Colorado's certified general list is on www.sos.state.co.us, whose
+    terms forbid automated access; its Clarity primary results still answer.
+    The races the list last certified keep that read (an independent it
+    listed stays, the basis stays the certified list's), never rewritten
+    from primary results."""
+    from app.api.elections import _ballot_marker
+    from app.pipeline.cache import api_cache_set
+    from app.pipeline.fetch.state_candidates_common import BALLOT_BASIS_TIER, ballot_basis_key
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "S6CO00001", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM", confirmed_general=True)
+    _db_cand(db_session, "ballot:2026-SEN-CO:indie", "2026-SEN-CO", "INDIE, PAT", "UNAFFILIATED", confirmed_general=True)
+    listed = sc.source_for_state("CO")["general_list"]["source_name"]
+    api_cache_set(db_session, BALLOT_BASIS_TIER, ballot_basis_key("CO", 2026),
+                  {"complete": True, "races": ["2026-SEN-CO"], "raceSources": {}, "sourceName": listed,
+                   "checkedAt": "2026-10-28T18:50:50Z"}, normal_ttl_hours=24)
+    db_session.commit()
+    only("CO", [_rec("S", None, "D", "Hickenlooper", "John Hickenlooper")])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert {c.id: c.confirmed_general for c in db_session.query(Candidate)} == {
+        "S6CO00001": True, "ballot:2026-SEN-CO:indie": True,
+    }
+    marker = _ballot_marker(db_session, "CO", 2026)
+    assert marker["complete"] is True and marker["sourceName"] == listed

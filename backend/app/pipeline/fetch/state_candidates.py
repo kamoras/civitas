@@ -40,6 +40,7 @@ accurate as before this sync ran, never worse.
 """
 
 import hashlib
+import json
 import logging
 import re
 import sys
@@ -50,6 +51,7 @@ import unicodedata
 import httpx
 from sqlalchemy.orm import Session
 
+from app import host_terms
 from app.crawl_policy import TermsForbid
 from app.models import (
     BALLOT_ONLY_ID_PREFIX,
@@ -1697,6 +1699,30 @@ def _is_ballot_list(source: dict, records: list[dict]) -> bool:
 CIVIC_SOURCE_NAME = "the Voting Information Project (the state's ballot data, via Google Civic)"
 
 
+def _refused_by_terms(entry: dict | None) -> bool:
+    """Whether a source entry reads a host whose terms of use forbid
+    automated access (app/host_terms.py): its addresses, the description
+    aside."""
+    if not entry:
+        return False
+    text = json.dumps({k: v for k, v in entry.items() if k != "description"})
+    return any(host_terms.forbid(h) for h in re.findall(r"https?://([A-Za-z0-9.-]+)", text))
+
+
+def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[str]:
+    """The races a certified list now refused by its terms last certified:
+    every race here when the ballot-basis marker says that list answered
+    for the whole state, else the races it named; none when the marker is
+    another source's (the list never answered this cycle)."""
+    marker = api_cache_get(db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+                           max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {}
+    if not entry or marker.get("sourceName") != str(entry.get("source_name") or ""):
+        return set()
+    if marker.get("complete"):
+        return {rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)}
+    return set(marker.get("races") or ())
+
+
 def _civic_entry(source: dict) -> dict | None:
     """The Google Civic source to read `source`'s state with first, or None
     without an API key: the state's own google_civic entry where it names
@@ -1889,7 +1915,12 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             general = None  # read above, ahead of everything
         ballot_source = general
         general_records = None
-        if general:
+        # A certified list on a host whose terms of use forbid automated
+        # access is held, not failed: the races its last read certified keep
+        # that read (their nominees, their basis), and weaker sources answer
+        # only for the races it never covered (_held_races).
+        held = _held_races(db, cycle, state, general) if _refused_by_terms(general) else set()
+        if general and not _refused_by_terms(general):
             general_records = await _fetch(client, cycle, state, general, "Certified general list")
             spare_list = general.get("fallback")
             if general_records is None and spare_list and STRATEGIES.get(spare_list.get("strategy")):
@@ -2039,8 +2070,8 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             races_here = {
                 rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
             }
-            covered: set[str] = set()
-            race_sources: dict[str, str] = {}
+            covered: set[str] = set(held)
+            race_sources: dict[str, str] = {rid: str(general.get("source_name") or "") for rid in held & races_here}
             applied = {"confirmed": 0, "unmatched": 0, "ballotOnly": 0, "unconfirmed": 0}
             for list_source, list_records in lists:
                 federal = [r for r in list_records if r["office"] in ("S", "H")
@@ -2077,13 +2108,25 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             # ballot as the complete certified one (general_ballot_complete
             # describes the document once it exists, not its absence).
             published = bool(records)
-            applied = _apply_ballot(
-                db, cycle, state, records,
-                keep_unlisted=not ballot_is_elsewhere,
-                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere and published,
-                prune=_may_prune(configured, source) and published,
-            )
-            if not ballot_is_elsewhere:
+            if held:
+                # The held certified list's races stay as it last read them;
+                # the rest take what this source says, never authoritatively.
+                races_here = {
+                    rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
+                }
+                rest = [r for r in records if _race_id_for(db, cycle, state, r["office"], r["district"]) not in held]
+                applied = _apply_ballot(
+                    db, cycle, state, rest, keep_unlisted=not ballot_is_elsewhere, authoritative=False,
+                    scope=races_here - held, prune=False,
+                )
+            else:
+                applied = _apply_ballot(
+                    db, cycle, state, records,
+                    keep_unlisted=not ballot_is_elsewhere,
+                    authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere and published,
+                    prune=_may_prune(configured, source) and published,
+                )
+            if not ballot_is_elsewhere and not held:
                 _record_ballot_basis(
                     db, cycle, state, source if published else {**source, "general_ballot_complete": False},
                 )
