@@ -1243,3 +1243,34 @@ async def test_a_certified_list_refused_by_its_terms_is_held_not_downgraded(db_s
     }
     marker = _ballot_marker(db_session, "CO", 2026)
     assert marker["complete"] is True and marker["sourceName"] == listed
+
+
+@pytest.mark.asyncio
+async def test_a_basis_rewritten_before_the_hold_is_restored_from_the_state_office_record(db_session, only):
+    """Colorado's basis was rewritten from primary results between two
+    deploys (2026-10-29), but its state-office record still names the
+    certified list: the list's races are held again and its basis restored,
+    dated by its last read."""
+    from app.api.elections import _ballot_marker
+    from app.pipeline.cache import api_cache_set
+    from app.pipeline.fetch.state_candidates_common import (
+        BALLOT_BASIS_TIER, STATEWIDE_MARKER_TIER, ballot_basis_key, statewide_marker_key,
+    )
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "ballot:2026-SEN-CO:indie", "2026-SEN-CO", "INDIE, PAT", "UNAFFILIATED", confirmed_general=True)
+    listed = sc.source_for_state("CO")["general_list"]["source_name"]
+    api_cache_set(db_session, BALLOT_BASIS_TIER, ballot_basis_key("CO", 2026),
+                  {"complete": False, "races": [], "sourceName": "Colorado Secretary of State (Clarity Election Night Reporting)",
+                   "checkedAt": "2026-10-29T00:51:07Z"}, normal_ttl_hours=24)
+    api_cache_set(db_session, STATEWIDE_MARKER_TIER, statewide_marker_key("CO", 2026),
+                  {"checkedAt": "2026-10-28T18:50:50Z", "count": 35, "sourceName": listed, "ballotList": True},
+                  normal_ttl_hours=24)
+    db_session.commit()
+    only("CO", [])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    marker = _ballot_marker(db_session, "CO", 2026)
+    assert marker["complete"] is True and marker["sourceName"] == listed
+    assert marker["checkedAt"] == "2026-10-28T18:50:50Z"
+    assert db_session.query(Candidate).one().confirmed_general is True

@@ -1714,13 +1714,33 @@ def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[
     every race here when the ballot-basis marker says that list answered
     for the whole state, else the races it named; none when the marker is
     another source's (the list never answered this cycle)."""
+    if not entry:
+        return set()
+    name = str(entry.get("source_name") or "")
+    races_here = {rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)}
     marker = api_cache_get(db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
                            max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {}
-    if not entry or marker.get("sourceName") != str(entry.get("source_name") or ""):
+    if marker.get("sourceName") == name:
+        return races_here if marker.get("complete") else set(marker.get("races") or ())
+    # The basis was rewritten by a weaker source before the hold existed
+    # (Colorado and Nebraska, 2026-10-29 00:51 and 01:29 UTC, between two
+    # deploys). The state-office record still names the list: it answered
+    # this cycle as the whole ballot, so its races are held and the basis
+    # restored, dated by that read.
+    statewide = api_cache_get(db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+                              max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {}
+    if statewide.get("sourceName") != name or not entry.get("statewide_offices"):
         return set()
-    if marker.get("complete"):
-        return {rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)}
-    return set(marker.get("races") or ())
+    api_cache_set(
+        db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+        {"complete": True, "races": sorted(races_here), "raceSources": {},
+         "sourceName": name, "checkedAt": statewide.get("checkedAt") or ""},
+        normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    db.commit()
+    logger.info("%s: restored the held certified list's ballot basis (%s, read %s)", state, name,
+                statewide.get("checkedAt"))
+    return races_here
 
 
 def _civic_entry(source: dict) -> dict | None:
