@@ -62,6 +62,7 @@ import lxml.etree
 import lxml.html
 import pdfplumber
 
+from app.crawl_policy import HostRefusing
 from app.http_client import is_bot_challenge
 from app.pipeline.fetch.http_utils import FETCH_HEADERS
 
@@ -102,6 +103,8 @@ def fetch(url: str, client: httpx.Client, cache: pathlib.Path | None) -> tuple[s
         return key.read_text(), "ok (cached)"
     try:
         r = client.get(url, headers=FETCH_HEADERS, follow_redirects=True, timeout=30)
+    except HostRefusing as refused:
+        return None, f"not asked: {refused.reason}"
     except httpx.HTTPError as exc:
         return None, f"fetch failed: {type(exc).__name__}"
     if is_bot_challenge(r):
@@ -303,6 +306,11 @@ def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pa
     for _ in range(2):  # once more after a refusal or a dropped connection, which come and go
         try:
             r = client.get(url, headers=FETCH_HEADERS, follow_redirects=True, timeout=30)
+        except HostRefusing:
+            # Not asked: a wall's backoff, or the host's terms of use forbid
+            # automated access (crawl_policy). The page is the state's own,
+            # shown unconfirmed, as for a wall's challenge.
+            return {**out, "status": "blocked"}, None
         except httpx.HTTPError as exc:
             r, failed = None, type(exc).__name__
             continue

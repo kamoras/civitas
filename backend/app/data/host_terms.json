@@ -1,0 +1,137 @@
+{
+  "_contract": "Hosts whose own terms of use forbid automated access. crawl_policy refuses every request to them before it is sent (TermsForbid), from every reader, the link check and the source crawl alike, and the source map says why. A host matches its own name and every name under it. Each entry quotes the terms, names where they were read and when, and says why the host is covered. A host leaves this file only when its terms change or its owner allows Civitas in writing (record that here). `text_sha256` is the hash of the terms page's text as reviewed (app/host_terms_check.page_text, from `reviewed_capture`); the weekly check (host_terms_check) alerts when the Internet Archive's newest capture differs or no longer holds `quote`, and the host stays unasked until the entry is reviewed. An entry with \"subdomains\": false covers its own name only (a terms page that names exact sites).",
+  "hosts": {
+    "coloradosos.gov": {
+      "publisher": "Colorado Secretary of State",
+      "terms_url": "https://www.coloradosos.gov/pubs/info_center/terms.html",
+      "quote": "Use of computerized “robots” or “data mining” of the information and images presented here is prohibited.",
+      "read_on": "2026-10-28",
+      "text_sha256": "0cb9cc6daafe21d78dbca90ba95bdb9ad31f11b46835e4bc81fca4c44a459e7f",
+      "reviewed_capture": "https://web.archive.org/web/20261028185850/https://www.coloradosos.gov/pubs/info_center/terms.html",
+      "why": "The Secretary of State's Terms of Use and Privacy Policy for its website; any attempted data mining without permission is blocked, and an Authorization Request for Automated Data Collection may be filed."
+    },
+    "ehawaii.gov": {
+      "publisher": "State of Hawaii",
+      "terms_url": "https://portal.ehawaii.gov/page/terms-of-use/",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent or contractor to access or attempt to access any of the Services through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "text_sha256": "77ad4bcb691bb8d1dea9e524f7fdee5fecea4dbf3989f6a9b05338bd5243e016",
+      "reviewed_capture": "https://web.archive.org/web/20261009040814/https://portal.ehawaii.gov/page/terms-of-use/",
+      "why": "The same terms name eHawaii.gov addresses."
+    },
+    "hawaii.gov": {
+      "publisher": "State of Hawaii",
+      "terms_url": "https://portal.ehawaii.gov/page/terms-of-use/",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent or contractor to access or attempt to access any of the Services through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "text_sha256": "77ad4bcb691bb8d1dea9e524f7fdee5fecea4dbf3989f6a9b05338bd5243e016",
+      "reviewed_capture": "https://web.archive.org/web/20261009040814/https://portal.ehawaii.gov/page/terms-of-use/",
+      "why": "Hawaii's terms define the web site as any page with an address containing 'hawaii.gov' or 'eHawaii.gov': the Office of Elections (elections.hawaii.gov) and online voter registration (olvr.hawaii.gov) included."
+    },
+    "mblsportal.sos.mn.gov": {
+      "publisher": "Minnesota Secretary of State",
+      "terms_url": "https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "quote": "The use of headless, programmatic, unattended, or automated browsers is prohibited.",
+      "read_on": "2026-10-28",
+      "text_sha256": "4de1b500dad16aaf98fb0481221d985dfcdb7134db2aa8879c80990f772debc2",
+      "reviewed_capture": "https://web.archive.org/web/20260909124556/https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "why": "Named in the Site's definition.",
+      "subdomains": false
+    },
+    "mi-boe.entellitrak.com": {
+      "publisher": "Michigan Bureau of Elections",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "The Bureau of Elections' Candidate Listing Report, a state government information system with no terms of its own; the Department of State's policies cover the state's systems.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    },
+    "michigan.gov": {
+      "publisher": "State of Michigan",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "Michigan.gov's Terms of Use Policy (updated December 2021), which the Department of State's own Policies page (michigan.gov/sos/policies) points to for its websites.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    },
+    "mvic.sos.state.mi.us": {
+      "publisher": "Michigan Department of State",
+      "terms_url": "https://www.michigan.gov/som/footer/policies",
+      "quote": "You specifically agree not to access, or attempt to access, or allow any employee, agent, or contractor to access or attempt to access any of the website through any automated means (including, but not limited to, use of scripts, web crawlers or screen scrapers)",
+      "read_on": "2026-10-28",
+      "why": "The Michigan Voter Information Center's own Policies link is the Department of State's policies page, which defers to the State of Michigan's terms of use.",
+      "text_sha256": "7cdaf013b8d08475cf843c65376b709fbea1cc0aab3a4534ab1e28e77966eb30",
+      "reviewed_capture": "https://web.archive.org/web/20261021111035/https://www.michigan.gov/som/footer/policies"
+    },
+    "nebraska.gov": {
+      "publisher": "Nebraska.gov (Nebraska Interactive)",
+      "terms_url": "https://www.nebraska.gov/policies/index.html",
+      "quote": "You may not without our prior written permission use any computer code, data mining software, \"robot,\" \"bot,\" \"spider,\" \"scraper\" or other automatic device, or program, algorithm or methodology having similar processes or functionality, or any manual process, to monitor or copy any of the Web pages, data or content found on this Site or accessed through this Site.",
+      "read_on": "2026-10-28",
+      "text_sha256": "d5deefdc6efb57d22f11f1586418232a127e21362c2567d1dacf1747d01834ed",
+      "reviewed_capture": "https://web.archive.org/web/20261010014713/https://www.nebraska.gov/policies/index.html",
+      "why": "The portal at its bare address.",
+      "subdomains": false
+    },
+    "sc.gov": {
+      "publisher": "SC.GOV (South Carolina Interactive)",
+      "terms_url": "https://sc.gov/terms-conditions",
+      "quote": "You may not engage in the practices of screen scraping, data mining, or any other bulk information gathering in connection with the Site, except as may be permitted under the South Carolina Freedom of Information Act.",
+      "read_on": "2026-10-28",
+      "text_sha256": "7ad83dbb3911e50bc04778534fcb56026c26c424126b4af9573391410db5c9f7",
+      "reviewed_capture": "https://web.archive.org/web/20240814080428/https://sc.gov/terms-conditions",
+      "why": "The terms govern 'the State website at SC.GOV' itself; the Election Commission's sites (scvotes.gov, vrems.scvotes.sc.gov) are not that site and are not listed.",
+      "subdomains": false
+    },
+    "sos.mn.gov": {
+      "publisher": "Minnesota Secretary of State",
+      "terms_url": "https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "quote": "The use of headless, programmatic, unattended, or automated browsers is prohibited.",
+      "read_on": "2026-10-28",
+      "text_sha256": "4de1b500dad16aaf98fb0481221d985dfcdb7134db2aa8879c80990f772debc2",
+      "reviewed_capture": "https://web.archive.org/web/20260909124556/https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "why": "The same site at its bare address.",
+      "subdomains": false
+    },
+    "sos.nebraska.gov": {
+      "publisher": "Nebraska Secretary of State",
+      "terms_url": "https://www.nebraska.gov/policies/index.html",
+      "quote": "You may not without our prior written permission use any computer code, data mining software, \"robot,\" \"bot,\" \"spider,\" \"scraper\" or other automatic device, or program, algorithm or methodology having similar processes or functionality, or any manual process, to monitor or copy any of the Web pages, data or content found on this Site or accessed through this Site.",
+      "read_on": "2026-10-28",
+      "text_sha256": "d5deefdc6efb57d22f11f1586418232a127e21362c2567d1dacf1747d01834ed",
+      "reviewed_capture": "https://web.archive.org/web/20261010014713/https://www.nebraska.gov/policies/index.html",
+      "why": "The Secretary of State's site links the Nebraska.gov Policies as its own ('Nebraska Policies' in its footer, capture of 2026-10-17). electionresults.nebraska.gov links no policies and is not listed."
+    },
+    "sos.state.co.us": {
+      "publisher": "Colorado Secretary of State",
+      "terms_url": "https://www.coloradosos.gov/pubs/info_center/terms.html",
+      "quote": "Use of computerized “robots” or “data mining” of the information and images presented here is prohibited.",
+      "read_on": "2026-10-28",
+      "text_sha256": "0cb9cc6daafe21d78dbca90ba95bdb9ad31f11b46835e4bc81fca4c44a459e7f",
+      "reviewed_capture": "https://web.archive.org/web/20261028185850/https://www.coloradosos.gov/pubs/info_center/terms.html",
+      "why": "The Secretary of State's own site at its older address (its pages and voter lookup), under the same terms."
+    },
+    "www.nebraska.gov": {
+      "publisher": "Nebraska.gov (Nebraska Interactive)",
+      "terms_url": "https://www.nebraska.gov/policies/index.html",
+      "quote": "You may not without our prior written permission use any computer code, data mining software, \"robot,\" \"bot,\" \"spider,\" \"scraper\" or other automatic device, or program, algorithm or methodology having similar processes or functionality, or any manual process, to monitor or copy any of the Web pages, data or content found on this Site or accessed through this Site.",
+      "read_on": "2026-10-28",
+      "text_sha256": "d5deefdc6efb57d22f11f1586418232a127e21362c2567d1dacf1747d01834ed",
+      "reviewed_capture": "https://web.archive.org/web/20261010014713/https://www.nebraska.gov/policies/index.html",
+      "why": "The portal the policies are for: its own pages only, not every host under nebraska.gov.",
+      "subdomains": false
+    },
+    "www.sos.mn.gov": {
+      "publisher": "Minnesota Secretary of State",
+      "terms_url": "https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "quote": "The use of headless, programmatic, unattended, or automated browsers is prohibited.",
+      "read_on": "2026-10-28",
+      "text_sha256": "4de1b500dad16aaf98fb0481221d985dfcdb7134db2aa8879c80990f772debc2",
+      "reviewed_capture": "https://web.archive.org/web/20260909124556/https://www.sos.mn.gov/about-the-office/about-the-office/web-site-terms-and-conditions-of-use/",
+      "why": "The Office's terms define the Site as www.sos.mn.gov, mblsportal.sos.mn.gov and all related subpages. Its other hosts (electionresultsfiles, mnvotes, pollfinder, myballotmn) are not named, so are not listed here.",
+      "subdomains": false
+    }
+  }
+}

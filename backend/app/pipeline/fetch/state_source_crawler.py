@@ -47,6 +47,7 @@ from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
+from app import crawl_policy
 from app.http_client import is_bot_challenge
 from app.pipeline.fetch import robots
 from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
@@ -111,6 +112,15 @@ ELECTION_DOMAINS = {
     "WA": ["sos.wa.gov", "votewa.gov"], "WV": ["sos.wv.gov"],
     "WI": ["elections.wi.gov"], "WY": ["sos.wyo.gov"],
 }
+
+def election_domains(state: str) -> list[str]:
+    """`state`'s election domains the crawler may look under: none whose
+    terms of use forbid automated access to every name under it
+    (crawl_policy.terms_forbid; Michigan's, 2026-10-28), which is left out
+    rather than asked and refused. A domain whose terms name only some of
+    its hosts (Minnesota's) stays, and each host is checked on its own."""
+    return [d for d in ELECTION_DOMAINS.get(state.upper(), []) if not crawl_policy.terms_forbid(f"any.{d}")]
+
 
 # Subdomain shapes an election-results host actually takes. Probed against
 # each state's domains, which is how a state that stands up a new results
@@ -293,10 +303,10 @@ async def _robots_for(client: httpx.AsyncClient, origin: str) -> robots.Robots:
 def _hosts_for(state: str) -> list[str]:
     """Every host worth asking whether it runs a results portal."""
     hosts = []
-    for domain in ELECTION_DOMAINS.get(state.upper(), []):
+    for domain in election_domains(state):
         for prefix in _RESULTS_PREFIXES:
             host = f"{prefix}.{domain}" if prefix else domain
-            if host not in hosts:
+            if host not in hosts and not crawl_policy.terms_forbid(host):
                 hosts.append(host)
     return hosts
 
@@ -555,8 +565,9 @@ async def _probe_pages(
 
         await scan(root, 2)
 
-    for domain in ELECTION_DOMAINS.get(state.upper(), []):
-        await scan_root(f"https://{domain}/")
+    for domain in election_domains(state):
+        if not crawl_policy.terms_forbid(domain):
+            await scan_root(f"https://{domain}/")
     # This cycle's files first, and results before anything else that
     # happened to be linked beside them.
     found.sort(key=lambda pair: (

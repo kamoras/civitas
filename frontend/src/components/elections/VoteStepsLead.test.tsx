@@ -98,7 +98,7 @@ describe("VoteStepsLead", () => {
     );
     expect(screen.getByTestId("ballot-lookup")).toHaveAccessibleName(/, unconfirmed \(opens/);
     expect(screen.getByTestId("vote-steps-lead")).toHaveTextContent(
-      "This site blocks automated checks, so we can't confirm it's up. If it doesn't open, use usa.gov ↗"
+      "This site doesn't allow automated checks, so we can't confirm it's up. If it doesn't open, use usa.gov ↗"
     );
     expect(
       screen.getByRole("link", { name: "See your sample ballot through USAGov (opens in new tab)" })

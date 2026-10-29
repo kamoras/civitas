@@ -1,173 +1,105 @@
-"""Google Civic Information API (voterInfoQuery) as a confirmed-candidate
-source for states with no state-specific pipeline at all (NY, OH, WI, NV,
-SC, MO, OK, DE, LA, RI) — a single national source, not a per-state
-vendor, so one module serves all of them the same way `tabular` serves
-every Enhanced Voting state.
+"""Google Civic Information API (voterInfoQuery) as a state's candidate
+source: the Voting Information Project's data, which election officials
+supply to Democracy Works and Google serves. Where it holds a race, it is
+the first source the sync reads (owner decision 2026-10-28: the crawler is
+the fallback); where it holds none, the state's own readers answer.
 
-**SENATE is always covered, via one statewide address (`source["address"]`
-— that state's own capitol, same fixed-public-building discipline
-town_directory.json already establishes: never a visitor's address, the
-same input for every visitor regardless of where they actually live).**
-voterInfoQuery resolves to the ONE precinct a given address sits in, so
-that single address also happens to cover whichever ONE House district
-contains it — real, full House coverage needs a SEPARATE address PER
-CONGRESSIONAL DISTRICT, configured per state as `source["house_addresses"]`
-(`{"1": "...", "2": "...", ...}`, keyed by district number as a string).
-This is genuinely more curation work (~13 addresses for Michigan alone,
-each independently verified — see below) than the single capitol address
-Senate needs, so `house_addresses` starts empty for most states and is
-filled in one state at a time, same town_directory.json-style "hand-
-curated, spot-checked, shouldn't grow without a human looking at each
-address" discipline. A state with no `house_addresses` entry simply gets
-Senate-only confirmation, exactly as before — not an error, not a gap
-this module needs to apologize for in its own output.
+**One precinct per question.** voterInfoQuery answers for the precinct an
+address sits in, and takes "latitude,longitude" as the address: Google
+answers with the nearest street address's ballot (measured 2026-10-28; a
+city's name alone answers nothing). So every district is asked about at
+points inside it, app/data/civic_query_points.json (the internal points of
+its most populous Census blocks, scripts/build_civic_query_points.py), plus
+any fixed public addresses the state's entry names (`address`,
+`house_addresses`). Never a visitor's location (AGENTS.md §8): the same
+points for everyone.
 
-**Every address, for every district, must be independently VERIFIED
-before it's trusted** — not assumed from a member's residence or a
-district's largest city. Live-verified building this for Michigan
-(2026-09-11): starting from each district's own current member's
-residence city (Wikipedia's own current, cited "Member (Residence)"
-table) and geocoding each candidate address via the SAME free Census
-Bureau geocoder this codebase's own `/geocode` endpoint already uses,
-**3 of the first 13 addresses tried resolved to the WRONG district**
-(three members' own district offices resolved one district over — all
-three real, current district-office addresses that simply sit just
-outside their own member's
-redrawn 2022 district lines). This is exactly why an address here is
-never trusted on the strength of "it's a real, current official
-address" alone — every single one must independently geocode to the
-district it's configured for before it's added.
+**The district is Google's, never the one asked about.** A point near a
+line can sit in the next district, so each contest is filed under the
+district its own label and `district.name` give ("Representative in
+Congress" + "4th District"), read by the shared office parsers; a House
+label with no number is at-large only in a state with one seat. Two answers
+that disagree about a race's candidates drop that race this run.
 
-Once a House contest is actually returned by voterinfo for a queried
-address, the SAME discipline applies again: Google's own `district.id`
-(schema-guaranteed, `district.scope == "congressional"` — verified
-against the Discovery Document, see civic_info.py's own
-`_parse_candidate_contest`) must match the district the address was
-configured for, or the contest is refused outright rather than
-confirmed under a number that might be wrong. A bare House office label
-("U.S. Representative") carries no district number of its own in free
-text, so this is the only reliable source for one — `parse_office` is
-still used first, only to confirm the contest is a House race at all.
+**Coverage decides what it speaks for.** The answer covers the federal
+races it names (the sync applies them as the certified ballot for exactly
+those races), the statewide offices when its answers agreed on them, and
+the legislative districts it read: a district no point answered for is
+named in `unread_districts`, and its stored nominees stand (measured
+2026-10-28: 147 of Michigan's 148 districts read). The sync takes the state
+offices from it only when it names every statewide office already on file
+(state_candidates._civic_speaks_for_state_offices). A state with no ballot behind its first points (Google
+holds VIP data for some states only, and only near an election) is a
+healthy empty answer, read in a few requests.
 
-TWO-HOP discovery, both plain GETs, reusing civic_info.py's own
-`_parse_contests`/`CIVIC_BASE` for the response schema (verified against
-Google's public Discovery Document there — same schema, no reason to
-duplicate the parsing):
+Answers are kept per point for a day in this process (`_answers`), so the
+measures reader (ballot_measures_civic.py) and a second sync that day ask
+nothing again. Data for a concluded election is removed from the API: what was read
+stays in the database and the election archive.
 
-1. `elections.electionQuery` (no address needed) — every election
-   Google's index currently carries, matched by `ocdDivisionId` (this
-   state's own division id, or the bare country-level one, in case a
-   national general ever gets listed that way instead of per-state) and
-   `electionDay` falling in `year`'s real November window. No match at
-   all returns `[]`, healthy, never a failure — which was every state's
-   live reality until 2026-09-23, when the index first carried the real
-   general: one country-level entry, `id` 12000, "2026 General Midterm
-   Election", 2026-11-03. That is matched by the bare country-level
-   `ocdDivisionId` branch above, which existed for exactly this case
-   and is no longer hypothetical.
-2. `voterinfo` with that election's own id passed EXPLICITLY, plus one
-   configured address — called once for the state's own Senate address,
-   then again for each configured `house_addresses` entry (the election
-   id lookup itself is shared, not repeated per address). Explicit-id
-   lookup is what actually works: passing no electionId at all currently 400s "Election unknown"
-   for every address tried, live-verified the same day — auto-select
-   finds nothing right now. Even with the real, currently-listed
-   Delaware primary's own real id, `contests` came back MISSING
-   entirely, 5 days before that primary — contest-level data can lag
-   well behind an election merely being listed, possibly until very
-   close to, or on, election day itself. So a request that succeeds but
-   carries no contests is ALSO `[]`, not a failure — matches that real,
-   directly-observed shape, not a guess. The same hop's HTTP 404 "No
-   information for this address" means the same thing and is handled
-   the same way (see `_NO_DATA`): on 2026-09-23, with the general now
-   listed, 71 of this file's 80 configured addresses answered exactly
-   that, every state capitol among them. Only LA's answered 200, and
-   even that one carried no `contests` key.
-
-Only a genuine network/JSON failure at either hop returns `None`
-(fetch_failed) — every "nothing here yet" shape above is `[]` (healthy,
-0 confirmed), which matters because until Google populates real November
-data, `[]` is the correct answer for literally every state, every night.
-That distinction is not theoretical: the morning the general was first
-listed, the second hop started answering 404 for real, and because 4xx
-is retried by default those 404s reported 8 states as fetch_failed
-before this was fixed.
-
-Party is deliberately NOT required to normalize for a candidate to be
-kept, unlike every vote-counting strategy elsewhere in this system
-(which skip an unrecognized party to avoid mis-bucketing raw VOTE COUNTS
-into the wrong pile). Nothing here counts votes — Civic's roster is
-already Google's own resolved answer to "who's on this ballot" — so
-there's no bucketing risk, and dropping an independent/minor-party
-candidate would defeat the actual point of adding this source: catching
-exactly the candidates who reach November without ever running in a
-primary, which every primary-derived source in this system structurally
-cannot see.
-
-The API key is injected into a separately-built request URL, never the
-`url` value fetch_with_retry logs on every request/retry/failure — same
-credential-safety split congress.py's own Congress.gov caller uses, for
-the identical reason (httpx's `params=` replaces rather than merges an
-existing query string, so the key can't just be added via that kwarg
-without risking it landing in a logged value some other way).
+The API key is merged into the request URL only, never the logged `url`.
 """
 
 import logging
+import re
+import time
 
 import httpx
 
 from app.config import settings
+from app.data_refresh import read as read_data
 from app.pipeline.fetch.civic_info import CIVIC_BASE, _parse_contests
 from app.pipeline.fetch.http_utils import fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, parse_office
+from app.pipeline.fetch.state_candidates_common import (
+    SourceRecords, ballot_list_party, clean_display_name, federal_record, normalize_party,
+    parse_office, parse_state_leg_office, parse_statewide_office,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-_rate_limiter = RateLimiter(rps=1.0)
+# Google's quota is 60 queries a minute per project (measured 2026-10-28:
+# 129 queries at 2.5 a second, then "Queries per minute per user").
+_rate_limiter = RateLimiter(rps=0.9)
+
+POINTS_FILE = "civic_query_points.json"
+# Each point's answer, kept in this process for a day: the candidate sync
+# and the measures reader in one Election run ask each point once. The
+# pipeline process is one process, and the answers are the same for
+# everyone (ballot data, never a visitor's).
+CACHE_TTL_S = 20 * 3600
+_answers: dict[str, tuple[float, list[dict]]] = {}
+SOURCE_NAME = "the Voting Information Project (Google Civic Information API)"
+# A state whose first few points carry no contests has no VIP ballot loaded.
+PROBE_POINTS = 3
+
+_NO_DATA = object()
+_FETCH_FAILED = object()
+
+
+def is_configured() -> bool:
+    return bool(settings.GOOGLE_CIVIC_API_KEY)
 
 
 def _matches_state(election: dict, state: str) -> bool:
     ocd = str(election.get("ocdDivisionId") or "")
-    return ocd in (
-        f"ocd-division/country:us/state:{state.lower()}",
-        "ocd-division/country:us",
-    )
+    return ocd in (f"ocd-division/country:us/state:{state.lower()}", "ocd-division/country:us")
 
 
 def _matches_november(election: dict, year: int) -> bool:
-    day = str(election.get("electionDay") or "")
-    # The real federal general is always in November; a permanent test
-    # entry (Google's own "VIP Test Election", live-verified to sit far
-    # in the future) and any of this state's own off-cycle/local/special
-    # elections in the same index must not be mistaken for it.
-    return day.startswith(f"{year}-11")
+    # The federal general is in November; Google's permanent test entries
+    # and a state's off-cycle elections in the same index are not it.
+    return str(election.get("electionDay") or "").startswith(f"{year}-11")
 
 
-# Google's own normal answer for an address whose ballot it has not
-# published yet: HTTP 404 "No information for this address". Verified
-# live on 2026-09-23, the morning after Google first listed the November
-# 3 general at all -- 71 of this file's 80 configured addresses answered
-# exactly that, including every state capitol. It is a real, expected
-# miss, NOT a failure, and must not read as one: because the default
-# retry path treats any 4xx as transient, that first morning reported
-# fetch_failed for 8 states (3 attempts each) rather than a healthy
-# empty night. `_FETCH_FAILED` below draws the same line one level up,
-# for the elections index.
-_NO_DATA = object()
-
-
-async def _get_json(
-    client: httpx.AsyncClient, url: str, params: dict, label: str,
-    expected_statuses: tuple[int, ...] = (),
-) -> dict | list | None | object:
-    """The parsed body, `_NO_DATA` for one of `expected_statuses`, or
-    `None` on a genuine fetch/parse failure."""
+async def _get_json(client: httpx.AsyncClient, url: str, params: dict, label: str,
+                    expected_statuses: tuple[int, ...] = ()):
+    """The parsed body, `_NO_DATA` for an expected status (404: "No
+    information for this address", Google's answer for a point it has no
+    ballot for), or None on a failed fetch."""
     full_url = str(httpx.URL(url).copy_merge_params({**params, "key": settings.GOOGLE_CIVIC_API_KEY}))
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, request_url=full_url, log_label=label,
-        expected_statuses=expected_statuses,
-    )
+    resp = await fetch_with_retry(client, _rate_limiter, "GET", url, request_url=full_url, log_label=label,
+                                  expected_statuses=expected_statuses)
     if resp is None:
         return None
     if resp.status_code in expected_statuses:
@@ -179,139 +111,230 @@ async def _get_json(
         return None
 
 
-# Sentinel distinguishing "the elections list genuinely failed to fetch or
-# parse" (a real problem -- state_candidates.py must report fetch_failed,
-# not a healthy empty night) from "fetched fine, nothing for this state/
-# year matched" (healthy -- today's actual reality for every state).
-# Collapsing both into one `None` return was a real bug caught before
-# this shipped: it would have silently reported every state's fetch
-# failure as a healthy [], every single night.
-_FETCH_FAILED = object()
-
-
-async def _current_general_election_id(
-    client: httpx.AsyncClient, state: str, year: int,
-) -> str | None | object:
+async def general_election_id(client: httpx.AsyncClient, state: str, year: int):
+    """The November general's id in Google's index, None when not listed,
+    or _FETCH_FAILED."""
     payload = await _get_json(client, f"{CIVIC_BASE}/elections", {}, f"Civic elections index ({state})")
-    if payload is None:
-        return _FETCH_FAILED
     elections = payload.get("elections") if isinstance(payload, dict) else None
     if not isinstance(elections, list):
         return _FETCH_FAILED
-    matches = [
-        e for e in elections
-        if isinstance(e, dict) and _matches_state(e, state) and _matches_november(e, year)
-    ]
+    matches = [e for e in elections if isinstance(e, dict) and _matches_state(e, state) and _matches_november(e, year)]
     return str(matches[0]["id"]) if matches else None
 
 
-def is_configured() -> bool:
-    return bool(settings.GOOGLE_CIVIC_API_KEY)
-
-
-async def _voterinfo_contests(
-    client: httpx.AsyncClient, election_id: str, address: str, label: str,
-) -> list[dict] | None:
-    """Parsed real contests for one address, or `None` on a genuine
-    fetch/parse failure. An empty list covers "fetched fine, no contests
-    published yet" (a 200 carrying no `contests`, or the 404 `_NO_DATA`
-    describes) and "a 200 with an unexpected shape" — see module
-    docstring for why all of those read as healthy, not a failure."""
-    payload = await _get_json(
-        client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": address}, label,
-        expected_statuses=(404,),
-    )
+async def contests_at(client: httpx.AsyncClient, election_id: str, where: str, label: str) -> list[dict] | None:
+    """The parsed contests on the ballot at `where` (an address, or
+    "lat,lon"), [] for none, None on a failed fetch. Kept a day."""
+    key = f"{election_id}|{where}"
+    kept = _answers.get(key)
+    if kept and time.monotonic() - kept[0] < CACHE_TTL_S:
+        return kept[1]
+    payload = await _get_json(client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": where},
+                              label, expected_statuses=(400, 404))
     if payload is None:
         return None
-    if payload is _NO_DATA or not isinstance(payload, dict):
+    contests = [] if payload is _NO_DATA or not isinstance(payload, dict) else _parse_contests(payload)
+    _answers[key] = (time.monotonic(), contests)
+    return contests
+
+
+def _label(contest: dict) -> str:
+    """The contest's office label with its district's name after it, the
+    way a printed ballot reads ("Representative in Congress 4th District")."""
+    office = (contest.get("office") or "").strip()
+    district = ((contest.get("district") or {}).get("name") or "").strip()
+    return f"{office} {district}".strip() if district and district.lower() not in office.lower() else office
+
+
+def _federal(contest: dict, one_seat: bool) -> tuple[str, int | None] | None:
+    """("S", None) or ("H", n) for a federal contest, else None."""
+    office = (contest.get("office") or "").strip()
+    scope = (contest.get("district") or {}).get("scope")
+    # The label with its district's name first: "Representative in
+    # Congress" alone reads as an at-large seat, "... 4th District" as the 4th.
+    parsed = parse_office(_label(contest)) or parse_office(office)
+    if parsed is None and scope == "congressional":
+        # Virginia's "Member, House of Representatives (9th District)": the
+        # label alone is a state chamber's words, Google's scope says
+        # which house it is.
+        number = re.search(r"\d+", _label(contest))
+        parsed = ("H", int(number.group())) if number else None
+    if parsed and parsed[0] == "H" and parsed[1] is None and not one_seat:
+        return None  # no number, and not an at-large state: refused, never guessed
+    return parsed
+
+
+# Google's scopes for a contest no state office has (VIP's district types).
+_LOCAL_SCOPES = frozenset({"countywide", "citywide", "township", "ward", "schoolBoard", "cityCouncil",
+                           "countyCouncil", "judicial", "special"})
+
+
+def _party_label(printed: str | None) -> str | None:
+    """A printed party name in VIP's capitals ("U.S. TAXPAYERS") as the
+    state's lists write it ("U.S. Taxpayers")."""
+    if not printed or not printed.isupper():
+        return printed
+    return " ".join(w if "." in w else w.capitalize() for w in printed.split())
+
+
+def _state_records(contest: dict) -> list[dict]:
+    """The statewide or legislative records a contest makes, [] for any
+    other contest (local, judicial, a measure).
+
+    Only the label WITH its district's name is parsed: the office alone
+    reads Jackson's city "Treasurer" (district "JACKSON CITY") as the
+    state treasurer, and with it the shared locality gate refuses it."""
+    if (contest.get("district") or {}).get("scope") in _LOCAL_SCOPES:
         return []
-    return _parse_contests(payload)
-
-
-def _contest_candidates(contest: dict, office: str, district: int | None) -> list[dict]:
-    results = []
+    label = _label(contest)
+    statewide = parse_statewide_office(label)
+    leg = None if statewide else parse_state_leg_office(label)
+    if statewide is None and leg is None:
+        return []
+    out = []
     for cand in contest.get("candidates") or []:
-        record = federal_record(office, district, normalize_party(cand.get("party") or ""), cand.get("name") or "")
-        if record:
-            results.append(record)
-    return results
-
-
-async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,
-) -> list[dict] | None:
-    if not is_configured():
-        return None
-
-    address = source.get("address")
-    if not address:
-        logger.error("google_civic source for %s has no configured address", state)
-        return None
-    house_addresses: dict = source.get("house_addresses") or {}
-
-    election_id = await _current_general_election_id(client, state, year)
-    if election_id is _FETCH_FAILED:
-        return None
-    if election_id is None:
-        return []  # not listed yet this cycle -- healthy, today's reality everywhere
-
-    results: list[dict] = []
-
-    senate_contests = await _voterinfo_contests(client, election_id, address, f"Civic voterinfo ({state})")
-    if senate_contests is None:
-        return None  # genuine fetch/parse failure
-    for contest in senate_contests:
-        if contest.get("kind") != "contest":
+        name = clean_display_name(cand.get("name") or "")
+        if statewide and statewide[0] == "governor" and "/" in name:
+            # A ticket printed "Governor/Lieutenant Governor" names both
+            # "A/B"; the state's lists write it "A and B".
+            name = " and ".join(part.strip() for part in name.split("/") if part.strip())
+        party = ballot_list_party(cand.get("party") or "") if cand.get("party") else None
+        if not name or party is None:
             continue
-        if parse_office(contest.get("office") or "") != ("S", None):
-            continue  # Senate only from the statewide address
-        results.extend(_contest_candidates(contest, "S", None))
+        code, printed = party
+        if statewide:
+            record = {"office": statewide[0], "district": statewide[1], "party": code, "last_name": name}
+        else:
+            record = {"office": leg[0], "district": leg[1], "party": code, "last_name": name}
+            if leg[2] is not None:
+                record["seat"] = leg[2]
+        if printed:
+            record["party_label"] = _party_label(printed)
+        out.append(record)
+    return out
 
-    for district_str, house_address in house_addresses.items():
-        try:
-            expected_district = int(district_str)
-        except (TypeError, ValueError):
-            logger.error("google_civic source for %s has a non-numeric house_addresses key %r", state, district_str)
-            continue
 
-        contests = await _voterinfo_contests(
-            client, election_id, house_address, f"Civic voterinfo ({state}-{expected_district})",
-        )
-        if contests is None:
-            return None  # genuine fetch/parse failure
+def _race_key(record: dict) -> tuple:
+    return (record["office"], record["district"], record.get("seat"))
+
+
+class _Reading:
+    """What every answer for one state said, race by race."""
+
+    def __init__(self, one_seat: bool):
+        self.one_seat = one_seat
+        self.races: dict[tuple, list[dict]] = {}
+        self.conflicts: set[tuple] = set()
+        self.seen: set[str] = set()  # district keys answered for, as the points file keys them
+        self.answers = 0
+        self.unread: list[str] = []
+
+    def add(self, contests: list[dict], state: str) -> None:
+        if contests:
+            self.answers += 1
         for contest in contests:
             if contest.get("kind") != "contest":
                 continue
-            office_district = parse_office(contest.get("office") or "")
-            if office_district is None or office_district[0] != "H":
-                continue  # not a House contest at all
+            federal = _federal(contest, self.one_seat)
+            if federal:
+                office, district = federal
+                records = [r for c in contest.get("candidates") or []
+                           if (r := federal_record(office, district, normalize_party(c.get("party") or ""),
+                                                   c.get("name") or ""))]
+                if office == "H":
+                    self.seen.add(f"{state}-H-{district or 0}")
+            else:
+                records = _state_records(contest)
+                for r in records:
+                    if r["office"] in ("upper", "lower"):
+                        self.seen.add(f"{state}-{r['office']}-{r['district']}")
+            for key in {_race_key(r) for r in records}:
+                these = sorted((r["last_name"], r["party"] or "") for r in records if _race_key(r) == key)
+                if key in self.races:
+                    if sorted((r["last_name"], r["party"] or "") for r in self.races[key]) != these:
+                        self.conflicts.add(key)
+                else:
+                    self.races[key] = [r for r in records if _race_key(r) == key]
 
-            # The schema-guaranteed district id is the only number this
-            # module trusts -- a bare office label carries none of its
-            # own, and even when the label text DOES carry a number
-            # (rare), a mismatch against Civic's own structured answer
-            # is treated as untrustworthy, not resolved in the text's
-            # favor. Refuses outright — never confirms a candidate under
-            # a district number that isn't independently confirmed —
-            # rather than guessing which of two disagreeing signals to
-            # trust (see module docstring: 3 of 13 real, current
-            # Michigan addresses resolved to the WRONG district on
-            # first try, which is exactly the failure mode this guards
-            # against happening again silently).
-            district_info = contest.get("district") or {}
-            reported_district = None
-            if district_info.get("scope") == "congressional":
-                try:
-                    reported_district = int(district_info.get("id") or "")
-                except (TypeError, ValueError):
-                    reported_district = None
-            if reported_district != expected_district:
-                logger.warning(
-                    "Civic voterinfo for %s district %s reported district %s instead of the "
-                    "expected one -- refusing rather than guessing",
-                    state, expected_district, reported_district,
-                )
-                continue
-            results.extend(_contest_candidates(contest, "H", expected_district))
+    def records(self) -> list[dict]:
+        if self.conflicts:
+            logger.warning("Civic answers disagreed about %d race(s); left out this run: %s",
+                           len(self.conflicts), sorted(self.conflicts)[:10])
+        return [r for key, rs in self.races.items() if key not in self.conflicts for r in rs]
 
-    return results
+
+def _points(state: str) -> dict[str, list]:
+    doc = read_data(POINTS_FILE) or {}
+    prefix = f"{state.upper()}-"
+    return {k: v for k, v in (doc.get("points") or {}).items() if k.startswith(prefix)}
+
+
+async def read_state(client: httpx.AsyncClient, year: int, state: str, source: dict | None = None):
+    """(_Reading, election id) for `state`, None on a failed fetch, or
+    (None, None) when Google lists no general for it."""
+    source = source or {}
+    election_id = await general_election_id(client, state, year)
+    if election_id is _FETCH_FAILED:
+        return None
+    if election_id is None:
+        return None, None
+    points = _points(state)
+    one_seat = sum(1 for k in points if k.startswith(f"{state}-H-")) == 1
+    reading = _Reading(one_seat)
+    # Fixed public addresses first, then each district's points, the
+    # legislative districts' first (each answer names its House and state
+    # Senate districts too), skipping a district an earlier answer named.
+    fixed = [a for a in [source.get("address"), *(source.get("house_addresses") or {}).values()] if a]
+    order = sorted(points, key=lambda k: ({"lower": 0, "upper": 1, "H": 2}.get(k.split("-")[1], 3), k))
+    asked = 0
+    for where in fixed:
+        contests = await contests_at(client, election_id, where, f"Civic voterinfo ({state})")
+        if contests is None:
+            return None
+        asked += 1
+        reading.add(contests, state)
+    for district in order:
+        if district in reading.seen:
+            continue
+        for lat, lon in points[district]:
+            if asked >= PROBE_POINTS and reading.answers == 0:
+                return reading, election_id  # no VIP ballot loaded for this state
+            contests = await contests_at(client, election_id, f"{lat},{lon}", f"Civic voterinfo ({district})")
+            if contests is None:
+                return None
+            asked += 1
+            reading.add(contests, state)
+            if district in reading.seen:
+                break
+    reading.unread = sorted(d for d in points if d.split("-")[1] in ("upper", "lower") and d not in reading.seen)
+    return reading, election_id
+
+
+async def fetch_confirmed_candidates(client: httpx.AsyncClient, year: int, state: str, source: dict):
+    """The state's VIP ballot as candidate records (see the module
+    docstring), [] when Google holds none, None on a failed fetch."""
+    if not is_configured():
+        return None
+    read = await read_state(client, year, state, source)
+    if read is None:
+        return None
+    reading, _ = read
+    if reading is None or reading.answers == 0:
+        return []
+    records = reading.records()
+    has_statewide = any(r["office"] not in ("S", "H", "upper", "lower") for r in records)
+    if not has_statewide or any(k[0] not in ("S", "H", "upper", "lower") for k in reading.conflicts):
+        # The statewide offices are on every ballot in the state: an answer
+        # without them, or answers disagreeing about one, is no read of them.
+        return SourceRecords([r for r in records if r["office"] in ("S", "H")], state_offices_incomplete=True,
+                             ballot_list=True)
+    out = SourceRecords(records, ballot_list=True)
+    # The legislative districts no point answered for (or whose answers
+    # disagreed): the sync leaves their stored nominees as they are.
+    out.unread_districts = frozenset(
+        tuple(d.split("-")[1:]) for d in reading.unread
+    ) | frozenset((k[0], k[1]) for k in reading.conflicts if k[0] in ("upper", "lower"))
+    if out.unread_districts:
+        logger.info("Civic: %s's legislative districts not read this run, kept as stored: %s",
+                    state, sorted(out.unread_districts)[:20])
+    return out

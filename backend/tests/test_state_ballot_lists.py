@@ -1084,26 +1084,26 @@ async def test_an_empty_answer_claims_nothing_about_state_offices(db_session, mo
 
 @pytest.mark.asyncio
 async def test_an_empty_answer_from_a_complete_ballot_source_changes_nothing(db_session, only, monkeypatch):
-    """Michigan's and Oklahoma's lists answer [] until they are the ballot
-    (another year's page, primary filers still listed). That must neither
+    """Oklahoma's list (and Michigan's, while it was read) answers [] until
+    it is the ballot (another year's page, primary filers still listed). That must neither
     unconfirm anyone nor prune a ballot-only row nor record the state's
     ballot as the complete certified one -- and it is not a failed fetch."""
     from app.api.elections import _ballot_marker
-    _race(db_session, "2026-SEN-MI", "MI")
-    _db_cand(db_session, "S6MI00001", "2026-SEN-MI", "ROGERS, MIKE", "REP", confirmed_general=True)
-    _db_cand(db_session, "ballot:2026-SEN-MI:tim-long", "2026-SEN-MI", "LONG, TIM", "U.S. TAXPAYERS PARTY",
+    _race(db_session, "2026-SEN-OK", "OK")
+    _db_cand(db_session, "S6OK00001", "2026-SEN-OK", "MULLIN, MARKWAYNE", "REP", confirmed_general=True)
+    _db_cand(db_session, "ballot:2026-SEN-OK:tim-long", "2026-SEN-OK", "LONG, TIM", "LIBERTARIAN",
              confirmed_general=True)
     db_session.commit()
-    only("MI", [])
+    only("OK", [])
     monkeypatch.setitem(sc.STRATEGIES, "google_civic", AsyncMock(return_value=None))
 
     results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
-    assert results["MI"]["status"] == "ok"
+    assert results["OK"]["status"] == "ok"
     assert {c.id: c.confirmed_general for c in db_session.query(Candidate)} == {
-        "S6MI00001": True, "ballot:2026-SEN-MI:tim-long": True,
+        "S6OK00001": True, "ballot:2026-SEN-OK:tim-long": True,
     }
-    assert _ballot_marker(db_session, "MI", 2026)["complete"] is False
+    assert _ballot_marker(db_session, "OK", 2026)["complete"] is False
 
 
 @pytest.mark.asyncio
@@ -1121,3 +1121,96 @@ async def test_an_empty_general_list_is_handled_like_one_that_did_not_answer(db_
 
     assert db_session.query(Candidate).one().confirmed_general is True
     assert _ballot_marker(db_session, "CO", 2026)["sourceName"] == sc.source_for_state("CO")["source_name"]
+
+
+# ── the VIP ballot first (Google Civic), the state's own sources after ──
+
+from app.config import settings as app_settings  # noqa: E402
+from app.models import StateLegNominee, StatewideNominee  # noqa: E402
+from app.pipeline.fetch.state_candidates_common import SourceRecords  # noqa: E402
+
+
+@pytest.fixture()
+def civic_first(monkeypatch):
+    """Google Civic configured, answering `records`; the state's own
+    source answering `own`."""
+    def scope(state, records, own):
+        _one_state(monkeypatch, state)
+        monkeypatch.setattr(app_settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+        monkeypatch.setitem(sc.STRATEGIES, "google_civic", AsyncMock(return_value=records))
+        strategy = sc.source_for_state(state)["strategy"]
+        if strategy != "google_civic":
+            monkeypatch.setitem(sc.STRATEGIES, strategy, AsyncMock(return_value=own))
+    return scope
+
+
+@pytest.mark.asyncio
+async def test_civic_decides_the_races_it_names_and_the_state_s_source_the_rest(db_session, civic_first):
+    from app.api.elections import _ballot_marker
+    _race(db_session, "2026-SEN-LA", "LA")
+    _race(db_session, "2026-HOUSE-LA-1", "LA", office="H", district=1)
+    _db_cand(db_session, "S6LA00001", "2026-SEN-LA", "CASSIDY, BILL", "REP", confirmed_general=True)
+    _db_cand(db_session, "S6LA00002", "2026-SEN-LA", "FLEMING, JOHN", "REP")
+    _db_cand(db_session, "H6LA01001", "2026-HOUSE-LA-1", "SCALISE, STEVE", "REP")
+    db_session.commit()
+    civic_first("LA", [_rec("S", None, "R", "Fleming", "John Fleming")],
+                [_rec("S", None, "R", "Cassidy", "Bill Cassidy"), _rec("H", 1, "R", "Scalise", "Steve Scalise")])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    confirmed = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    # The VIP ballot named the Senate race: its list is the ballot there.
+    assert confirmed["S6LA00002"] is True and confirmed["S6LA00001"] is False
+    # It named no House race: the state's own source, itself the complete
+    # ballot, still speaks for it as one.
+    assert confirmed["H6LA01001"] is True
+    marker = _ballot_marker(db_session, "LA", 2026)
+    assert marker["complete"] is True
+    assert marker["raceSources"]["2026-SEN-LA"] == sc.CIVIC_SOURCE_NAME
+    assert marker["raceSources"]["2026-HOUSE-LA-1"] == sc.source_for_state("LA")["source_name"]
+
+
+def _civic_state(records, unread=frozenset()):
+    out = SourceRecords(records, ballot_list=True)
+    out.unread_districts = unread
+    return out
+
+
+@pytest.mark.asyncio
+async def test_civic_takes_the_state_offices_and_leaves_an_unread_district_as_stored(db_session, civic_first):
+    _race(db_session, "2026-SEN-MI", "MI")
+    db_session.add_all([
+        StatewideNominee(state="MI", cycle_year=2026, office="governor", party="D", display_name="Old Ticket",
+                         source_name="the state's list"),
+        StateLegNominee(state="MI", cycle_year=2026, chamber="lower", district="1", party="D",
+                        display_name="Old Name", source_name="the state's list"),
+        StateLegNominee(state="MI", cycle_year=2026, chamber="lower", district="73", party="D",
+                        display_name="Julie Brixie", source_name="the state's list"),
+    ])
+    db_session.commit()
+    civic_first("MI", _civic_state([
+        {"office": "governor", "district": None, "party": "D", "last_name": "Jocelyn Benson and Winnie Brinks"},
+        {"office": "lower", "district": "1", "party": "D", "last_name": "Tyrone Carter"},
+    ], unread=frozenset({("lower", "73")})), None)
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    leg = {(r.district, r.display_name): r.source_name for r in db_session.query(StateLegNominee)}
+    assert leg == {("1", "Tyrone Carter"): sc.CIVIC_SOURCE_NAME, ("73", "Julie Brixie"): "the state's list"}
+    assert [r.display_name for r in db_session.query(StatewideNominee)] == ["Jocelyn Benson and Winnie Brinks"]
+
+
+@pytest.mark.asyncio
+async def test_civic_never_takes_state_offices_missing_one_already_on_file(db_session, civic_first):
+    _race(db_session, "2026-SEN-MN", "MN")
+    db_session.add(StatewideNominee(state="MN", cycle_year=2026, office="auditor", party="D",
+                                    display_name="Julie Blaha", source_name="the state's list"))
+    db_session.commit()
+    civic_first("MN", _civic_state([
+        {"office": "governor", "district": None, "party": "D", "last_name": "A Ticket"},
+        {"office": "lower", "district": "1A", "party": "D", "last_name": "A Member"},
+    ]), [])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert [r.display_name for r in db_session.query(StatewideNominee)] == ["Julie Blaha"]

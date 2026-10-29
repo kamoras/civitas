@@ -444,7 +444,7 @@ describe("the ballot page", () => {
     );
     const own = screen.getByRole("link", { name: /^Check your registration: my\.arizona\.vote/ });
     expect(own).toHaveAttribute("href", "https://my.arizona.vote/check_registration");
-    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(screen.getByText(/This site doesn't allow automated checks/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Check your registration through Can I Vote/ })
     ).toHaveAttribute("href", "https://www.nass.org/can-i-vote/voter-registration-status");
@@ -466,7 +466,7 @@ describe("the ballot page", () => {
 
   it("gives a verified lookup no caveat", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    expect(screen.queryAllByText(/This site blocks automated checks/)).toHaveLength(0);
+    expect(screen.queryAllByText(/This site doesn't allow automated checks/)).toHaveLength(0);
   });
 });
 
@@ -1452,6 +1452,34 @@ describe("ballot measures", () => {
     ).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
     expect(drawer.getByText(/we have not checked this state yet/)).toBeInTheDocument();
+  });
+
+  it("says a list is no longer re-read because the state's terms forbid it, never that a read failed", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered",
+            sourceName: measure.sourceName,
+            checkedAt: "2026-10-28T12:31:00Z",
+            lastAttemptAt: "2026-10-29T12:31:00Z",
+            termsBlock: {
+              host: "elections.example.gov",
+              publisher: "State of Example",
+              terms_url: "https://example.gov/terms",
+            },
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/election site is no longer read automatically/)).toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: /terms of use/ })).toHaveAttribute(
+      "href",
+      "https://example.gov/terms"
+    );
+    expect(drawer.queryByText(/attempt to re-read .* failed/)).not.toBeInTheDocument();
   });
 
   it("gives an unread state's own reason, with the official lookup", async () => {

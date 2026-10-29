@@ -33,6 +33,11 @@ sources (`sync_gate` / `sync_observe`).
   A plain 403 is not a host's refusal (Akamai NetStorage answers 403 for a
   file that isn't there: www.senate.gov's floor logs for days without a
   session, measured 2026-10-25), and is not retried.
+- **Terms of use** (`terms_forbid`): a host whose own terms forbid
+  automated access (app/data/host_terms.json, each entry quoting them) is
+  never asked at all: TermsForbid, a HostRefusing, before anything is sent.
+  Michigan's Department of State sites, 2026-10-28 (owner decision: their
+  terms are respected, and the data is read where they share it, VIP).
 """
 
 import asyncio
@@ -49,7 +54,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from app import crawler, source_reads
+from app import crawler, host_terms, source_reads
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.error_utils import ExpectedSourceFailure
 from app.pipeline.fetch import robots
@@ -79,6 +84,19 @@ class HostRefusing(ExpectedSourceFailure, httpx.TransportError):
         self.host, self.reason, self.until = host, reason, until
         when = f" until {datetime.fromtimestamp(until, timezone.utc):%Y-%m-%d %H:%M} UTC" if until else ""
         super().__init__(f"{host}: {reason}{when}; not requested")
+
+
+class TermsForbid(HostRefusing):
+    """No request was sent: the host's terms of use forbid automated access."""
+
+    def __init__(self, host: str, terms: dict):
+        self.terms = terms
+        super().__init__(host, f"its terms of use forbid automated access ({terms.get('terms_url')})")
+
+
+def terms_forbid(host: str) -> dict | None:
+    """The host_terms.json entry covering `host`, or None (app/host_terms.py)."""
+    return host_terms.forbid(host)
 
 
 class _Host:
@@ -301,6 +319,9 @@ def _release(host: str) -> None:
 
 
 def _check(host: str) -> None:
+    terms = terms_forbid(host)
+    if terms:
+        raise TermsForbid(host, terms)
     entry = refusing(host)
     if entry:
         source_reads.held_off(host, entry.get("reason") or "")

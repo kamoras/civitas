@@ -614,8 +614,11 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // has to be told that rather than shown them as current.
     // Any status but covered / confirmed_none means the latest read did
     // not confirm this list — failed, or found the document missing.
+    // A state whose site's terms forbid automated reading is not re-read
+    // at all: its list is the last read's however its status reads.
     const stale =
-      measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none";
+      Boolean(measureCoverage.termsBlock) ||
+      (measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none");
     // Credit the measures to the source they came from, not to whichever
     // source the coverage row names: while a state's registered source is
     // renamed or re-pointed, the cards are still the previous source's. A
@@ -686,10 +689,25 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         {!unread && stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-body text-signal-amber">
-              {measureCoverage.status === "ingest_failed"
-                ? `Our latest attempt to re-read ${state}'s measures failed`
-                : `Our latest check could not find ${state}'s published list`}
-              {measureCoverage.lastAttemptAt
+              {measureCoverage.termsBlock ? (
+                <>
+                  {state}&apos;s election site is no longer read automatically: its{" "}
+                  <a
+                    href={measureCoverage.termsBlock.terms_url ?? lookupHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={INLINE_LINK}
+                  >
+                    terms of use ↗
+                  </a>{" "}
+                  forbid it
+                </>
+              ) : measureCoverage.status === "ingest_failed" ? (
+                `Our latest attempt to re-read ${state}'s measures failed`
+              ) : (
+                `Our latest check could not find ${state}'s published list`
+              )}
+              {measureCoverage.lastAttemptAt && !measureCoverage.termsBlock
                 ? ` (${measureCoverage.lastAttemptAt.slice(0, 10)})`
                 : ""}
               . The list below is from the last successful read
@@ -780,13 +798,15 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
   // not_yet_covered / ingest_failed — say so plainly, with the actual
   // reason. Never imply zero.
   const failed = measureCoverage.status === "ingest_failed";
-  const why = failed
-    ? "our last attempt to load them failed."
-    : measureCoverage.unreadReason
-      ? measureCoverage.unreadReason
-      : measureCoverage.lastAttemptAt
-        ? "the state has not published its list for this election yet."
-        : "we have not checked this state yet.";
+  const why = measureCoverage.termsBlock
+    ? "the state's election site's terms of use forbid reading it automatically, and the Voting Information Project has no list for it yet."
+    : failed
+      ? "our last attempt to load them failed."
+      : measureCoverage.unreadReason
+        ? measureCoverage.unreadReason
+        : measureCoverage.lastAttemptAt
+          ? "the state has not published its list for this election yet."
+          : "we have not checked this state yet.";
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
       <p className="text-body text-signal-amber">

@@ -73,8 +73,7 @@ from app.pipeline.fetch.ballot_measures_wv import fetch_measures as wv_fetch_mea
 from app.pipeline.fetch.ballot_measures_il import fetch_measures as il_fetch_measures
 from app.pipeline.fetch.ballot_measures_in import fetch_measures as in_fetch_measures
 from app.pipeline.fetch.ballot_measures_ks import fetch_measures as ks_fetch_measures
-from app.pipeline.fetch.ballot_measures_mi import fetch_measures as mi_fetch_measures
-from app.pipeline.fetch.ballot_measures_mn import fetch_measures as mn_fetch_measures
+from app.pipeline.fetch.ballot_measures_civic import fetch_measures as civic_fetch_measures
 from app.pipeline.fetch.ballot_measures_nd import fetch_measures as nd_fetch_measures
 from app.pipeline.fetch.ballot_measures_ne import fetch_measures as ne_fetch_measures
 from app.pipeline.fetch.ballot_measures_ok import fetch_measures as ok_fetch_measures
@@ -282,8 +281,6 @@ MULTI_DOCUMENT_STRATEGIES = {
     "il_voters_guide_questions": il_fetch_measures,
     "in_legislation_summary": in_fetch_measures,
     "ks_proposed_amendments": ks_fetch_measures,
-    "mi_ballot_questions": mi_fetch_measures,
-    "mn_constitutional_amendments": mn_fetch_measures,
     "nd_measures_on_ballot": nd_fetch_measures,
     "ne_ballot_measures": ne_fetch_measures,
     "ok_state_questions": ok_fetch_measures,
@@ -348,13 +345,21 @@ CACHE_TTL_HOURS = 72
 CACHE_TIER = "ballot_measure_pdf_v2"
 
 
+# A national reader of a state's measures, given the state and its entry:
+# the Voting Information Project's ballot data through Google Civic, for a
+# state whose own sites are not read (ballot_measures_civic.py).
+NATIONAL_STRATEGIES = {
+    "google_civic": civic_fetch_measures,
+}
+
+
 def is_configured(state: str) -> bool:
     """Whether `state` has both a registered source AND a strategy
     function for it — a source entry with a typo'd/unregistered strategy
     key is a config bug, not a signal to guess at parsing."""
     source = source_for_state(state)
     strategy = source.get("strategy") if source else None
-    return strategy in STRATEGIES or strategy in MULTI_DOCUMENT_STRATEGIES
+    return strategy in STRATEGIES or strategy in MULTI_DOCUMENT_STRATEGIES or strategy in NATIONAL_STRATEGIES
 
 
 def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -> dict:
@@ -570,7 +575,8 @@ async def fetch_state_measures_pdf(
     strategy_key = source["strategy"]
     strategy = STRATEGIES.get(strategy_key)
     multi_strategy = MULTI_DOCUMENT_STRATEGIES.get(strategy_key)
-    if strategy is None and multi_strategy is None:
+    national = NATIONAL_STRATEGIES.get(strategy_key)
+    if strategy is None and multi_strategy is None and national is None:
         logger.error(
             "Ballot measure PDF source for %s references unknown strategy %r",
             state, strategy_key,
@@ -581,6 +587,18 @@ async def fetch_state_measures_pdf(
     cached = api_cache_get(db, CACHE_TIER, cache_key, max_age_hours=CACHE_TTL_HOURS)
     if isinstance(cached, list):
         return cached
+
+    if national is not None:
+        try:
+            pairs = await national(client, year, state, source)
+        except NotYetPublished:
+            raise
+        except Exception:
+            logger.exception("Ballot measure fetch failed for %s %d (%s)", state, year, strategy_key)
+            return None
+        if pairs is None:
+            return None
+        return _finish(db, state, year, [_to_measure(state, parsed, election_date, url) for parsed, url in pairs])
 
     if multi_strategy is not None:
         try:

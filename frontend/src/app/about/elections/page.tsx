@@ -278,9 +278,9 @@ export default async function ElectionsChapter() {
               from a third-party site, and each one links to its source. When a rule says &ldquo;15
               days before the election,&rdquo; we show the rule and the date it works out to. Each
               source is checked again when the list is rebuilt, and a date we can&apos;t check
-              isn&apos;t shown. When a state&apos;s site blocks automated checks, we use its law
-              instead. If we can&apos;t read a state&apos;s deadlines from either, its page lists
-              none, says so, and links the state&apos;s own voter lookup.
+              isn&apos;t shown. When a state&apos;s site blocks automated checks or its terms forbid
+              them, we use its law instead. If we can&apos;t read a state&apos;s deadlines from
+              either, its page lists none, says so, and links the state&apos;s own voter lookup.
             </P>
           </Box>
           <Box
@@ -297,12 +297,12 @@ export default async function ElectionsChapter() {
               Each state page leads with how and by when to register (&ldquo;Register online by Mon,
               Oct 19&rdquo;), the days left, and a link to the state election office&apos;s own
               registration page. We check each link answers on the state&apos;s own site when the
-              list is rebuilt. If the site blocks automated checks, the link is still shown, marked
-              as one we couldn&apos;t confirm. With no state page on file, the link is vote.gov, the
-              federal government&apos;s registration directory. Where a state lets you register at
-              the polls, the page says so in the state&apos;s words. North Dakota has no voter
-              registration, and its page says that. The elections page and the homepage list every
-              state whose registration closes in the next 10 days.
+              list is rebuilt. If the site blocks automated checks or its terms forbid them, the
+              link is still shown, marked as one we couldn&apos;t confirm. With no state page on
+              file, the link is vote.gov, the federal government&apos;s registration directory.
+              Where a state lets you register at the polls, the page says so in the state&apos;s
+              words. North Dakota has no voter registration, and its page says that. The elections
+              page and the homepage list every state whose registration closes in the next 10 days.
             </P>
           </Box>
         </Boxes>

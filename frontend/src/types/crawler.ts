@@ -24,6 +24,16 @@ export interface CrawlerFacts {
   userAgent: string;
   /** The hosts that refuse userAgent, each with the form it is sent and the measurement. */
   userAgentExceptions: { host: string; userAgent: string; reason: string }[];
+  /** Hosts whose own terms forbid automated access: never asked. */
+  termsHosts: {
+    host: string;
+    publisher: string;
+    termsUrl: string;
+    quote: string;
+    readOn: string;
+    /** When the weekly check last found the terms as reviewed (an Internet Archive capture date). */
+    confirmedOn: string;
+  }[];
   page: string;
   contact: string | null;
   signing: { configured: boolean; directory: string | null };

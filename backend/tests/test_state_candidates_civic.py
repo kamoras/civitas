@@ -1,379 +1,184 @@
-"""Tests for the Google Civic confirmed-candidate strategy
-(state_candidates_civic.py).
+"""The Google Civic candidate source (state_candidates_civic.py), on the
+shapes voterInfoQuery answers with: contests copied from Michigan's live
+answers of 2026-10-28 (office labels, district names and scopes, the
+parties as VIP prints them), cut to a few races each."""
 
-No real fixture data exists for this module to test against. Google's
-election index DOES now carry the November 2026 general (live-verified
-2026-09-23 against production's real GOOGLE_CIVIC_API_KEY: one
-country-level entry, id 12000), but no address has real contest data
-behind it yet — 71 of the 80 configured addresses answer HTTP 404 "No
-information for this address", and the one that answers 200 carries no
-`contests` key. See the module's own docstring. The response
-shapes below are constructed directly from Google's public Discovery
-Document schema (the same one civic_info.py's own docstring verifies
-its parsing against) — labeled honestly as constructed, not claimed as
-real captured data, the same discipline KY's own test fixtures use for
-their one genuinely-unverifiable branch.
-"""
-
-import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_civic as civic
 
-_ELECTIONS_INDEX = {
-    "elections": [
-        {"id": "2000", "name": "VIP Test Election", "electionDay": "2031-12-06"},
-        {
-            "id": "9468", "name": "Delaware Primary Election", "electionDay": "2026-09-15",
-            "ocdDivisionId": "ocd-division/country:us/state:de",
-        },
-        {
-            "id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03",
-            "ocdDivisionId": "ocd-division/country:us/state:mi",
-        },
-    ],
-}
+ELECTIONS = {"elections": [
+    {"id": "2000", "name": "VIP Test Election", "electionDay": "2031-12-06", "ocdDivisionId": "ocd-division/country:us"},
+    {"id": "12000", "name": "2026 General Midterm Election", "electionDay": "2026-11-03",
+     "ocdDivisionId": "ocd-division/country:us"},
+]}
 
-_VOTERINFO_SENATE_AND_HOUSE = {
-    "election": {"id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03"},
-    "contests": [
-        {
-            "type": "General",
-            "office": "United States Senator",
-            "candidates": [
-                {"name": "Abdul El-Sayed", "party": "Democratic Party"},
-                {"name": "Mike Rogers", "party": "Republican Party"},
-                {"name": "Someone Else", "party": "Independent"},
-            ],
-        },
-        {
-            "type": "General",
-            "office": "U.S. Representative",
-            "district": {"id": "12", "name": "Congressional District 12", "scope": "congressional"},
-            "candidates": [
-                {"name": "A House Candidate", "party": "Democratic Party"},
-            ],
-        },
-    ],
-}
 
-# A real house_addresses query response: the district field's own real
-# schema (id/name/scope — see civic_info.py's docstring) is the only
-# source of the district number this module trusts, matching the shape
-# a house_addresses-configured district 12 query would really return.
-_VOTERINFO_HOUSE_DISTRICT_12 = {
-    "election": {"id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03"},
-    "contests": [
-        {
-            "type": "General",
-            "office": "U.S. Representative",
-            "district": {"id": "12", "name": "Congressional District 12", "scope": "congressional"},
-            "candidates": [
-                {"name": "Rashida Tlaib", "party": "Democratic Party"},
-                {"name": "A Republican Candidate", "party": "Republican Party"},
-            ],
-        },
-    ],
-}
+def _contest(office, district, scope, *cands):
+    return {"type": "General", "office": office, "district": {"name": district, "scope": scope},
+            "candidates": [{"name": n, "party": p} for n, p in cands]}
 
-# The real failure mode this module's own docstring documents: an
-# address configured for district 9 that actually resolves to district
-# 10 (Rep. McClain's real Shelby Township office, live-verified) — the
-# contest returned is for the WRONG district and must be refused.
-_VOTERINFO_HOUSE_WRONG_DISTRICT = {
-    "election": {"id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03"},
-    "contests": [
-        {
-            "type": "General",
-            "office": "U.S. Representative",
-            "district": {"id": "10", "name": "Congressional District 10", "scope": "congressional"},
-            "candidates": [{"name": "John James", "party": "Republican Party"}],
-        },
-    ],
+
+STATEWIDE = [
+    _contest("Governor/Lieutenant Governor", "Michigan", "statewide",
+             ("Jocelyn Benson/Winnie Brinks", "DEMOCRATIC"), ("John James/Jay DeBoyer", "REPUBLICAN")),
+    _contest("United States Senator", "Michigan", "statewide",
+             ("Abdul El-Sayed", "DEMOCRATIC"), ("Mike Rogers", "REPUBLICAN"), ("Tim Long", "U.S. TAXPAYERS")),
+    # A city's own treasurer: its office alone reads as the state treasurer.
+    _contest("Treasurer", "JACKSON CITY", "citywide", ("David R. Hammontree", "NON PARTISAN")),
+    _contest("Justice of Supreme Court", "Supreme Court", "judicial", ("Noah P. Hood", "NO PARTY AFFILIATION")),
+]
+
+
+def _ballot(house, upper, lower, extra=()):
+    return {"contests": [
+        *STATEWIDE,
+        _contest("Representative in Congress", f"{house} District", "congressional", *extra or (
+            ("Sean McCann", "DEMOCRATIC"), ("Bill Huizenga", "REPUBLICAN"))),
+        _contest("State Senator", f"{upper} District", "stateUpper", ("Julie M. Rogers", "DEMOCRATIC")),
+        _contest("Representative in State Legislature", f"{lower} District", "stateLower",
+                 ("Matt Longjohn", "DEMOCRATIC")),
+    ]}
+
+
+POINTS = {
+    "XX-H-4": [[1.0, 1.0]], "XX-H-5": [[2.0, 2.0]],
+    "XX-upper-19": [[1.0, 1.0]], "XX-upper-20": [[2.0, 2.0]],
+    "XX-lower-40": [[1.0, 1.0]], "XX-lower-41": [[2.0, 2.0], [3.0, 3.0]],
 }
 
 
-class TestElectionMatching:
-    def test_matches_this_states_ocd_division_and_november(self):
-        matches = [
-            e for e in _ELECTIONS_INDEX["elections"]
-            if civic._matches_state(e, "MI") and civic._matches_november(e, 2026)
-        ]
-        assert [e["id"] for e in matches] == ["9999"]
-
-    def test_a_bare_country_level_division_also_matches(self):
-        national = {"ocdDivisionId": "ocd-division/country:us", "electionDay": "2026-11-03"}
-        assert civic._matches_state(national, "MI") is True
-
-    def test_a_different_states_division_does_not_match(self):
-        assert civic._matches_state(_ELECTIONS_INDEX["elections"][1], "MI") is False
-
-    def test_a_non_november_date_does_not_match(self):
-        assert civic._matches_november(_ELECTIONS_INDEX["elections"][1], 2026) is False
-
-    def test_the_permanent_test_election_never_matches_a_real_year(self):
-        assert civic._matches_november(_ELECTIONS_INDEX["elections"][0], 2026) is False
+@pytest.fixture(autouse=True)
+def _fresh(monkeypatch):
+    civic._answers.clear()
+    monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+    monkeypatch.setattr(civic, "_points", lambda state: {k.replace("XX", state): v for k, v in POINTS.items()})
 
 
-class TestFetchConfirmedCandidates:
-    def _patch(self, monkeypatch, elections=None, voterinfo=None):
-        async def fake_get_json(client, url, params, label, expected_statuses=()):
-            if url.endswith("/elections"):
-                return elections
-            return voterinfo
+def _serve(monkeypatch, answers: dict, elections=ELECTIONS):
+    """`answers`: address -> payload (civic._NO_DATA, None for a failed fetch)."""
+    asked = []
 
-        monkeypatch.setattr(civic, "_get_json", fake_get_json)
-        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+    async def get_json(client, url, params, label, expected_statuses=()):
+        if url.endswith("/elections"):
+            return elections
+        asked.append(params["address"])
+        return answers.get(params["address"], civic._NO_DATA)
 
-    @pytest.mark.asyncio
-    async def test_returns_none_when_unconfigured(self, monkeypatch):
-        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "")
-        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"}) is None
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_address_configured(self, monkeypatch):
-        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
-        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {}) is None
-
-    @pytest.mark.asyncio
-    async def test_no_matching_election_yet_is_a_healthy_empty_list(self, monkeypatch):
-        """Today's actual live reality for every state -- must read as
-        healthy (ok, 0 confirmed), never fetch_failed."""
-        self._patch(monkeypatch, elections=_ELECTIONS_INDEX)
-        result = await civic.fetch_confirmed_candidates(None, 2026, "WI", {"address": "x"})
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_elections_index_fetch_failure_is_not_silently_healthy(self, monkeypatch):
-        """Regression for the sentinel bug: a genuine elections-index
-        fetch failure must return None (fetch_failed), never the same []
-        a real "not listed yet" answer produces -- collapsing the two
-        would report every night's real outage as a healthy empty run."""
-        self._patch(monkeypatch, elections=None)
-        result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_malformed_elections_payload_is_also_a_failure(self, monkeypatch):
-        self._patch(monkeypatch, elections={"elections": "not-a-list"})
-        result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_matched_election_with_no_contests_yet_is_healthy_empty(self, monkeypatch):
-        """Real, directly-observed shape: Delaware's real, currently-
-        listed primary returns HTTP 200 with no `contests` key at all,
-        5 days before the real election."""
-        self._patch(monkeypatch, elections=_ELECTIONS_INDEX, voterinfo={"election": {"id": "9999"}})
-        result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_voterinfo_fetch_failure_after_a_real_election_match_is_not_healthy(self, monkeypatch):
-        self._patch(monkeypatch, elections=_ELECTIONS_INDEX, voterinfo=None)
-        result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_confirms_the_real_senate_candidates_and_excludes_the_house_one(self, monkeypatch):
-        """The independent candidate's party doesn't normalize -- kept
-        anyway with party=None, deliberately unlike every vote-counting
-        strategy elsewhere in this system (see module docstring).
-
-        The House contest that also appears at the statewide Senate address
-        is real (Civic returns every contest for that precinct, not just
-        Senate) but out of scope for THIS query -- only house_addresses
-        entries are asked about House races, never the Senate address,
-        whether or not the contest carries a schema-valid district id (see
-        TestHouseAddresses for that path)."""
-        self._patch(monkeypatch, elections=_ELECTIONS_INDEX, voterinfo=_VOTERINFO_SENATE_AND_HOUSE)
-        result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
-        assert result is not None
-        by_name = {r["last_name"]: r for r in result}
-        assert by_name["El-Sayed"] == {"office": "S", "district": None, "party": "D", "last_name": "El-Sayed", "display_name": "Abdul El-Sayed"}
-        assert by_name["Rogers"]["party"] == "R"
-        assert by_name["Else"]["party"] is None  # independent, kept anyway
-        assert "Candidate" not in by_name  # the House contest's own candidate never appears
-        assert len(result) == 3
+    monkeypatch.setattr(civic, "_get_json", get_json)
+    return asked
 
 
-class TestHouseAddresses:
-    """house_addresses is optional -- a state with none configured
-    (every existing test above) gets Senate-only confirmation exactly
-    as before. These tests are the only ones that set it."""
-
-    def _patch(self, monkeypatch, voterinfo_by_address: dict[str, dict]):
-        async def fake_get_json(client, url, params, label, expected_statuses=()):
-            if url.endswith("/elections"):
-                return _ELECTIONS_INDEX
-            return voterinfo_by_address.get(params.get("address"))
-
-        monkeypatch.setattr(civic, "_get_json", fake_get_json)
-        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
-
-    @pytest.mark.asyncio
-    async def test_confirms_a_house_district_whose_reported_id_matches(self, monkeypatch):
-        self._patch(monkeypatch, {
-            "capitol": _VOTERINFO_SENATE_AND_HOUSE,
-            "district-12-address": _VOTERINFO_HOUSE_DISTRICT_12,
-        })
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI", {"address": "capitol", "house_addresses": {"12": "district-12-address"}},
-        )
-        assert result is not None
-        by_seat = {(r["office"], r["district"], r["party"]): r["last_name"] for r in result}
-        assert by_seat[("H", 12, "D")] == "Tlaib"
-        assert by_seat[("H", 12, "R")] == "Candidate"
-        assert by_seat[("S", None, "D")] == "El-Sayed"  # Senate still confirmed from the capitol address
-
-    @pytest.mark.asyncio
-    async def test_refuses_a_house_district_whose_reported_id_does_not_match(self, monkeypatch):
-        """Real regression case from this module's own docstring: an
-        address configured for district 9 (Rep. McClain's real Shelby
-        Township office) actually resolves to district 10. Must never
-        confirm a candidate under the WRONG district number — refuse
-        the whole contest instead."""
-        self._patch(monkeypatch, {
-            "capitol": {"election": {"id": "9999"}},  # no Senate contest this run
-            "shelby-township-address": _VOTERINFO_HOUSE_WRONG_DISTRICT,
-        })
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI", {"address": "capitol", "house_addresses": {"9": "shelby-township-address"}},
-        )
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_refuses_a_house_contest_with_no_congressional_scope_district(self, monkeypatch):
-        """Never falls back to trusting the office label's own free text
-        when the schema-guaranteed district field is missing or isn't
-        scoped "congressional" — refuses rather than guessing."""
-        no_district_info = {
-            "election": {"id": "9999"},
-            "contests": [{
-                "type": "General", "office": "U.S. Representative",
-                "candidates": [{"name": "Someone", "party": "Democratic Party"}],
-            }],
-        }
-        self._patch(monkeypatch, {
-            "capitol": {"election": {"id": "9999"}},
-            "district-1-address": no_district_info,
-        })
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI", {"address": "capitol", "house_addresses": {"1": "district-1-address"}},
-        )
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_a_non_numeric_house_addresses_key_is_skipped_not_fatal(self, monkeypatch):
-        self._patch(monkeypatch, {
-            "capitol": {"election": {"id": "9999"}},
-            "bad-address": _VOTERINFO_HOUSE_DISTRICT_12,
-        })
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI", {"address": "capitol", "house_addresses": {"at-large": "bad-address"}},
-        )
-        assert result == []  # skipped, not a fetch_failed
-
-    @pytest.mark.asyncio
-    async def test_a_house_address_fetch_failure_fails_the_whole_run(self, monkeypatch):
-        self._patch(monkeypatch, {"capitol": {"election": {"id": "9999"}}})  # district-1-address -> None
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI", {"address": "capitol", "house_addresses": {"1": "district-1-address"}},
-        )
-        assert result is None
+async def _read(state="XX", source=None):
+    return await civic.fetch_confirmed_candidates(None, 2026, state, source or {})
 
 
-class TestConfiguredAddressesAreParseable:
-    """Google's voterInfoQuery rejects an address with no numeric street
-    number outright — HTTP 400 "Failed to parse address", not an empty
-    result — so such an entry is a permanent dead end for that state, not
-    a slow day.
-
-    It is invisible until Google publishes real data for the election,
-    because every address returns an error either way until then. Two of
-    NY's addresses were in exactly that state (the statewide "State St,
-    Albany, NY 12224" and district 17's "One Blue Hill Plaza"), which
-    would have left the largest of these states the one still broken on
-    the day the rest started working. Checked here instead, where adding
-    a bad address fails immediately and offline.
-    """
-
-    def _entries(self):
-        import json
-        import pathlib
-
-        path = (pathlib.Path(__file__).resolve().parent.parent
-                / "app" / "data" / "state_candidate_sources.json")
-        states = json.loads(path.read_text())["states"]
-        for code, state in states.items():
-            # Google Civic is a state's main source, its general_list, its
-            # fallback or its general_list's fallback -- the address is read
-            # the same way in each.
-            general = state.get("general_list") or {}
-            for entry in (state, general, state.get("fallback") or {}, general.get("fallback") or {}):
-                if entry.get("strategy") != "google_civic":
-                    continue
-                if entry.get("address"):
-                    yield f"{code} statewide", entry["address"]
-                for district, addr in (entry.get("house_addresses") or {}).items():
-                    yield f"{code}-{district}", addr
-
-    def test_every_address_starts_with_a_street_number(self):
-        bad = [(label, addr) for label, addr in self._entries()
-               if not addr.strip()[:1].isdigit()]
-        assert bad == [], (
-            "Google 400s these — spell the street number as a digit "
-            f"('One Blue Hill Plaza' -> '1 Blue Hill Plaza'): {bad}")
-
-    def test_there_is_something_to_check(self):
-        """Guards the guard: a renamed strategy or moved key would make
-        the assertion above pass over an empty list forever."""
-        assert len(list(self._entries())) > 50
+def _by_office(records):
+    out = {}
+    for r in records:
+        out.setdefault((r["office"], r["district"]), []).append(r)
+    return out
 
 
-class TestAddressWithNoPublishedBallot:
-    """Google answers HTTP 404 "No information for this address" for a
-    precinct whose ballot it has not published yet. That is its normal
-    answer, not a failure -- and because the shared retry path treats
-    any 4xx as transient, it read as one: on 2026-09-23, the morning
-    after Google first listed the November 3 general at all, 8 states
-    reported fetch_failed (3 attempts each) instead of a healthy empty
-    night. 71 of the 80 configured addresses answered 404 that morning,
-    every state capitol among them.
+@pytest.mark.asyncio
+async def test_each_district_comes_from_its_own_label_and_name(monkeypatch):
+    _serve(monkeypatch, {"1.0,1.0": _ballot("4th", "19th", "40th"), "2.0,2.0": _ballot("5th", "20th", "41st")})
+    records = _by_office(await _read())
+    assert {r["last_name"] for r in records[("H", 4)]} == {"McCann", "Huizenga"}
+    assert ("H", 5) in records and ("upper", "20") in records and ("lower", "41") in records
+    assert {r["last_name"] for r in records[("S", None)]} == {"El-Sayed", "Rogers", "Long"}
 
-    These exercise the REAL fetch_with_retry, not a patched _get_json,
-    because the bug lived in the status handling between them."""
 
-    def _patch(self, monkeypatch, voterinfo_status: int):
-        async def fake_fetch(client, limiter, method, url, **kwargs):
-            if url.endswith("/elections"):
-                return httpx.Response(200, json=_ELECTIONS_INDEX)
-            if voterinfo_status not in kwargs.get("expected_statuses", ()):
-                return None  # what the retry path does with an unexpected status
-            return httpx.Response(voterinfo_status, json={"error": {"message": "x"}})
+@pytest.mark.asyncio
+async def test_a_ticket_is_joined_and_a_city_office_or_judgeship_is_not_a_state_office(monkeypatch):
+    _serve(monkeypatch, {"1.0,1.0": _ballot("4th", "19th", "40th"), "2.0,2.0": _ballot("5th", "20th", "41st")})
+    records = await _read()
+    governors = {r["last_name"] for r in records if r["office"] == "governor"}
+    assert governors == {"Jocelyn Benson and Winnie Brinks", "John James and Jay DeBoyer"}
+    assert not any(r["office"] == "treasurer" for r in records)
+    assert {r["office"] for r in records} <= {"S", "H", "governor", "upper", "lower"}
 
-        monkeypatch.setattr(civic, "fetch_with_retry", fake_fetch)
-        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
 
-    @pytest.mark.asyncio
-    async def test_a_404_for_the_address_is_a_healthy_empty_night(self, monkeypatch):
-        self._patch(monkeypatch, 404)
-        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "capitol"}) == []
+@pytest.mark.asyncio
+async def test_a_house_label_with_no_number_is_at_large_only_in_a_one_seat_state(monkeypatch):
+    bare = {"contests": [*STATEWIDE, _contest("U.S. Representative", "", "", ("A Person", "DEMOCRATIC"))]}
+    _serve(monkeypatch, {"1.0,1.0": bare, "2.0,2.0": bare, "3.0,3.0": bare})
+    assert not any(r["office"] == "H" for r in await _read())  # two seats on file: refused
+    civic._answers.clear()
+    monkeypatch.setattr(civic, "_points", lambda state: {"XX-H-0": [[1.0, 1.0]], "XX-upper-1": [[2.0, 2.0]]})
+    assert [r["district"] for r in await _read() if r["office"] == "H"] == [None]
 
-    @pytest.mark.asyncio
-    async def test_every_house_address_404ing_is_still_healthy(self, monkeypatch):
-        """The statewide 404 must not short-circuit the state into a
-        failure before its districts are even tried."""
-        self._patch(monkeypatch, 404)
-        result = await civic.fetch_confirmed_candidates(
-            None, 2026, "MI",
-            {"address": "capitol", "house_addresses": {"1": "a", "2": "b"}},
-        )
-        assert result == []
 
-    @pytest.mark.asyncio
-    async def test_a_genuine_failure_is_still_not_healthy(self, monkeypatch):
-        """The other half of the same line: 404 reading as [] must not
-        drag a real fetch failure along with it."""
-        self._patch(monkeypatch, 500)
-        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "capitol"}) is None
+@pytest.mark.asyncio
+async def test_virginia_s_house_label_is_read_by_its_congressional_scope(monkeypatch):
+    va = {"contests": [*STATEWIDE, {"office": "Member, House of Representatives (9th District)",
+                                    "district": {"name": "09", "scope": "congressional"},
+                                    "candidates": [{"name": "Morgan Griffith", "party": "Republican"}]}]}
+    _serve(monkeypatch, {"1.0,1.0": va})
+    assert [(r["office"], r["district"]) for r in await _read() if r["office"] == "H"] == [("H", 9)]
+
+
+@pytest.mark.asyncio
+async def test_answers_that_disagree_about_a_race_drop_it(monkeypatch):
+    _serve(monkeypatch, {
+        "1.0,1.0": _ballot("4th", "19th", "40th"),
+        "2.0,2.0": _ballot("4th", "20th", "41st", extra=(("Sean McCann", "DEMOCRATIC"),)),
+    })
+    records = await _read()
+    assert not any(r["office"] == "H" and r["district"] == 4 for r in records)
+
+
+@pytest.mark.asyncio
+async def test_an_unread_district_is_named_and_the_rest_is_complete(monkeypatch):
+    # 41's points both fail to parse: Google's answer for a point it can't place.
+    _serve(monkeypatch, {"1.0,1.0": _ballot("4th", "19th", "40th")})
+    records = await _read()
+    assert not records.state_offices_incomplete
+    assert ("lower", "41") in records.unread_districts and ("lower", "40") not in records.unread_districts
+
+
+@pytest.mark.asyncio
+async def test_no_statewide_offices_means_no_state_office_read(monkeypatch):
+    house_only = {"contests": [_contest("Representative in Congress", "4th District", "congressional",
+                                        ("Sean McCann", "DEMOCRATIC"))]}
+    _serve(monkeypatch, {"1.0,1.0": house_only})
+    records = await _read()
+    assert records.state_offices_incomplete and {r["office"] for r in records} == {"H"}
+
+
+@pytest.mark.asyncio
+async def test_a_state_with_no_vip_ballot_is_an_empty_answer_in_a_few_requests(monkeypatch):
+    asked = _serve(monkeypatch, {})
+    assert await _read() == []
+    assert len(asked) == civic.PROBE_POINTS
+
+
+@pytest.mark.asyncio
+async def test_no_general_listed_is_empty_and_a_failed_read_is_none(monkeypatch):
+    _serve(monkeypatch, {}, elections={"elections": []})
+    assert await _read() == []
+    _serve(monkeypatch, {}, elections=None)
+    assert await _read() is None
+    _serve(monkeypatch, {"1.0,1.0": None})
+    assert await _read() is None
+
+
+@pytest.mark.asyncio
+async def test_each_point_is_asked_once_a_day(monkeypatch):
+    asked = _serve(monkeypatch, {"1.0,1.0": _ballot("4th", "19th", "40th"), "2.0,2.0": _ballot("5th", "20th", "41st")})
+    await _read()
+    first = len(asked)
+    await _read()
+    assert len(asked) == first
+
+
+@pytest.mark.asyncio
+async def test_fixed_addresses_are_asked_first(monkeypatch):
+    asked = _serve(monkeypatch, {"100 Capitol": _ballot("4th", "19th", "40th"), "2.0,2.0": _ballot("5th", "20th", "41st")})
+    await _read(source={"address": "100 Capitol"})
+    assert asked[0] == "100 Capitol" and "1.0,1.0" not in asked  # 4th, 19th and 40th were already read
+
+
+def test_vip_capital_party_names_read_as_the_state_writes_them():
+    assert civic._party_label("U.S. TAXPAYERS") == "U.S. Taxpayers"
+    assert civic._party_label("Working Class Party") == "Working Class Party"

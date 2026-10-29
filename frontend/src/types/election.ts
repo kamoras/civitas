@@ -342,6 +342,10 @@ export interface MeasureCoverage {
    * site blocks automated access, or it publishes no list — written for a
    * voter. Null for a state that is read. */
   unreadReason?: string | null;
+  /** When the state's site is no longer read because its terms of use
+   * forbid automated access: the host, who publishes it and their terms.
+   * The measures shown are from the last read. Null otherwise. */
+  termsBlock?: { host: string; publisher: string | null; terms_url: string | null } | null;
 }
 
 /** One statewide executive contest (Governor, Attorney General, ...) and

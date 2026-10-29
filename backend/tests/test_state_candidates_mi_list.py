@@ -39,7 +39,10 @@ from app.pipeline.fetch.state_candidates_certified_table import (
 
 _HERE = Path(__file__).resolve().parent
 PAGE = (_HERE / "fixtures_mi_candidate_listing_2026.html").read_bytes()
-SOURCE = json.loads((_HERE.parent / "app" / "data" / "state_candidate_sources.json").read_text())["states"]["MI"]
+# The entry this layout was read under until 2026-10-28 (the fixture's _note):
+# the adapter's grid knobs stay tested on the listing they were built for.
+SOURCE = json.loads((_HERE / "fixtures_entellitrak_listing_source.json").read_text())["source"]
+LIVE = json.loads((_HERE.parent / "app" / "data" / "state_candidate_sources.json").read_text())["states"]["MI"]
 
 
 def _records(state_offices=True):
@@ -236,8 +239,12 @@ def test_an_independent_governor_ticket_never_holds_the_state_offices():
     assert ("governor", "I") in {(r["office"], r["party"]) for r in records}
 
 
-def test_the_entry_is_the_ballot_and_google_only_supplements_it():
-    assert SOURCE["strategy"] == "certified_table"
-    assert SOURCE["general_ballot_complete"] is True
-    assert SOURCE["general_list"]["strategy"] == "google_civic"
-    assert len(SOURCE["general_list"]["house_addresses"]) == 13
+def test_michigan_is_read_from_the_vip_ballot_and_never_from_its_own_sites():
+    """michigan.gov's terms forbid automated access (host_terms.json): the
+    live entry reads Google Civic, and names no Department of State host."""
+    from app import host_terms
+    assert LIVE["strategy"] == "google_civic"
+    text = json.dumps(LIVE)
+    for host in ("michigan.gov", "mi-boe.entellitrak.com", "mvic.sos.state.mi.us"):
+        assert host_terms.forbid(host), host
+        assert f"//{host}" not in text and f".{host}/" not in text

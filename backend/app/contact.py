@@ -91,7 +91,6 @@ _EMAIL_WHY = (
 HOST_USER_AGENTS: dict[str, tuple[str, str]] = {
     "www.maine.gov": (_BROWSER_FORM, _BROWSER_WHY),
     "sos.tn.gov": (_BROWSER_FORM, _BROWSER_WHY),
-    "www.michigan.gov": (_BARE_FORM, _BARE_WHY),
     "www.sos.nh.gov": (_BARE_FORM, _BARE_WHY),
     "mm.nh.gov": (_BARE_FORM, _BARE_WHY + " (New Hampshire's document host)"),
     "goelect.txelections.civixapps.com": (_EMAIL_FORM, _EMAIL_WHY + " (Texas's Civix API)"),
@@ -100,7 +99,6 @@ HOST_USER_AGENTS: dict[str, tuple[str, str]] = {
     # each (Civitas's own, the browser form sent before 2026-10-25, the bare
     # and the email-only forms); every other host the day's refusals named
     # answered all four alike.
-    "michigan.gov": (_BARE_FORM, _BARE_WHY + " (Michigan's apex, as www.michigan.gov)"),
     "indianavoters.in.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Indiana's voter portal, a challenge otherwise)"),
     "myvote.wi.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Wisconsin's voter portal, a challenge otherwise)"),
     "voteroutreach.sos.mo.gov": (_EMAIL_FORM, _EMAIL_WHY + " (Missouri's voter portal, a challenge otherwise)"),

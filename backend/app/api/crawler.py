@@ -3,12 +3,15 @@ when, and how it behaves, for /about/crawler. Every figure is read from the
 code (app/crawler.py, app/crawl_policy.py) or, for the hosts refusing it
 now, from the record the fetchers keep (crawl_policy.refusals)."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from app import crawl_policy, crawler
 from app.api.response_helpers import CACHE_TTL_LIST_S, JSONResponse, cached_json
+from app.database import get_db
+from app.host_terms_check import last_check
 
 router = APIRouter()
 
@@ -26,8 +29,14 @@ def _seconds(s: float) -> str:
     return f"{round(s, 2):g} seconds"
 
 
-def facts() -> dict:
+def facts(db: Session | None = None) -> dict:
     body = crawler.summary()
+    for t in body["termsHosts"]:
+        # When the weekly check last found the terms as reviewed (the
+        # Internet Archive's capture date), else when they were read.
+        record = last_check(db, t["host"]) if isinstance(db, Session) else None
+        day = date.fromisoformat((record or {}).get("confirmedOn") or t["readOn"])
+        t["confirmedOn"] = f"{day:%b} {day.day}, {day.year}"
     for h in body["hosts"]:
         h["minimumGap"] = _seconds(crawl_policy.interval(h["host"]))
     body["manners"] = {
@@ -46,6 +55,6 @@ def facts() -> dict:
 
 
 @router.get("/crawler")
-def crawler_facts() -> JSONResponse:
+def crawler_facts(db: Session = Depends(get_db)) -> JSONResponse:
     # A list's lifetime, not reference data's: the hosts refusing now change.
-    return cached_json(facts(), CACHE_TTL_LIST_S)
+    return cached_json(facts(db), CACHE_TTL_LIST_S)

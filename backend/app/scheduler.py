@@ -41,6 +41,7 @@ from app.pipeline import bill_refresh
 from app.pipeline.fetch import nominations
 from app.pipeline.fetch import bill_display_titles
 from app.pipeline.fetch.agencies import run_agency_sync
+from app.host_terms_check import run_host_terms_check
 from app.pipeline.fetch.amendment_purpose import fill_amendment_purposes
 from app.http_client import make_async_client
 from app.ops_alerts import send_ops_alert
@@ -906,6 +907,14 @@ def _agency_sync() -> None:
     _start_job(run_agency_sync, name="agency-sync")
 
 
+def _host_terms_check() -> None:
+    """Re-read the terms of every host Civitas never asks because its
+    terms forbid automated access (app/host_terms_check.py), from the
+    Internet Archive's copy: daily, each host once its last check is a week
+    old, and once at start."""
+    _start_job(run_host_terms_check, name="host-terms-check")
+
+
 def _environmental_sample() -> None:
     """The models' sizes for /environmental (app/environmental_sampler.py),
     read from the language-model server and the embedding models' files.
@@ -1067,6 +1076,15 @@ def start_scheduler() -> None:
         _agency_sync,
         CronTrigger(**crawler.cron("agency_sync")),
         id="agency_sync",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+    # Terms of use of the hosts never asked: daily, a host once a week.
+    scheduler.add_job(
+        _host_terms_check,
+        CronTrigger(**crawler.cron("host_terms_check")),
+        id="host_terms_check",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc),
     )

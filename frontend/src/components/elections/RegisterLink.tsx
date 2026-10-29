@@ -9,7 +9,7 @@ export function registerWhere(link: Link): string {
 
 /** A sentence for a link the build script couldn't read past a bot wall,
  *  worded as the voter lookup's is (AGENTS.md section 7). */
-export const UNCONFIRMED = "This site blocks automated checks, so we can't confirm it's up.";
+export const UNCONFIRMED = "This site doesn't allow automated checks, so we can't confirm it's up.";
 
 /**
  * Where to register to vote: the state election office's page, checked by

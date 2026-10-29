@@ -300,6 +300,10 @@ def run_command(argv: list[str], timeout_s: int) -> tuple[int | None, str]:
     page requests never wait on it. (exit code, or None when it ran past
     `timeout_s` and was stopped; its whole output, stdout then stderr)."""
     env = {**os.environ, "PYTHONPATH": str(BACKEND)}
+    if len(argv) > 1 and argv[0] == PY and argv[1].endswith(".py"):
+        # Every request the script sends keeps the crawler's manners
+        # (app/script_gate.py): its pace, a wall's backoff, a host's terms.
+        argv = [PY, "-m", "app.script_gate", *argv[1:]]
     try:
         # nice(1) rather than preexec_fn: the pipeline process is threaded
         # (the scheduler), and preexec_fn is not safe to use with threads.
@@ -1139,6 +1143,51 @@ def _state_leg_gate(new: dict, old: dict) -> list[str]:
     return failures + _drift(new, old, "districts", keep=0.9)
 
 
+CIVIC_POINTS_FILE = "civic_query_points.json"
+
+
+def _civic_points_command(ctx: Context) -> list[str]:
+    return [PY, _script("build_civic_query_points.py"), "--congress", str(line_targets()[1]),
+            "--cycle", str(_election().cycle), "--out", "{out}", "--cache", "{tmp}"]
+
+
+def _civic_points_due(ctx: Context) -> bool:
+    """The points Google Civic is asked about for each district's ballot
+    (state_candidates_civic): rebuilt when the election's Congress or
+    cycle moves on from the file's, or (weekly) when a block equivalency
+    file it was built from is re-released or a newer state legislative one
+    is published."""
+    if ctx.doc.get("congress") != line_targets()[1] or ctx.doc.get("cycle") != _election().cycle:
+        return True
+    if _rereleased([ctx.doc], ctx):
+        return True
+    if ctx.tried_within(7):
+        return False
+    have = (ctx.doc.get("_inputs") or {}).get("sldu")
+    try:
+        found = census_lines.find_sld_bef(_election().cycle, "sldu")
+    except Exception:
+        logger.info("civic query points: the Census listing is unreadable", exc_info=True)
+        return False
+    return bool(have and found and list(found[:2]) != list(have))
+
+
+def _civic_points_gate(new: dict, old: dict) -> list[str]:
+    """Every House seat once, every state's two chambers (Nebraska's one),
+    and every district with a point."""
+    points = new.get("points") or {}
+    house = {k[: k.index("-H-")] + "-" + k.rsplit("-", 1)[1] for k in points if "-H-" in k}
+    failures = [] if len(house) == HOUSE_SEATS else [f"{len(house)} House districts, not {HOUSE_SEATS}"]
+    empty = [k for k, v in points.items() if not v]
+    if empty:
+        failures.append(f"districts with no point: {empty[:10]}")
+    legislatures = {k.split("-")[0] for k in points if k.split("-")[1] in ("upper", "lower")}
+    before = {k.split("-")[0] for k in (old.get("points") or {}) if k.split("-")[1] in ("upper", "lower")}
+    if before - legislatures:
+        failures.append(f"legislatures missing: {sorted(before - legislatures)}")
+    return failures + _drift(new, old, "points", keep=0.9)
+
+
 LEAN_FILE = "district_lean.json"
 
 
@@ -1751,4 +1800,6 @@ DATA_FILES: list[DataFile] = [
     DataFile(OVERLAP_FILE, command=_overlap_command, due=_overlap_due, gate=_overlap_gate, heavy=True,
              timeout_s=3600),
     DataFile(MAPS_FILE, command=_maps_command, due=_maps_due, gate=_maps_gate, heavy=True, timeout_s=1800),
+    DataFile(CIVIC_POINTS_FILE, command=_civic_points_command, due=_civic_points_due, gate=_civic_points_gate,
+             heavy=True, timeout_s=6 * 3600),
 ]

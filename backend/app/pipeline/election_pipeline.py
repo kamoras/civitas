@@ -1103,6 +1103,20 @@ async def _sync_pdf_measures(
     for state in states if states is not None else sorted(ballot_measure_pdf_sources.configured_states()):
         source = ballot_measure_pdf_sources.source_for_state(state)
         source_name = source["source_name"]
+        blocked = ballot_measure_pdf_sources.terms_block(state)
+        if blocked:
+            # The state's site is not read: its terms of use forbid
+            # automated access. The measures on file stand as last read
+            # (their coverage status unchanged); the page says why.
+            note = f"not read: {blocked['host']}'s terms of use forbid automated access ({blocked['terms_url']})"
+            row = _coverage_row(db, state, election_day)
+            if row is None:
+                _set_coverage(db, state, election_day, MeasureCoverage.NOT_YET_COVERED, count=0,
+                              source_name=source_name, error=note)
+            else:
+                row.error_detail, row.checked_at = note, utcnow()
+            db.commit()
+            continue
         fresh = ballot_measures_pdf.cached_answer(db, state, year) is None
         try:
             listed, reasons = await _fetch_with_reasons(client, db, state, year, election_day)
