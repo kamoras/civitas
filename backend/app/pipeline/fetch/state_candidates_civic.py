@@ -70,11 +70,25 @@ POINTS_FILE = "civic_query_points.json"
 CACHE_TTL_S = 20 * 3600
 _answers: dict[str, tuple[float, list[dict]]] = {}
 SOURCE_NAME = "the Voting Information Project (Google Civic Information API)"
-# A state whose first few points carry no contests has no VIP ballot loaded.
+# A state whose first few placed points carry no contests has no VIP ballot
+# loaded. A point Google fails to place ("Failed to parse address", about
+# half of them, measured 2026-10-29) is no answer and doesn't count: three
+# such failures in a row had read Wisconsin, whose VIP ballot is loaded, as
+# a state without one.
 PROBE_POINTS = 3
+# Points tried before a state none of whose points Google places reads as a
+# failed fetch: at the measured rate twenty misses in a row is a broken
+# geocoder, not a state, and an outage is never read as "no ballot".
+PROBE_LIMIT = 20
 
 _NO_DATA = object()
+_UNPLACED = object()
 _FETCH_FAILED = object()
+
+
+class Unplaced(list):
+    """No contests because Google couldn't place the point: an empty list
+    to every reader, never an answer that the place has no ballot."""
 
 
 def is_configured() -> bool:
@@ -96,14 +110,15 @@ async def _get_json(client: httpx.AsyncClient, url: str, params: dict, label: st
                     expected_statuses: tuple[int, ...] = ()):
     """The parsed body, `_NO_DATA` for an expected status (404: "No
     information for this address", Google's answer for a point it has no
-    ballot for), or None on a failed fetch."""
+    ballot for), `_UNPLACED` for a 400 (Google couldn't place the address),
+    or None on a failed fetch."""
     full_url = str(httpx.URL(url).copy_merge_params({**params, "key": settings.GOOGLE_CIVIC_API_KEY}))
     resp = await fetch_with_retry(client, _rate_limiter, "GET", url, request_url=full_url, log_label=label,
                                   expected_statuses=expected_statuses)
     if resp is None:
         return None
     if resp.status_code in expected_statuses:
-        return _NO_DATA
+        return _UNPLACED if resp.status_code == 400 else _NO_DATA
     try:
         return resp.json()
     except ValueError:
@@ -124,7 +139,8 @@ async def general_election_id(client: httpx.AsyncClient, state: str, year: int):
 
 async def contests_at(client: httpx.AsyncClient, election_id: str, where: str, label: str) -> list[dict] | None:
     """The parsed contests on the ballot at `where` (an address, or
-    "lat,lon"), [] for none, None on a failed fetch. Kept a day."""
+    "lat,lon"), [] for none, an empty `Unplaced` when Google couldn't place
+    it, None on a failed fetch. Kept a day."""
     key = f"{election_id}|{where}"
     kept = _answers.get(key)
     if kept and time.monotonic() - kept[0] < CACHE_TTL_S:
@@ -133,7 +149,10 @@ async def contests_at(client: httpx.AsyncClient, election_id: str, where: str, l
                               label, expected_statuses=(400, 404))
     if payload is None:
         return None
-    contests = [] if payload is _NO_DATA or not isinstance(payload, dict) else _parse_contests(payload)
+    if payload is _UNPLACED:
+        contests = Unplaced()
+    else:
+        contests = [] if payload is _NO_DATA or not isinstance(payload, dict) else _parse_contests(payload)
     _answers[key] = (time.monotonic(), contests)
     return contests
 
@@ -286,12 +305,12 @@ async def read_state(client: httpx.AsyncClient, year: int, state: str, source: d
     # Senate districts too), skipping a district an earlier answer named.
     fixed = [a for a in [source.get("address"), *(source.get("house_addresses") or {}).values()] if a]
     order = sorted(points, key=lambda k: ({"lower": 0, "upper": 1, "H": 2}.get(k.split("-")[1], 3), k))
-    asked = 0
+    asked = tried = 0
     for where in fixed:
         contests = await contests_at(client, election_id, where, f"Civic voterinfo ({state})")
         if contests is None:
             return None
-        asked += 1
+        asked += not isinstance(contests, Unplaced)
         reading.add(contests, state)
     for district in order:
         if district in reading.seen:
@@ -299,10 +318,14 @@ async def read_state(client: httpx.AsyncClient, year: int, state: str, source: d
         for lat, lon in points[district]:
             if asked >= PROBE_POINTS and reading.answers == 0:
                 return reading, election_id  # no VIP ballot loaded for this state
+            if tried >= PROBE_LIMIT and asked == 0:
+                logger.warning("Civic placed none of %d points for %s", tried, state)
+                return None
+            tried += 1
             contests = await contests_at(client, election_id, f"{lat},{lon}", f"Civic voterinfo ({district})")
             if contests is None:
                 return None
-            asked += 1
+            asked += not isinstance(contests, Unplaced)
             reading.add(contests, state)
             if district in reading.seen:
                 break
