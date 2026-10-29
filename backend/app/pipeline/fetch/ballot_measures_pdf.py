@@ -39,6 +39,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import pdfplumber
 
+from app.http_client import answering_client
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import terms_block, source_for_state
 from app.models import BallotMeasure
@@ -600,6 +601,21 @@ async def fetch_state_measures_pdf(
             return None
         return _finish(db, state, year, [_to_measure(state, parsed, election_date, url) for parsed, url in pairs])
 
+    measures = await _read_measures(client, db, state, year, election_date, source)
+    if measures is None and national is None and client is not None:
+        measures = await _read_archived(client, db, state, year, election_date, source)
+    return None if measures is None else _finish(db, state, year, measures)
+
+
+async def _read_measures(
+    client: httpx.AsyncClient, db, state: str, year: int, election_date: str, source: dict,
+) -> list[dict] | None:
+    """The state's measures read by its registered reader through `client`
+    (fetch_state_measures_pdf's outcomes, before _finish)."""
+    strategy_key = source["strategy"]
+    strategy = STRATEGIES.get(strategy_key)
+    multi_strategy = MULTI_DOCUMENT_STRATEGIES.get(strategy_key)
+    national = NATIONAL_STRATEGIES.get(strategy_key)
     if national is not None:
         try:
             pairs = await national(client, year, state, source)
@@ -610,7 +626,7 @@ async def fetch_state_measures_pdf(
             return None
         if pairs is None:
             return None
-        return _finish(db, state, year, [_to_measure(state, parsed, election_date, url) for parsed, url in pairs])
+        return [_to_measure(state, parsed, election_date, url) for parsed, url in pairs]
 
     if multi_strategy is not None:
         try:
@@ -627,7 +643,7 @@ async def fetch_state_measures_pdf(
         if pairs is None:
             return None
         measures = [_to_measure(state, parsed, election_date, url) for parsed, url in pairs]
-        return _finish(db, state, year, measures)
+        return measures
 
     absent_until_published = bool(source.get("absent_until_published"))
     if "landing_page_url" in source:
@@ -700,4 +716,41 @@ async def fetch_state_measures_pdf(
         logger.exception("Ballot measure PDF parse failed for %s %d", state, year)
         return None
 
-    return _finish(db, state, year, measures)
+    return measures
+
+async def _read_archived(
+    client: httpx.AsyncClient, db, state: str, year: int, election_date: str, source: dict,
+) -> list[dict] | None:
+    """The state's own reader, run again on the Internet Archive's copy of
+    every page it asks for (web_archive.ArchiveTransport), when the state's
+    own read failed: walled, down, or moved. Nothing is sent to the state's
+    host. The copy gets every check the reader applies, must quote exactly
+    the measures already stored from the state's own host
+    (_agrees_with_stored: a capture may be older than the read on file),
+    and each measure is credited to its capture ("as archived by the
+    Internet Archive on <date>"). A capture can say nothing is published
+    or nothing is on the ballot only from a page the state has since
+    changed, so only a read that finds measures is used; otherwise the
+    state's read stays the failure it was."""
+    archive = web_archive.ArchiveTransport(client)
+    try:
+        async with answering_client(archive) as copy:
+            measures = await _read_measures(copy, db, state, year, election_date, source)
+    except (NotYetPublished, DocumentNotLinked):
+        return None
+    if not measures:
+        return None
+    credited = []
+    for measure in measures:
+        page, _, fragment = measure["source_url"].partition("#")
+        capture = archive.captures.get(page)
+        if capture is None:
+            logger.warning("%s: an archived measure names %s, which no capture answered — refusing", state, page)
+            return None
+        url = capture.page_url + (f"#{fragment}" if fragment else "")
+        credited.append({**measure, "source_url": url, "republished_by": web_archive.PUBLISHER})
+    stored = _stored_measures(db, state, election_date)
+    if not _agrees_with_stored(state, [(m, m["source_url"]) for m in credited], stored):
+        return None
+    logger.info("%s: the state's own read failed; read its document as archived by %s", state, web_archive.PUBLISHER)
+    return credited
