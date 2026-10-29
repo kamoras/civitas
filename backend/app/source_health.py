@@ -146,13 +146,15 @@ def _run_reads(db: Session, since: datetime) -> tuple[dict, dict]:
 def outbound_modules() -> frozenset[str]:
     """The modules that send rather than read, by where they sit in the
     code: the one every operator alert goes through (send_ops_alert's), the
-    one every post goes through (broadcast.publish's), and an API route that
+    one every post goes through (broadcast.publish's) and the channels it
+    sends to (app/social/), and an API route that
     forwards what a reader submits (a POST route handler that itself posts
     or puts to a service: feedback filed as a GitHub issue). A host only these
     name is a service Civitas sends to, not a source it reads: it is kept
     off the public map and out of "read by", and the admin lists it under
     outbound services."""
     out = {send_ops_alert.__module__, publish.__module__}
+    out |= {crawler._module_name(path) for path in sorted((crawler.APP / "social").glob("[!_]*.py"))}
     for path in sorted((crawler.APP / "api").glob("*.py")):
         for fn in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):

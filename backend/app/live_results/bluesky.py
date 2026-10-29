@@ -214,8 +214,8 @@ class _History:
     can be raised again (a data reset outside the results window wipes
     them; database.reset_all_data keeps them inside it)."""
 
-    # race -> (kind, Bluesky status) of its latest flip-or-correction post
-    last_claim: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # race -> (kind, Bluesky status, post id) of its latest flip-or-correction post
+    last_claim: dict[str, tuple[str, str, int]] = field(default_factory=dict)
     said: set[tuple[str, str]] = field(default_factory=set)  # (race, kind)
     recent: set[str] = field(default_factory=set)  # races posted about in the cooldown
     last_hour: int = 0  # posts that spend the budget — corrections never do
@@ -225,15 +225,15 @@ class _History:
 def _history(db: Session, election_date: str, now: datetime) -> _History:
     h = _History()
     rows = (
-        db.query(BroadcastPost.subject, BroadcastPost.published_at, BroadcastPost.bsky_status)
+        db.query(BroadcastPost.subject, BroadcastPost.published_at, BroadcastPost.bsky_status, BroadcastPost.id)
         .filter(BroadcastPost.kind == "result", BroadcastPost.subject.startswith(f"result:{election_date}:"))
         .order_by(BroadcastPost.published_at, BroadcastPost.id)
     )
-    for subject, published_at, bsky_status in rows:
+    for subject, published_at, bsky_status, post_id in rows:
         _, _, race_id, kind = subject.split(":", 3)
         h.said.add((race_id, kind))
         if kind in (er.FLIP, CORRECTION):
-            h.last_claim[race_id] = (kind, bsky_status)
+            h.last_claim[race_id] = (kind, bsky_status, post_id)
         if published_at >= now - timedelta(minutes=RACE_COOLDOWN_MINUTES):
             h.recent.add(race_id)
         if kind != CORRECTION:
@@ -327,7 +327,7 @@ def post_result_updates(db: Session, election_date: str) -> int:
     # post on a race is a flip. Owing one wherever a flip was ever posted
     # sent a second "no longer shows a change of party" after the first,
     # in a race swinging around the line.
-    posted_flip_races = {rid for rid, (kind, _) in h.last_claim.items() if kind == er.FLIP}
+    posted_flip_races = {rid for rid, (kind, *_) in h.last_claim.items() if kind == er.FLIP}
     recent_races = h.recent
     hour_left = MAX_POSTS_PER_HOUR - h.last_hour
     election_left = MAX_POSTS_PER_ELECTION - h.this_election
@@ -387,13 +387,17 @@ def post_result_updates(db: Session, election_date: str) -> int:
         # "sending" is a send that may have gone out; "pending" on a result
         # post is one never tried (they are never retried), so not shown.
         to_bluesky = not correction or h.last_claim.get(race.id, ("", ""))[1] in ("sending", "sent")
+        # Threads takes a correction the same way: only where it showed the
+        # flip (broadcast.publish's `follows`).
+        claimed = h.last_claim.get(race.id)
+        follows = db.get(BroadcastPost, claimed[2]) if correction and claimed else None
         post = broadcast.publish(
             db, kind="result", subject=_subject(election_date, race.id, kind), title=_title(kind, race, details),
-            text=text, url=url, state=race.state, bluesky=to_bluesky,
+            text=text, url=url, state=race.state, bluesky=to_bluesky, follows=follows,
         )
         h.said.add((race.id, kind))
         if kind in (er.FLIP, CORRECTION):
-            h.last_claim[race.id] = (kind, post.bsky_status)
+            h.last_claim[race.id] = (kind, post.bsky_status, post.id)
         posted += 1
         recent_races.add(race.id)
         if not correction:

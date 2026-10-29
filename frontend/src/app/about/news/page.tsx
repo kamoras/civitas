@@ -583,10 +583,12 @@ export default function NewsChapter() {
               and nothing passed or confirmed, such as a pro forma session, isn&apos;t posted. On a
               weekend before a week of business, a post says when each chamber next meets, from the
               Record&apos;s own notice, and which bills passed one chamber the week before and go to
-              the other. Posts go to the <A href="/feeds">feeds</A> and the Bluesky account. The
-              feeds get them as soon as they are written; one written overnight waits for Bluesky
-              until the hours U.S. users are most active that day, measured from Bluesky&apos;s own
-              public activity. News, an Action Center issue or an election-night count, never waits.
+              the other. Posts go to the <A href="/feeds">feeds</A> and the Bluesky account, and to
+              Threads and Instagram where those accounts are set up (Instagram only takes a post
+              with a picture, so it carries the record cards). The feeds get them as soon as they
+              are written; one written overnight waits for the accounts until the hours U.S. users
+              are most active that day, measured from Bluesky&apos;s own public activity. News, an
+              Action Center issue or an election-night count, never waits.
             </P>
           </Box>
         </Boxes>

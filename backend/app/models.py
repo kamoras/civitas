@@ -2623,6 +2623,32 @@ class BroadcastPost(Base):
     engagement_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class BroadcastDelivery(Base):
+    """One post's delivery to one channel past Bluesky (app/social/:
+    "threads", "instagram"). Bluesky keeps its own columns on the post; a
+    channel added since keeps a row here, written by broadcast.publish when
+    the channel is configured and wants the post, and claimed by one sender
+    before any network call (broadcast.deliver_channel), so a crash
+    mid-send never posts twice. Kept by a data reset, with its post."""
+    __tablename__ = "broadcast_deliveries"
+    __table_args__ = (UniqueConstraint("post_id", "channel", name="uq_broadcast_delivery_post_channel"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("broadcast_posts.id"), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(12), nullable=False)
+    # pending | sending | sent | failed | skipped (the channel can't carry
+    # this post: Instagram and a post with no picture) | off (the channel
+    # was unconfigured when its turn came).
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The platform's id for the published post, once sent.
+    remote_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Why the last try failed or was skipped, in one line (never a token).
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class SiteVisit(VisitsBase):
     """One row per unique visitor per day — never raw IP/PII.
 
