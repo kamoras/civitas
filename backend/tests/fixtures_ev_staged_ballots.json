@@ -1,0 +1,2329 @@
+{
+ "_source": "Trimmed from the staged 2026 generals read by live_results/readiness.py: Georgia's results.sos.ga.gov (2026-10-26) and Utah's electionresults.utah.gov (2026-10-28). Index cut to the general's entry and one other; ballot items cut to a few contests, each as served.",
+ "GA": {
+  "index_url": "https://results.sos.ga.gov/results/public/api/jurisdictions/Georgia",
+  "data_url": "https://results.sos.ga.gov/results/public/api/elections/Georgia/11032026GeneralAndSpecialElection/data",
+  "index": {
+   "elections": [
+    {
+     "publicElectionId": "11032026GeneralAndSpecialElection",
+     "electionDate": "2026-11-03",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026 - General & Special Elections"
+      }
+     ],
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "08252026SpecialElectionRunoff",
+     "electionDate": "2026-08-25",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "August 25th, 2026 Special Election Runoff"
+      }
+     ],
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "August 25, 2026"
+      }
+     ]
+    }
+   ]
+  },
+  "data": {
+   "election": {
+    "ballotItemCount": 1,
+    "dateText": [
+     {
+      "languageId": "en",
+      "text": "November 3, 2026"
+     }
+    ],
+    "id": "01000000-70f4-ca87-08cb-08df23e5fea8",
+    "jurisdictionId": "09378a07-e6cf-4f66-be7c-ca4aa534f99a",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "November 3, 2026 - General & Special Elections"
+     }
+    ],
+    "isOfficialResults": false,
+    "electionDate": "2026-11-03",
+    "isProduction": true,
+    "asOf": "2026-10-23T18:24:06.0517405Z",
+    "lastUpdated": "2026-10-23T17:18:05.136361Z",
+    "publishDate": "2026-10-23T18:24:18.9469301Z",
+    "publishVersionId": "c15c345b-5768-4328-93f4-85df1ad1d1c7",
+    "publicReportCategories": [
+     {
+      "id": null,
+      "categoryName": null,
+      "reports": [
+       {
+        "reportName": "Total Votes Excel",
+        "blobName": "Total Votes Results_52cac871-d18a-4cad-8c4c-fdc3e081db20.xlsx",
+        "order": 0,
+        "versions": null
+       }
+      ],
+      "order": 0
+     }
+    ],
+    "groupReportingStatus": [],
+    "precinctReportingStatus": null,
+    "contestGroups": [],
+    "countGroups": [
+     {
+      "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+      "groupName": [
+       {
+        "languageId": "en",
+        "text": "Election Day"
+       }
+      ],
+      "isFromVirtualPrecinct": false
+     },
+     {
+      "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+      "groupName": [
+       {
+        "languageId": "en",
+        "text": "Advance Voting"
+       }
+      ],
+      "isFromVirtualPrecinct": false
+     },
+     {
+      "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+      "groupName": [
+       {
+        "languageId": "en",
+        "text": "Absentee by Mail"
+       }
+      ],
+      "isFromVirtualPrecinct": false
+     },
+     {
+      "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+      "groupName": [
+       {
+        "languageId": "en",
+        "text": "Provisional"
+       }
+      ],
+      "isFromVirtualPrecinct": false
+     }
+    ],
+    "precinctsReporting": null,
+    "map": {
+     "enabled": true,
+     "styleUrl": "mapbox://styles/enhancedvoting/cm1jnw2xt002801pf5t7g25mp",
+     "featureIdField": "NAME",
+     "disclaimer": [],
+     "showMapLegend": true
+    },
+    "totalVoters": 0.0,
+    "ballotsCast": 0.0,
+    "redactingPrecinctCountGroups": false,
+    "precinctResultsProtected": false,
+    "reportingStatusBy": 0,
+    "customPublicMessages": [],
+    "closeRaceThreshold": null,
+    "closeRaceThresholdDisclaimer": [],
+    "hasStateWideCloseRaces": false,
+    "nextUpdateAt": null,
+    "hidePrecincts": false,
+    "includePrecinctResults": true,
+    "includePrecinctStatuses": true,
+    "showOverUnderVotes": false,
+    "isPrimary": false,
+    "parties": [
+     {
+      "id": "01000000-3a82-a359-3795-08df23e5ff36",
+      "name": [
+       {
+        "languageId": "en",
+        "text": ""
+       }
+      ],
+      "abbreviation": "",
+      "standardName": "",
+      "color": "#FF9933",
+      "textColor": "#FFFFFF"
+     },
+     {
+      "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Rep"
+       }
+      ],
+      "abbreviation": "Rep",
+      "standardName": "Rep",
+      "color": "#960018",
+      "textColor": "#000000"
+     },
+     {
+      "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Dem"
+       }
+      ],
+      "abbreviation": "Dem",
+      "standardName": "Dem",
+      "color": "#255C99",
+      "textColor": "#000000"
+     },
+     {
+      "id": "01000000-3a82-a359-0ce4-08df23e608ef",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "REP"
+       }
+      ],
+      "abbreviation": "REP",
+      "standardName": "REP",
+      "color": "#960018",
+      "textColor": "#ffffff"
+     },
+     {
+      "id": "01000000-3a82-a359-6c9a-08df23e60bed",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Ind"
+       }
+      ],
+      "abbreviation": "Ind",
+      "standardName": "Ind",
+      "color": "#481f82",
+      "textColor": "#000000"
+     }
+    ]
+   },
+   "localityElections": [
+    {
+     "ballotItemCount": 1,
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ],
+     "id": "01000000-3a82-a359-6120-08df23e60773",
+     "jurisdictionId": "e19c5769-eec5-4127-a883-058ddcc4e977",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026 - General & Special Elections"
+      }
+     ],
+     "isOfficialResults": false,
+     "electionDate": "2026-11-03",
+     "isProduction": true,
+     "asOf": "2026-10-23T18:24:04.7457885Z",
+     "lastUpdated": "2026-10-16T20:49:32.5864231Z",
+     "publishDate": null,
+     "publishVersionId": null,
+     "publicReportCategories": null,
+     "groupReportingStatus": null,
+     "precinctReportingStatus": null,
+     "contestGroups": [],
+     "countGroups": [
+      {
+       "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Election Day"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Advance Voting"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Absentee by Mail"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Provisional"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      }
+     ],
+     "precinctsReporting": null,
+     "map": {
+      "enabled": false,
+      "styleUrl": null,
+      "featureIdField": null,
+      "disclaimer": [],
+      "showMapLegend": true
+     },
+     "totalVoters": 0.0,
+     "ballotsCast": 0.0,
+     "redactingPrecinctCountGroups": false,
+     "precinctResultsProtected": false,
+     "reportingStatusBy": 0,
+     "customPublicMessages": [],
+     "closeRaceThreshold": null,
+     "closeRaceThresholdDisclaimer": [],
+     "hasStateWideCloseRaces": false,
+     "nextUpdateAt": null,
+     "hidePrecincts": false,
+     "includePrecinctResults": true,
+     "includePrecinctStatuses": true,
+     "showOverUnderVotes": false,
+     "isPrimary": false,
+     "parties": [
+      {
+       "id": "01000000-3a82-a359-3795-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": ""
+        }
+       ],
+       "abbreviation": "",
+       "standardName": "",
+       "color": "#FF9933",
+       "textColor": "#FFFFFF"
+      },
+      {
+       "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Rep"
+        }
+       ],
+       "abbreviation": "Rep",
+       "standardName": "Rep",
+       "color": "#960018",
+       "textColor": "#000000"
+      },
+      {
+       "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Dem"
+        }
+       ],
+       "abbreviation": "Dem",
+       "standardName": "Dem",
+       "color": "#255C99",
+       "textColor": "#000000"
+      },
+      {
+       "id": "01000000-3a82-a359-0ce4-08df23e608ef",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP"
+        }
+       ],
+       "abbreviation": "REP",
+       "standardName": "REP",
+       "color": "#960018",
+       "textColor": "#ffffff"
+      },
+      {
+       "id": "01000000-3a82-a359-6c9a-08df23e60bed",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Ind"
+        }
+       ],
+       "abbreviation": "Ind",
+       "standardName": "Ind",
+       "color": "#481f82",
+       "textColor": "#000000"
+      }
+     ]
+    },
+    {
+     "ballotItemCount": 1,
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ],
+     "id": "01000000-3a82-a359-947e-08df23e604ac",
+     "jurisdictionId": "c9278aa5-acbe-47b6-97ab-082132264144",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026 - General & Special Elections"
+      }
+     ],
+     "isOfficialResults": false,
+     "electionDate": "2026-11-03",
+     "isProduction": true,
+     "asOf": "2026-10-23T18:24:04.7538893Z",
+     "lastUpdated": "2026-10-16T20:49:01.5175161Z",
+     "publishDate": null,
+     "publishVersionId": null,
+     "publicReportCategories": null,
+     "groupReportingStatus": null,
+     "precinctReportingStatus": null,
+     "contestGroups": [],
+     "countGroups": [
+      {
+       "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Election Day"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Advance Voting"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Absentee by Mail"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      },
+      {
+       "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+       "groupName": [
+        {
+         "languageId": "en",
+         "text": "Provisional"
+        }
+       ],
+       "isFromVirtualPrecinct": false
+      }
+     ],
+     "precinctsReporting": null,
+     "map": {
+      "enabled": false,
+      "styleUrl": null,
+      "featureIdField": null,
+      "disclaimer": [],
+      "showMapLegend": true
+     },
+     "totalVoters": 0.0,
+     "ballotsCast": 0.0,
+     "redactingPrecinctCountGroups": false,
+     "precinctResultsProtected": false,
+     "reportingStatusBy": 0,
+     "customPublicMessages": [],
+     "closeRaceThreshold": null,
+     "closeRaceThresholdDisclaimer": [],
+     "hasStateWideCloseRaces": false,
+     "nextUpdateAt": null,
+     "hidePrecincts": false,
+     "includePrecinctResults": true,
+     "includePrecinctStatuses": true,
+     "showOverUnderVotes": false,
+     "isPrimary": false,
+     "parties": [
+      {
+       "id": "01000000-3a82-a359-3795-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": ""
+        }
+       ],
+       "abbreviation": "",
+       "standardName": "",
+       "color": "#FF9933",
+       "textColor": "#FFFFFF"
+      },
+      {
+       "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Rep"
+        }
+       ],
+       "abbreviation": "Rep",
+       "standardName": "Rep",
+       "color": "#960018",
+       "textColor": "#000000"
+      },
+      {
+       "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Dem"
+        }
+       ],
+       "abbreviation": "Dem",
+       "standardName": "Dem",
+       "color": "#255C99",
+       "textColor": "#000000"
+      },
+      {
+       "id": "01000000-3a82-a359-0ce4-08df23e608ef",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP"
+        }
+       ],
+       "abbreviation": "REP",
+       "standardName": "REP",
+       "color": "#960018",
+       "textColor": "#ffffff"
+      },
+      {
+       "id": "01000000-3a82-a359-6c9a-08df23e60bed",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Ind"
+        }
+       ],
+       "abbreviation": "Ind",
+       "standardName": "Ind",
+       "color": "#481f82",
+       "textColor": "#000000"
+      }
+     ]
+    }
+   ],
+   "ballotItems": [
+    {
+     "id": "01000000-3a82-a359-4042-08df23e5ff36",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "11032026GeneralAndSpecialElection",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US Senate"
+      }
+     ],
+     "voteFor": [
+      {
+       "languageId": "en",
+       "text": "Vote for 1"
+      }
+     ],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 156,
+      "asOf": "2026-10-23T18:24:06.0517405Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "01000000-3a82-a359-482e-08df23e5ff36",
+        "nativeId": "1",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike Collins (Rep)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Rep"
+          }
+         ],
+         "abbreviation": "Rep",
+         "standardName": null,
+         "color": "#960018",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-3a82-a359-4a50-08df23e5ff36",
+        "nativeId": "2",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jon Ossoff (I) (Dem)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Dem"
+          }
+         ],
+         "abbreviation": "Dem",
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": ""
+    },
+    {
+     "id": "01000000-3a82-a359-9ca3-08df23e5ffce",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "11032026GeneralAndSpecialElection",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 1"
+      }
+     ],
+     "voteFor": [
+      {
+       "languageId": "en",
+       "text": "Vote for 1"
+      }
+     ],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 15,
+      "asOf": "2026-10-23T18:24:06.0517405Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "01000000-3a82-a359-9ccc-08df23e5ffce",
+        "nativeId": "23",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "James \"Jim\" Kingston (Rep)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Rep"
+          }
+         ],
+         "abbreviation": "Rep",
+         "standardName": null,
+         "color": "#960018",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-3a82-a359-9cec-08df23e5ffce",
+        "nativeId": "24",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Amanda Hollowell (Dem)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Dem"
+          }
+         ],
+         "abbreviation": "Dem",
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": ""
+    },
+    {
+     "id": "01000000-3a82-a359-0434-08df23e5ff46",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "11032026GeneralAndSpecialElection",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Governor"
+      }
+     ],
+     "voteFor": [
+      {
+       "languageId": "en",
+       "text": "Vote for 1"
+      }
+     ],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 156,
+      "asOf": "2026-10-23T18:24:06.0517405Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "01000000-3a82-a359-0468-08df23e5ff46",
+        "nativeId": "3",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Rick Jackson (Rep)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Rep"
+          }
+         ],
+         "abbreviation": "Rep",
+         "standardName": null,
+         "color": "#960018",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-3a82-a359-047d-08df23e5ff46",
+        "nativeId": "4",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Keisha Lance Bottoms (Dem)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Dem"
+          }
+         ],
+         "abbreviation": "Dem",
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": ""
+    },
+    {
+     "id": "01000000-3a82-a359-d253-08df23e608e4",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "11032026GeneralAndSpecialElection",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senate - District 1"
+      }
+     ],
+     "voteFor": [
+      {
+       "languageId": "en",
+       "text": "Vote for 1"
+      }
+     ],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 3,
+      "asOf": "2026-10-23T18:24:06.0517405Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "01000000-3a82-a359-d27a-08df23e608e4",
+        "nativeId": "30",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ben Watson (I) (Rep)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Rep"
+          }
+         ],
+         "abbreviation": "Rep",
+         "standardName": null,
+         "color": "#960018",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-3a82-a359-d292-08df23e608e4",
+        "nativeId": "31",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Corey Foreman (Dem)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Dem"
+          }
+         ],
+         "abbreviation": "Dem",
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": ""
+    },
+    {
+     "id": "01000000-3a82-a359-6d62-08df23e626b5",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "11032026GeneralAndSpecialElection",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State House of Representatives - District 1"
+      }
+     ],
+     "voteFor": [
+      {
+       "languageId": "en",
+       "text": "Vote for 1"
+      }
+     ],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 2,
+      "asOf": "2026-10-23T18:24:06.0517405Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "01000000-3a82-a359-6d72-08df23e626b5",
+        "nativeId": "27",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike Cameron (I)(Rep)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-46c9-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Rep"
+          }
+         ],
+         "abbreviation": "Rep",
+         "standardName": null,
+         "color": "#960018",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-3a82-a359-6d7a-08df23e626b5",
+        "nativeId": "28",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Steven \"Diz\" Disbrow (Dem)"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "01000000-3a82-a359-49a7-08df23e5ff36",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Dem"
+          }
+         ],
+         "abbreviation": "Dem",
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000"
+        },
+        "groupResults": [
+         {
+          "groupId": "01000000-3a82-a359-956f-08df23e5ff21",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Election Day"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-de9c-08df23e5ff25",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Advance Voting"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-44a4-08df23e5ff27",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Absentee by Mail"
+           }
+          ],
+          "voteCount": 0
+         },
+         {
+          "groupId": "01000000-3a82-a359-a55e-08df23e5ff28",
+          "groupName": [
+           {
+            "languageId": "en",
+            "text": "Provisional"
+           }
+          ],
+          "voteCount": 0
+         }
+        ],
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": ""
+    }
+   ]
+  }
+ },
+ "UT": {
+  "index_url": "https://electionresults.utah.gov/results/public/api/jurisdictions/Utah",
+  "data_url": "https://electionresults.utah.gov/results/public/api/elections/Utah/General11032026/data",
+  "index": {
+   "elections": [
+    {
+     "publicElectionId": "General11032026",
+     "electionDate": "2026-11-03",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2026 General Election"
+      }
+     ],
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "Primary06232026",
+     "electionDate": "2026-06-23",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2026 Utah Primary Election"
+      }
+     ],
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "June 23, 2026"
+      }
+     ]
+    }
+   ]
+  },
+  "data": {
+   "election": {
+    "ballotItemCount": 1,
+    "dateText": [
+     {
+      "languageId": "en",
+      "text": "November 3, 2026"
+     }
+    ],
+    "id": "01000000-3eb9-2098-2ce9-08df22ebab67",
+    "jurisdictionId": "a7510980-7b10-4aca-a2d8-ff92951aca1c",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 General Election"
+     }
+    ],
+    "isOfficialResults": false,
+    "electionDate": "2026-11-03",
+    "isProduction": true,
+    "asOf": "2026-10-21T18:48:33.8935743Z",
+    "lastUpdated": "2026-10-20T20:49:25.3252164Z",
+    "publishDate": "2026-10-22T15:45:25.3233175Z",
+    "publishVersionId": "3738270f-97ba-4289-a977-611f39628d2c",
+    "publicReportCategories": [
+     {
+      "id": null,
+      "categoryName": null,
+      "reports": [
+       {
+        "reportName": "Summary Results by Contest",
+        "blobName": "Summary Results_57ce85c7-82b2-4ba5-8e38-9a3555965bb7.PDF",
+        "order": 0,
+        "versions": null,
+        "county": null
+       },
+       {
+        "reportName": "All Results Excel",
+        "blobName": "All Results_25360426-7026-49a3-806b-f3d7ad6bd368.xlsx",
+        "order": 0,
+        "versions": null,
+        "county": null
+       }
+      ],
+      "order": 0,
+      "categoryType": null,
+      "description": null,
+      "categoryNameTranslations": null
+     }
+    ],
+    "groupReportingStatus": [],
+    "precinctReportingStatus": null,
+    "contestGroups": [],
+    "countGroups": null,
+    "precinctsReporting": null,
+    "map": {
+     "enabled": true,
+     "styleUrl": "mapbox://styles/enhancedvoting/clnwf76n3003w01pd907e333i",
+     "featureIdField": "countynbr",
+     "disclaimer": [],
+     "showMapLegend": true
+    },
+    "totalVoters": 0.0,
+    "ballotsCast": 0.0,
+    "redactingPrecinctCountGroups": false,
+    "precinctResultsProtected": false,
+    "reportingStatusBy": 0,
+    "customPublicMessages": [],
+    "closeRaceThreshold": null,
+    "closeRaceThresholdDisclaimer": [],
+    "hasStateWideCloseRaces": false,
+    "nextUpdateAt": null,
+    "hidePrecincts": false,
+    "includePrecinctResults": true,
+    "includePrecinctStatuses": true,
+    "showOverUnderVotes": false,
+    "isPrimary": false,
+    "parties": [
+     {
+      "id": "18bd0000-4292-09ee-6c82-08df2b02c2ee",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Constitution"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Constitution",
+      "color": "#abb8c3",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-e991-08df2b02c2fb",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Republican"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Republican",
+      "color": "#d92d20",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-10e7-08df2b02c2fc",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Democratic"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Democratic",
+      "color": "#255C99",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-2027-08df2b02c2fc",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Forward"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Forward",
+      "color": "#999999",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-23d9-08df2b02c2fc",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Libertarian"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Libertarian",
+      "color": "#fed000",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-24e4-08df2b02c2fc",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Unaffiliated"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Unaffiliated",
+      "color": "#32373c",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     },
+     {
+      "id": "18bd0000-4292-09ee-265b-08df2b02c2fc",
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Independent American"
+       }
+      ],
+      "abbreviation": null,
+      "standardName": "Independent American",
+      "color": "#FFE74C",
+      "textColor": "#000000",
+      "showInPublicResultsFilters": null
+     }
+    ]
+   },
+   "localityElections": [
+    {
+     "ballotItemCount": 1,
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ],
+     "id": "01000000-9141-29be-8749-08df2a02e03a",
+     "jurisdictionId": "6e5accd9-defb-449e-8143-060d76406c04",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2026 General Election"
+      }
+     ],
+     "isOfficialResults": false,
+     "electionDate": "2026-11-03",
+     "isProduction": true,
+     "asOf": "2026-10-21T18:48:30.6832388Z",
+     "lastUpdated": "2026-10-14T14:53:16.8353918Z",
+     "publishDate": null,
+     "publishVersionId": null,
+     "publicReportCategories": null,
+     "groupReportingStatus": null,
+     "precinctReportingStatus": null,
+     "contestGroups": [],
+     "countGroups": null,
+     "precinctsReporting": null,
+     "map": {
+      "enabled": false,
+      "styleUrl": null,
+      "featureIdField": null,
+      "disclaimer": [],
+      "showMapLegend": true
+     },
+     "totalVoters": 0.0,
+     "ballotsCast": 0.0,
+     "redactingPrecinctCountGroups": false,
+     "precinctResultsProtected": false,
+     "reportingStatusBy": 0,
+     "customPublicMessages": [],
+     "closeRaceThreshold": null,
+     "closeRaceThresholdDisclaimer": [],
+     "hasStateWideCloseRaces": false,
+     "nextUpdateAt": null,
+     "hidePrecincts": false,
+     "includePrecinctResults": true,
+     "includePrecinctStatuses": true,
+     "showOverUnderVotes": false,
+     "isPrimary": false,
+     "parties": [
+      {
+       "id": "18bd0000-4292-09ee-6c82-08df2b02c2ee",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Constitution"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Constitution",
+       "color": "#abb8c3",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-e991-08df2b02c2fb",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Republican"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Republican",
+       "color": "#d92d20",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-10e7-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Democratic"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Democratic",
+       "color": "#255C99",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-2027-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Forward"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Forward",
+       "color": "#999999",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-23d9-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Libertarian"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Libertarian",
+       "color": "#fed000",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-24e4-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Unaffiliated"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Unaffiliated",
+       "color": "#32373c",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-265b-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Independent American"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Independent American",
+       "color": "#FFE74C",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      }
+     ]
+    },
+    {
+     "ballotItemCount": 1,
+     "dateText": [
+      {
+       "languageId": "en",
+       "text": "November 3, 2026"
+      }
+     ],
+     "id": "01000000-b4d7-10b4-4dcb-08df29fabba6",
+     "jurisdictionId": "bc00395e-621f-44ee-8ef0-2beb02cdd913",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2026 General Election"
+      }
+     ],
+     "isOfficialResults": false,
+     "electionDate": "2026-11-03",
+     "isProduction": true,
+     "asOf": "2026-10-21T18:48:30.7056796Z",
+     "lastUpdated": "2026-10-14T13:54:59.7683517Z",
+     "publishDate": null,
+     "publishVersionId": null,
+     "publicReportCategories": null,
+     "groupReportingStatus": null,
+     "precinctReportingStatus": null,
+     "contestGroups": [],
+     "countGroups": null,
+     "precinctsReporting": null,
+     "map": {
+      "enabled": false,
+      "styleUrl": null,
+      "featureIdField": null,
+      "disclaimer": [],
+      "showMapLegend": true
+     },
+     "totalVoters": 0.0,
+     "ballotsCast": 0.0,
+     "redactingPrecinctCountGroups": false,
+     "precinctResultsProtected": false,
+     "reportingStatusBy": 0,
+     "customPublicMessages": [],
+     "closeRaceThreshold": null,
+     "closeRaceThresholdDisclaimer": [],
+     "hasStateWideCloseRaces": false,
+     "nextUpdateAt": null,
+     "hidePrecincts": false,
+     "includePrecinctResults": true,
+     "includePrecinctStatuses": true,
+     "showOverUnderVotes": false,
+     "isPrimary": false,
+     "parties": [
+      {
+       "id": "18bd0000-4292-09ee-6c82-08df2b02c2ee",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Constitution"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Constitution",
+       "color": "#abb8c3",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-e991-08df2b02c2fb",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Republican"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Republican",
+       "color": "#d92d20",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-10e7-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Democratic"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Democratic",
+       "color": "#255C99",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-2027-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Forward"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Forward",
+       "color": "#999999",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-23d9-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Libertarian"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Libertarian",
+       "color": "#fed000",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-24e4-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Unaffiliated"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Unaffiliated",
+       "color": "#32373c",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      },
+      {
+       "id": "18bd0000-4292-09ee-265b-08df2b02c2fc",
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Independent American"
+        }
+       ],
+       "abbreviation": null,
+       "standardName": "Independent American",
+       "color": "#FFE74C",
+       "textColor": "#000000",
+       "showInPublicResultsFilters": null
+      }
+     ]
+    }
+   ],
+   "ballotItems": [
+    {
+     "id": "18bd0000-4292-09ee-2072-08df2b02c31c",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "General11032026",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. House District 1"
+      }
+     ],
+     "voteFor": [],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 0,
+      "asOf": "2026-10-21T18:48:33.8935743Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "18bd0000-4292-09ee-224e-08df2b02c31c",
+        "nativeId": "637531264",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "RILEY OWEN"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-e991-08df2b02c2fb",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Republican"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#d92d20",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-23bf-08df2b02c31c",
+        "nativeId": "637843142",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "JESSE WEST"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-23d9-08df2b02c2fc",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Libertarian"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#fed000",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-255e-08df2b02c31c",
+        "nativeId": "641825679",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "ELIAS HENRY MONTGOMERY"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-24e4-08df2b02c2fc",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Unaffiliated"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#32373c",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-271f-08df2b02c31c",
+        "nativeId": "636639717",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "BEN MCADAMS"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-10e7-08df2b02c2fc",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Democratic"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "01000000-b2cc-68ac-609a-08df2fa3963d",
+        "nativeId": "BABAK\"BOBBY\"DARVISH-5-Unaffiliated",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "BABAK \"BOBBY\" DARVISH "
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-24e4-08df2b02c2fc",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Unaffiliated"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#32373c",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": true,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": null
+    },
+    {
+     "id": "18bd0000-4292-09ee-4f97-08df2b02c31b",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "General11032026",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State House District 1 (Multi-County)"
+      }
+     ],
+     "voteFor": [],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 2,
+      "asOf": "2026-10-21T18:48:33.8935743Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "Candidate",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "18bd0000-4292-09ee-51e6-08df2b02c31b",
+        "nativeId": "636671644",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "JASON O'DELL"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-6c82-08df2b02c2ee",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Constitution"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#abb8c3",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-8e71-08df2b02c31b",
+        "nativeId": "636527003",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "THOMAS PETERSON"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-e991-08df2b02c2fb",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Republican"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#d92d20",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-9262-08df2b02c31b",
+        "nativeId": "636672887",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CHRIS REID"
+         }
+        ],
+        "voteCount": 0,
+        "party": {
+         "id": "18bd0000-4292-09ee-10e7-08df2b02c2fc",
+         "name": [
+          {
+           "languageId": "en",
+           "text": "Democratic"
+          }
+         ],
+         "abbreviation": null,
+         "standardName": null,
+         "color": "#255C99",
+         "textColor": "#000000",
+         "showInPublicResultsFilters": null
+        },
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": null
+    },
+    {
+     "id": "18bd0000-4292-09ee-b4f8-08df2b02c2fc",
+     "parentId": null,
+     "parentJurisdictionName": "",
+     "publishPublicElectionId": "General11032026",
+     "relatedIds": null,
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Constitutional Amendment A"
+      }
+     ],
+     "voteFor": [],
+     "referendum": [],
+     "turnout": null,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 10,
+      "asOf": "2026-10-21T18:48:33.8935743Z",
+      "reportingStatusDetails": null
+     },
+     "voteTotal": 0,
+     "underVoteCount": null,
+     "overVoteCount": null,
+     "contestGroupId": null,
+     "contestType": "BallotMeasure",
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "id": "18bd0000-4292-09ee-d108-08df2b02c30d",
+        "nativeId": "647587948",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "FOR"
+         }
+        ],
+        "voteCount": 0,
+        "party": null,
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       },
+       {
+        "id": "18bd0000-4292-09ee-9df6-08df2b02c31a",
+        "nativeId": "647587954",
+        "name": [
+         {
+          "languageId": "en",
+          "text": "AGAINST"
+         }
+        ],
+        "voteCount": 0,
+        "party": null,
+        "groupResults": null,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "isWinner": null
+       }
+      ]
+     },
+     "rankedChoiceSummaryResults": null,
+     "crossCounties": [],
+     "isCloseRace": null,
+     "partyName": null
+    }
+   ]
+  }
+ }
+}

@@ -560,16 +560,16 @@ class TestIncumbentRecordLink:
         assert (holder["id"], holder["status"]) == ("pat-roe", "unconfirmed")
 
     def test_the_house_race_names_the_member_leaving_it(self, db_session):
-        _representative(db_session, "lucy-mcbride", "Lucy McBride", "GA", 6, bioguide_id="M000001")
-        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _candidate(db_session, "H6GA06002", "2026-HOUSE-GA-6", "ROE, PAT", confirmed_general=True)
+        _representative(db_session, "lucy-mcbride", "Lucy McBride", "PA", 6, bioguide_id="M000001")
+        _race(db_session, "2026-HOUSE-PA-6", "PA", office="H", district=6)
+        _candidate(db_session, "H6PA06002", "2026-HOUSE-PA-6", "ROE, PAT", confirmed_general=True)
         db_session.commit()
 
-        race = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]
+        race = _body(elections.state_ballot("PA", db_session))["houseRaces"][0]
         assert {k: race["seatHolder"][k] for k in ("id", "name", "status", "certified")} == {
             "id": "lucy-mcbride", "name": "Lucy McBride", "status": "notNominee", "certified": False,
         }
-        assert _body(elections.race_detail("2026-HOUSE-GA-6", db_session))["seatHolder"]["id"] == "lucy-mcbride"
+        assert _body(elections.race_detail("2026-HOUSE-PA-6", db_session))["seatHolder"]["id"] == "lucy-mcbride"
 
     def test_a_nominee_is_named_by_their_own_row_not_as_the_seat_holder(self, db_session):
         _representative(db_session, "lucy-mcbride", "Lucy McBride", "GA", 6, bioguide_id="M000001")

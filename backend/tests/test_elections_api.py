@@ -258,9 +258,9 @@ class TestListRaces:
         defeated-primary FEC filer shouldn't count toward candidateCount
         or edge out the real nominee for a topCandidates slot just
         because they raised more before losing."""
-        _race(db_session, "2026-SEN-GA", "GA")
-        _candidate(db_session, "WINNER", "2026-SEN-GA", "PAXTON, KEN", confirmed_general=True, cash_on_hand=1.0)
-        _candidate(db_session, "LOSER", "2026-SEN-GA", "CORNYN, JOHN", confirmed_general=False, cash_on_hand=999.0)
+        _race(db_session, "2026-SEN-PA", "PA")
+        _candidate(db_session, "WINNER", "2026-SEN-PA", "PAXTON, KEN", confirmed_general=True, cash_on_hand=1.0)
+        _candidate(db_session, "LOSER", "2026-SEN-PA", "CORNYN, JOHN", confirmed_general=False, cash_on_hand=999.0)
         db_session.commit()
 
         data = _body(elections.list_races(db_session))
@@ -330,12 +330,12 @@ class TestRaceDetail:
         function — a candidate list unfiltered here would let the exact
         19-candidates bug resurface one click after the state-ballot page
         fixed it."""
-        _race(db_session, "2026-SEN-GA", "GA")
-        _candidate(db_session, "WINNER", "2026-SEN-GA", "PAXTON, KEN", confirmed_general=True)
-        _candidate(db_session, "LOSER", "2026-SEN-GA", "CORNYN, JOHN", confirmed_general=False)
+        _race(db_session, "2026-SEN-PA", "PA")
+        _candidate(db_session, "WINNER", "2026-SEN-PA", "PAXTON, KEN", confirmed_general=True)
+        _candidate(db_session, "LOSER", "2026-SEN-PA", "CORNYN, JOHN", confirmed_general=False)
         db_session.commit()
 
-        data = _body(elections.race_detail("2026-SEN-GA", db_session))
+        data = _body(elections.race_detail("2026-SEN-PA", db_session))
         assert [c["id"] for c in data["candidates"]] == ["WINNER"]
         # _race_full computes this alongside the same filter; race_detail
         # must too, or a reader here can't tell a confirmed nominee from a
@@ -488,13 +488,13 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         """A mixed list must not present the recovered candidate as a
         state-confirmed nominee — candidateSource is per-race and cannot
         carry this."""
-        _race(db_session, "2026-HOUSE-GA-11", "GA", office="H", district=11)
-        _candidate(db_session, "DNOM", "2026-HOUSE-GA-11", "MARTIN, JAMES",
+        _race(db_session, "2026-HOUSE-PA-11", "PA", office="H", district=11)
+        _candidate(db_session, "DNOM", "2026-HOUSE-PA-11", "MARTIN, JAMES",
                    party="DEM", confirmed_general=True)
-        _candidate(db_session, "MAST", "2026-HOUSE-GA-11", "MAST, BRIAN", party="REP")
+        _candidate(db_session, "MAST", "2026-HOUSE-PA-11", "MAST, BRIAN", party="REP")
         db_session.commit()
 
-        data = _body(elections.race_detail("2026-HOUSE-GA-11", db_session))
+        data = _body(elections.race_detail("2026-HOUSE-PA-11", db_session))
         by_id = {c["id"]: c for c in data["candidates"]}
         assert by_id["DNOM"]["confirmed"] is True
         assert by_id["MAST"]["confirmed"] is False

@@ -27,10 +27,6 @@
     "PA": {
       "reason": "Civitas does not read Pennsylvania's official measure list automatically yet.",
       "dev_note": "2026-10-08: the earlier reason ('publishes no list ... before the election') was false — Pa. Const. art. XI, §1 and 25 P.S. §2621.1 have the Secretary of the Commonwealth advertise every proposed amendment three months before the election, and pa.gov/agencies/vote lists none on its election pages. No official page confirming none for 2026-11-03 was found (pa.gov's upcoming-elections page carries only the calendar), so this stays not_yet_covered rather than confirmed_none. A reader of the Department of State's advertisement is the fix."
-    },
-    "WI": {
-      "reason": "Civitas does not read Wisconsin's official measure list automatically yet.",
-      "dev_note": "2026-10-08: elections.wi.gov answers with a Cloudflare challenge ('Just a moment...', 403) — not worked around. Needs a county republication of the state's own notice to be read."
     }
   },
   "states": {
@@ -342,6 +338,16 @@
       "description": "Proves absence only: the State Voters' Pamphlet for the general election (ORS 251.185 puts every state measure in it), the lowest-numbered county book linked from sos.oregon.gov/elections/Voters-Pamphlet/Pages/Voters-Pamphlet-English.aspx. [] only when its cover names the election, its contents list no measure, no page carries a 'Measure <n>' heading and the page links no other pamphlet document for the year (a separate measures volume); otherwise None — it never returns a measure. Verified live 2026-10-08: the November 3, 2026 pamphlet (VP_G26-Book1_web.pdf) has none. The measure database requires a captcha and is not used. See ballot_measures_or.py.",
       "expected_by_days_before": 20,
       "expected_by_basis": "The State Voters' Pamphlet is delivered to every residence by October (2026: October 7-9, per the Secretary's pamphlet page); 20 days out it has been posted for over a week."
+    },
+    "WI": {
+      "source_name": "Wisconsin Elections Commission",
+      "strategy": "google_civic",
+      "title_authority": "Wisconsin Legislature",
+      "origin_when_title_says": {
+        "referendum": "Wisconsin Legislature"
+      },
+      "link_url": "https://myvote.wi.gov/",
+      "description": "Wisconsin's statewide referendum questions as the state supplies them to the Voting Information Project, read through Google Civic (ballot_measures_civic.py; VIP first, owner decision 2026-10-28): a question on every answering ballot from three congressional districts, its title and text verbatim, a county's or school district's question on only some of them left out. elections.wi.gov answers with a Cloudflare challenge and is not read. Wisconsin has no citizen initiative (Wis. Const. art. XII, §1): every statewide question is the Legislature's, which the origin rule states. Checked 2026-10-29: VIP's ballots from congressional districts 1, 3 and 5 each carry the same three 'State of Wisconsin ... Referendum' questions."
     }
   }
 }

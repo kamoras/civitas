@@ -182,3 +182,21 @@ async def test_fixed_addresses_are_asked_first(monkeypatch):
 def test_vip_capital_party_names_read_as_the_state_writes_them():
     assert civic._party_label("U.S. TAXPAYERS") == "U.S. Taxpayers"
     assert civic._party_label("Working Class Party") == "Working Class Party"
+
+
+@pytest.mark.asyncio
+async def test_a_point_google_cannot_place_is_not_an_answer(monkeypatch):
+    # The first three points fail to parse; the state's ballot is still read.
+    points = {"XX-H-4": [[9.0, 9.0], [8.0, 8.0], [7.0, 7.0], [1.0, 1.0]], "XX-H-5": [[2.0, 2.0]]}
+    monkeypatch.setattr(civic, "_points", lambda state: {k.replace("XX", state): v for k, v in points.items()})
+    unplaced = {f"{n}.0,{n}.0": civic._UNPLACED for n in (7, 8, 9)}
+    _serve(monkeypatch, {**unplaced, "1.0,1.0": _ballot("4th", "19th", "40th"), "2.0,2.0": _ballot("5th", "20th", "41st")})
+    assert ("H", 4) in _by_office(await _read())
+
+
+@pytest.mark.asyncio
+async def test_a_state_none_of_whose_points_are_placed_is_a_failed_read(monkeypatch):
+    many = {"XX-H-1": [[float(n), float(n)] for n in range(30)]}
+    monkeypatch.setattr(civic, "_points", lambda state: {k.replace("XX", state): v for k, v in many.items()})
+    _serve(monkeypatch, {f"{float(n)},{float(n)}": civic._UNPLACED for n in range(30)})
+    assert await _read() is None
