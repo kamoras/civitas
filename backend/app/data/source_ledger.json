@@ -38,7 +38,7 @@
     {"publisher": "Google Civic Information", "takes": "Contests on a town's ballot", "hosts": ["civicinfo.googleapis.com"]},
     {"publisher": "Google Trends", "takes": "What people are searching for, for the Action Center", "hosts": ["trends.google.com"]},
     {"publisher": "Bluesky", "takes": "Trending topics for the Action Center", "hosts": ["public.api.bsky.app"]},
-    {"publisher": "Internet Archive", "takes": "Archived copies of state documents behind a bot wall", "hosts": ["web.archive.org"]},
+    {"publisher": "Internet Archive", "takes": "Archived copies of state documents behind a bot wall, from the Wayback Machine and the state libraries' Archive-It collections", "hosts": ["web.archive.org", "wayback.archive-it.org", "partner.archive-it.org"]},
     {"publisher": "Vote.gov and USA.gov", "takes": "Official links for registering and voting", "hosts": ["vote.gov", "www.usa.gov"]},
     {"publisher": "Clarity Elections (state results)", "takes": "Election results several states publish here", "hosts": ["results.enr.clarityelections.com"]},
     {"publisher": "South Dakota Secretary of State", "takes": "South Dakota's certified general election ballot", "hosts": ["vip.sdsos.gov"]},

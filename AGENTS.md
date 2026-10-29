@@ -1136,10 +1136,16 @@ Corollaries that follow from the same rule, all enforced in code:
   read that finds measures is used, since a capture can't speak for a page
   the state has since changed. The per-state archived readers
   (`ARCHIVED_STRATEGIES`) stay for the documents whose address only the
-  stored reads know. A wall that also turns the Archive's crawler away
-  (Ohio's did) leaves no copy, and the state stays ingest_failed; so does a
-  page whose newest capture is another election's at the same address
-  (California's Prop 3 page, 2026-10-29: the reader refuses it).
+  stored reads know. A capture is looked for in two indexes: the Wayback
+  Machine's, and the Archive-It collections state libraries keep of their
+  own state's sites (the California State Library's CA.gov archive, the
+  Montana State Library's MT.Gov archive), found by rule from Archive-It's
+  public seed list, never typed (`web_archive._collections`), and not all
+  mirrored into the Wayback index; the newest verified capture of the two
+  is the copy, read and checked the same way. A wall that also turns every
+  archive's crawler away (Ohio's did) leaves no copy, and the state stays
+  ingest_failed; so does a page whose newest capture is another election's
+  at the same address (the reader refuses it).
   **Every request names Civitas, the same way** (2026-10-25): the one
   User-Agent `Civitas/1.0 (+<SITE_URL>/about/crawler; <CONTACT_EMAIL>)`
   (`app/contact.USER_AGENT`; `make_async_client` sends it by default, the
