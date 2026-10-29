@@ -39,6 +39,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import pdfplumber
 
+from app.http_client import answering_client
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import terms_block, source_for_state
 from app.models import BallotMeasure
@@ -733,7 +734,7 @@ async def _read_archived(
     state's read stays the failure it was."""
     archive = web_archive.ArchiveTransport(client)
     try:
-        async with httpx.AsyncClient(transport=archive, follow_redirects=True) as copy:
+        async with answering_client(archive) as copy:
             measures = await _read_measures(copy, db, state, year, election_date, source)
     except (NotYetPublished, DocumentNotLinked):
         return None

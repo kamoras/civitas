@@ -405,6 +405,16 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
                 jar.clear(cookie.domain, cookie.path, cookie.name)
 
 
+def answering_client(transport: httpx.AsyncBaseTransport) -> httpx.AsyncClient:
+    """A client every answer of which comes from `transport`, which sends
+    nothing itself: web_archive.ArchiveTransport answers each request from
+    an Internet Archive capture it reads through a governed client (with
+    the backstop, the crawl policy and Civitas's name). Not governed here,
+    since none of its requests leaves the process, and the crawl policy
+    would refuse the walled state host the transport stands in for."""
+    return httpx.AsyncClient(transport=transport, follow_redirects=True)
+
+
 def make_async_client(**kwargs: Any) -> BackstoppedAsyncClient:
     """Construct the backend's httpx client. Use this everywhere.
 
