@@ -1712,10 +1712,13 @@ def _refused_by_terms(entry: dict | None) -> bool:
 
 
 def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[str]:
-    """The races a certified list now refused by its terms last certified:
-    every race here when the ballot-basis marker says that list answered
-    for the whole state, else the races it named; none when the marker is
-    another source's (the list never answered this cycle)."""
+    """The races a certified list that can't answer tonight last certified
+    (refused by its terms, walled, down, or taken off its site): every race
+    here when the ballot-basis marker says that list answered for the whole
+    state, else the races it named, by the marker or by the races the
+    marker credits to it (raceSources: a night the VIP ballot answered
+    beside the held list names Google Civic as the marker's source); none
+    when the list never answered this cycle."""
     if not entry:
         return set()
     name = str(entry.get("source_name") or "")
@@ -1724,6 +1727,9 @@ def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[
                            max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {}
     if marker.get("sourceName") == name:
         return races_here if marker.get("complete") else set(marker.get("races") or ())
+    credited = {rid for rid, src in (marker.get("raceSources") or {}).items() if src == name}
+    if credited:
+        return credited & races_here
     # The basis was rewritten by a weaker source before the hold existed
     # (Colorado and Nebraska, 2026-10-29 00:51 and 01:29 UTC, between two
     # deploys). The state-office record still names the list: it answered
@@ -1964,6 +1970,15 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 # speaks for no race, so it is handled exactly like one
                 # that did not answer.
                 general_records = None
+            if general_records is None:
+                # A list that certified races before and can't answer
+                # tonight (walled, down, taken off its site: Georgia's
+                # staged ballot, gone from its portal 2026-10-29) still
+                # certified them: they keep that read, exactly as a list
+                # refused by its terms does, and weaker sources answer only
+                # for the races it never covered. A list never read this
+                # cycle holds nothing.
+                held = _held_races(db, cycle, state, general)
 
         records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
@@ -2092,8 +2107,8 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             races_here = {
                 rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
             }
-            covered: set[str] = set(held)
-            race_sources: dict[str, str] = {rid: str(general.get("source_name") or "") for rid in held & races_here}
+            covered: set[str] = set()
+            race_sources: dict[str, str] = {}
             applied = {"confirmed": 0, "unmatched": 0, "ballotOnly": 0, "unconfirmed": 0}
             for list_source, list_records in lists:
                 federal = [r for r in list_records if r["office"] in ("S", "H")
@@ -2107,6 +2122,11 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 applied = {k: applied[k] + more[k] for k in applied}
                 covered |= these
                 race_sources.update({rid: str(list_source.get("source_name") or "") for rid in these & races_here})
+            # A held list's races keep its last read, after the VIP ballot
+            # (which speaks first for every race it names tonight).
+            kept = (held & races_here) - covered
+            race_sources.update({rid: str(general.get("source_name") or "") for rid in kept})
+            covered |= kept
             rest = [r for r in records if _race_id_for(db, cycle, state, r["office"], r["district"]) not in covered]
             if rest:
                 # Primary results beside a certified list never prune: a

@@ -553,6 +553,31 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
     assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tonight", [None, []], ids=["walled", "taken-down"])
+async def test_a_certified_list_that_cannot_answer_keeps_what_it_certified(db_session, monkeypatch, tonight):
+    # The same race: the list replaced Colfax with Penrose. On a night the
+    # list can't be read (a wall, or the page gone), primary results naming
+    # Colfax must not confirm him again or take the race's certified basis.
+    _one_state(monkeypatch, "ME")
+    results = AsyncMock(return_value=[_rec("S", None, "D", "Colfax", "Gordon Colfax")])
+    certified = AsyncMock(return_value=[_rec("S", None, "D", "Penrose", "Reid D. Penrose")])
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", results)
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", certified)
+    _race(db_session, "2026-SEN-ME", "ME")
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "COLFAX, WHITFIELD", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "PENROSE, TROY", "DEM")
+    db_session.commit()
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    certified.return_value = tonight
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags == {"S6ME1": False, "S6ME2": True}
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
+
+
 # --- Florida's candidate list ---
 
 from app.pipeline.fetch.state_candidates_dos_canlist import parse_canlist  # noqa: E402
