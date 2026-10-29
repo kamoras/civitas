@@ -176,6 +176,8 @@ def test_every_measure_registry_terms_entry_names_a_forbidden_host():
     named = {s: e["terms"]["host"] for s, e in (registry._load().get("states") or {}).items() if e.get("terms")}
     assert named == {"HI": "elections.hawaii.gov", "NE": "sos.nebraska.gov"}
     assert all(registry.terms_block(s) for s in named)
+    # Hawaii's is read from the Internet Archive's copy, with the owner's go-ahead.
+    assert registry.terms_block("HI")["archive"] and not registry.terms_block("NE")["archive"]
 
 
 @pytest.mark.asyncio
@@ -187,10 +189,10 @@ async def test_a_terms_blocked_state_s_reader_is_never_called_and_its_measures_s
         raise AssertionError("the reader was called")
 
     monkeypatch.setattr(ep, "_fetch_with_reasons", never)
-    db_session.add(MeasureCoverage(state="HI", election_date="2026-11-03", status=MeasureCoverage.COVERED,
-                                   measure_count=2, source_name="Hawaii Office of Elections"))
+    db_session.add(MeasureCoverage(state="NE", election_date="2026-11-03", status=MeasureCoverage.COVERED,
+                                   measure_count=2, source_name="Nebraska Secretary of State"))
     db_session.commit()
-    await ep._sync_pdf_measures(db_session, None, "2026-11-03", states=["HI"])
-    row = db_session.query(MeasureCoverage).filter_by(state="HI").one()
+    await ep._sync_pdf_measures(db_session, None, "2026-11-03", states=["NE"])
+    row = db_session.query(MeasureCoverage).filter_by(state="NE").one()
     assert row.status == MeasureCoverage.COVERED and row.measure_count == 2
     assert "terms of use forbid automated access" in row.error_detail

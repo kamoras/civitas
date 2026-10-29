@@ -71,7 +71,11 @@ def terms_block(state: str) -> dict | None:
     entry = host_terms.forbid(host) if host else None
     if not entry:
         return None
-    return {"host": host, "publisher": entry.get("publisher"), "terms_url": entry.get("terms_url")}
+    # `archive`: the state's document is read from the Internet Archive's
+    # copy instead (ballot_measures_pdf.ARCHIVED_STRATEGIES), with the
+    # owner's go-ahead for that state.
+    return {"host": host, "publisher": entry.get("publisher"), "terms_url": entry.get("terms_url"),
+            "archive": bool(terms.get("archive"))}
 
 
 def walls() -> dict[str, dict]:

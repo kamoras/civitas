@@ -82,3 +82,60 @@ async def test_a_page_with_no_question_heading_is_a_failure_never_none(monkeypat
         return FIXTURE.replace("QUESTION", "PROPOSAL")
     monkeypatch.setattr(hi, "fetch_text_with_retry", fake_fetch)
     assert await hi.fetch_measures(None, 2026) is None
+
+
+# ── read from the Internet Archive's copy (hawaii.gov's terms forbid
+# automated access: app/data/host_terms.json) ──
+
+from app.pipeline.fetch import web_archive  # noqa: E402
+from app.pipeline.fetch.web_archive import Capture  # noqa: E402
+
+_CAPTURE = Capture("20261025093406", hi.URL_PATTERN.format(year=2026), "X")
+
+
+@pytest.mark.asyncio
+async def test_the_archived_page_is_read_verified_and_credited_to_its_capture(monkeypatch):
+    async def newest(client, url):
+        assert url == hi.URL_PATTERN.format(year=2026)
+        return _CAPTURE
+
+    async def raw(client, capture):
+        return FIXTURE.encode()
+
+    monkeypatch.setattr(web_archive, "newest_capture", newest)
+    monkeypatch.setattr(web_archive, "read_capture", raw)
+    pairs = await hi.fetch_archived(None, 2026, [])
+    assert [p["number"] for p, _ in pairs] == ["1", "2"]
+    assert {url for _, url in pairs} == {_CAPTURE.page_url}
+
+
+@pytest.mark.asyncio
+async def test_a_capture_that_fails_its_digest_reads_nothing(monkeypatch):
+    async def newest(client, url):
+        return _CAPTURE
+
+    async def unverified(client, capture):
+        return None
+
+    monkeypatch.setattr(web_archive, "newest_capture", newest)
+    monkeypatch.setattr(web_archive, "read_capture", unverified)
+    assert await hi.fetch_archived(None, 2026, []) is None
+
+
+@pytest.mark.asyncio
+async def test_hawaii_is_read_from_the_archive_and_its_own_host_never(db_session, monkeypatch):
+    from app.pipeline.fetch import ballot_measures_pdf as pdf
+
+    async def never(*a, **kw):
+        raise AssertionError("elections.hawaii.gov was asked")
+
+    async def archived(client, year, known):
+        return [({"number": "1", "title": "t", "official_title": None, "official_summary": "Shall ...?",
+                  "fiscal_impact": None, "yes_means": None, "no_means": None, "origin": hi.ORIGIN,
+                  "title_authority": hi.TITLE_AUTHORITY}, _CAPTURE.page_url)]
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "hi_proposed_amendments", never)
+    monkeypatch.setitem(pdf.ARCHIVED_STRATEGIES, "hi_proposed_amendments", archived)
+    measures = await pdf.fetch_state_measures_pdf(None, db_session, "HI", 2026, "2026-11-03")
+    assert [m["republished_by"] for m in measures] == [web_archive.PUBLISHER]
+    assert measures[0]["source_url"] == _CAPTURE.page_url
