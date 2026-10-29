@@ -303,5 +303,7 @@ See `.env.example` for all options. Key variables:
 | `GOOGLE_CIVIC_API_KEY` | No | Google Civic Information API key — enables the optional town-level local-races selector on the state ballot pages (a small hand-curated pilot list, not all US towns). Unset means the selector doesn't appear |
 | `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.org`) |
 | `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
+| `THREADS_USER_ID`, `THREADS_ACCESS_TOKEN` | No | Threads account id and long-lived token ([social-accounts.md](social-accounts.md)); both set turns Threads on. The pipeline refreshes the token itself (`/data/social_tokens.json`) |
+| `INSTAGRAM_USER_ID`, `INSTAGRAM_ACCESS_TOKEN` | No | Instagram Professional account id and long-lived token ([social-accounts.md](social-accounts.md)); both set turns Instagram on, for posts with a picture only |
 | `FEEDBACK_TOKEN` | No | Fine-grained GitHub PAT (Issues: write only) for the on-site feedback form; leave unset to disable it (returns 503, never silently drops) |
 | `GITHUB_FEEDBACK_REPO` | No | Repo the feedback form files issues against (default: `kamoras/civitas`) |

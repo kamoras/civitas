@@ -46,14 +46,32 @@ out the moment it is written. The feed entry is never held: a feed is
 pulled, so its reader already chooses when to read it, and holding it would
 only make it late. Only Bluesky's chronological Following feed rewards
 arriving while people are looking.
+
+Threads and Instagram (app/social/) take the same posts at the same times:
+each configured channel gets a `BroadcastDelivery` row when a post that
+goes to Bluesky is stored (`bluesky=False` keeps a post off them too), is
+sent when Bluesky's would be (held for the same window, retried by the
+same `deliver_pending` on the same day under the same limits), and is
+claimed by one sender before any call, like Bluesky's. A post that only
+makes sense beside an earlier one (an election-night correction of a
+flip, `follows`) goes to a channel only if that channel showed the earlier
+post. Their sends run on one background thread (_spawn), never in the
+caller's: a container can take minutes to be ready, and publish is called
+from inside the election-night sync's event loop. A failure on one channel
+is recorded on its row and never touches another channel, Bluesky or the
+stored post. Instagram takes only a post with its own picture, as a JPEG
+copy this site serves (`post_image_jpeg`, /api/cards/posts/<id>.jpg).
 """
 
+import io
 import json
 import logging
 import pathlib
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from PIL import Image
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -62,7 +80,11 @@ from app.http_client import source_request
 from app import data_refresh, retractions
 from app.config import settings
 from app.contact import USER_AGENT
-from app.models import BroadcastPost
+from app.database import SessionLocal
+from app.error_utils import exception_summary
+from app.models import BroadcastDelivery, BroadcastPost
+from app.social import graph as social_graph
+from app.social import instagram, threads
 from app.pipeline.analyze.bluesky_utils import (
     BSKY_MAX_IMAGE_BYTES,
     PostImage,
@@ -164,6 +186,13 @@ FEEDS: dict[str, Feed] = {
 }
 
 
+# The channels past Bluesky, each a module of app/social/.
+CHANNELS = {m.NAME: m for m in (threads, instagram)}
+# One sender thread's work at a time: a container wait is minutes, and two
+# threads would only race on the token file.
+_CHANNEL_LOCK = threading.Lock()
+
+
 def _bluesky_configured() -> bool:
     return bool(getattr(settings, "BSKY_HANDLE", "")) and bool(getattr(settings, "BSKY_APP_PASSWORD", ""))
 
@@ -231,6 +260,7 @@ def publish(
     image_url: str | None = None,
     alt_text: str | None = None,
     embed_kind: str | None = None,
+    follows: BroadcastPost | None = None,
 ) -> BroadcastPost:
     """Record a post, then deliver it to Bluesky if an account is set up.
 
@@ -247,6 +277,10 @@ def publish(
     instead; trend_poster alternates the two to measure them). The image is
     read from inside the stack at send time (_post_image); one that can't
     be read goes as the card, never holding the post.
+
+    Threads and Instagram get the post when it goes to Bluesky, or, when
+    `follows` names the earlier post this one only makes sense beside,
+    when that channel showed it (module docstring).
     """
     if kind not in KINDS:
         raise ValueError(f"unknown broadcast kind {kind!r}")
@@ -268,7 +302,10 @@ def publish(
     )
     db.add(post)
     db.commit()
+    queued = _queue_channels(db, post, bluesky=bluesky, follows=follows)
     capture_card(db, post)
+    if queued and not _held(post):
+        _spawn([post.id])
     if post.bsky_status == "pending":
         if _held(post):
             logger.info("Bluesky send of %s %r held until %s UTC (posting window)",
@@ -276,6 +313,99 @@ def publish(
         else:
             _deliver_to_bluesky(db, post)
     return post
+
+
+def _queue_channels(db: Session, post: BroadcastPost, *, bluesky: bool, follows: BroadcastPost | None) -> bool:
+    """A pending delivery row for each configured channel that takes the
+    post. True when any was written."""
+    shown = set()
+    if follows is not None:
+        shown = {d.channel for d in db.query(BroadcastDelivery).filter(
+            BroadcastDelivery.post_id == follows.id, BroadcastDelivery.status.in_(("sending", "sent")))}
+    names = [name for name, ch in CHANNELS.items()
+             if ch.configured() and (name in shown if follows is not None else bluesky)]
+    for name in names:
+        db.add(BroadcastDelivery(post_id=post.id, channel=name, status="pending", attempts=0))
+    if names:
+        db.commit()
+    return bool(names)
+
+
+def _spawn(post_ids: list[int]) -> None:
+    """Send these posts' due channel deliveries, and keep each channel's
+    token fresh, on a background thread with its own session."""
+    if any(ch.configured() for ch in CHANNELS.values()):
+        threading.Thread(target=_send_channels, args=(post_ids,), name="broadcast-channels", daemon=True).start()
+
+
+def _send_channels(post_ids: list[int]) -> None:
+    with _CHANNEL_LOCK:
+        for ch in CHANNELS.values():
+            ch.keep_token_fresh()
+        db = SessionLocal()
+        try:
+            for delivery in (db.query(BroadcastDelivery)
+                             .filter(BroadcastDelivery.post_id.in_(post_ids),
+                                     BroadcastDelivery.status.in_(("pending", "failed")),
+                                     BroadcastDelivery.attempts < MAX_BSKY_ATTEMPTS,
+                                     or_(BroadcastDelivery.last_attempt_at.is_(None),
+                                         BroadcastDelivery.last_attempt_at <= utcnow() - RETRY_AFTER))
+                             .order_by(BroadcastDelivery.post_id, BroadcastDelivery.id).all()):
+                try:
+                    deliver_channel(db, delivery)
+                except Exception:
+                    db.rollback()
+                    logger.exception("Delivery %s to %s failed", delivery.post_id, delivery.channel)
+        finally:
+            db.close()
+
+
+def post_image_url(post: BroadcastPost) -> str:
+    """Where Meta fetches the post's picture: its JPEG copy on this site."""
+    return f"{SITE_URL}/api/cards/posts/{post.id}.jpg"
+
+
+def deliver_channel(db: Session, delivery: BroadcastDelivery) -> bool:
+    """Send one delivery row (claimed first, as Bluesky's is). True when sent."""
+    claimed = (
+        db.query(BroadcastDelivery)
+        .filter(BroadcastDelivery.id == delivery.id, BroadcastDelivery.status.in_(("pending", "failed")))
+        .update({"status": "sending", "attempts": BroadcastDelivery.attempts + 1,
+                 "last_attempt_at": utcnow()}, synchronize_session=False)
+    )
+    db.commit()
+    if claimed != 1:
+        return False
+    db.refresh(delivery)
+    channel = CHANNELS.get(delivery.channel)
+    post = db.get(BroadcastPost, delivery.post_id)
+    if channel is None or not channel.configured() or post is None:
+        delivery.status = "off"
+        db.commit()
+        return False
+    image_url = post_image_url(post) if post.image_url and _post_image(post) is not None else None
+    try:
+        delivery.remote_id = channel.send(post, image_url)[:64]
+        delivery.status, delivery.sent_at, delivery.error = "sent", utcnow(), None
+        logger.info("Posted to %s (%s): %s", delivery.channel, post.kind, post.title[:80])
+    except social_graph.Skip as exc:
+        delivery.status, delivery.error = "skipped", str(exc)
+    except Exception as exc:
+        delivery.status, delivery.error = "failed", exception_summary(exc)[:500]
+        logger.warning("%s post %s failed: %s", delivery.channel, post.id, delivery.error)
+    db.commit()
+    return delivery.status == "sent"
+
+
+def post_image_jpeg(post: BroadcastPost) -> bytes | None:
+    """The post's picture as a JPEG (Instagram takes no other format), or
+    None when it has none or it can't be read."""
+    image = _post_image(post)
+    if image is None:
+        return None
+    out = io.BytesIO()
+    Image.open(io.BytesIO(image.data)).convert("RGB").save(out, "JPEG", quality=90)
+    return out.getvalue()
 
 
 def capture_card(db: Session, post: BroadcastPost) -> bool:
@@ -392,7 +522,12 @@ def deliver_pending(db: Session) -> int:
     login allowance, and the rest wait for the next run. Not after one: a
     refusal can be about the post itself (a link card Bluesky rejects),
     and that post would otherwise hold back every later one until its
-    tries ran out."""
+    tries ran out.
+
+    Threads' and Instagram's due rows, under the same rules, go to the
+    background sender (_spawn), which also keeps their tokens fresh; the
+    count returned is Bluesky's."""
+    _spawn(_due_channel_posts(db))
     if not _bluesky_configured():
         return 0
     today = _post_day(utcnow())
@@ -432,6 +567,30 @@ def deliver_pending(db: Session) -> int:
         if refused >= MAX_CONSECUTIVE_REFUSALS:
             break
     return sent
+
+
+def _due_channel_posts(db: Session) -> list[int]:
+    """Posts with a Threads or Instagram row deliver_pending would send now:
+    the same tries, spacing, kinds, window and day as Bluesky's."""
+    now = utcnow()
+    rows = (
+        db.query(BroadcastPost)
+        .join(BroadcastDelivery, BroadcastDelivery.post_id == BroadcastPost.id)
+        .filter(
+            BroadcastDelivery.status.in_(("pending", "failed")),
+            BroadcastDelivery.attempts < MAX_BSKY_ATTEMPTS,
+            or_(BroadcastDelivery.last_attempt_at.is_(None),
+                BroadcastDelivery.last_attempt_at <= now - RETRY_AFTER),
+            not_withdrawn(),
+            BroadcastPost.kind.notin_(NO_RETRY_KINDS),
+            BroadcastPost.published_at >= now - HELD_MAX_AGE,
+        )
+        .distinct()
+        .order_by(BroadcastPost.id)
+        .all()
+    )
+    today, open_now = _post_day(now), in_window(now)
+    return [p.id for p in rows if (open_now if _held(p) else _post_day(p.published_at) == today)]
 
 
 def withdrawn_subjects() -> frozenset[str]:

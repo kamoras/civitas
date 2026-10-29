@@ -188,7 +188,10 @@ class TestMap:
         # The senders are found from the code: the module every alert goes
         # through, the one every post goes through, and the feedback route
         # that files a reader's message as an issue.
-        assert source_health.outbound_modules() == {"app.ops_alerts", "app.broadcast", "app.api.feedback"}
+        assert source_health.outbound_modules() == {
+            "app.ops_alerts", "app.broadcast", "app.api.feedback",
+            "app.social.graph", "app.social.instagram", "app.social.threads",
+        }
         monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
         body = source_health.build(db_session)
         by = {e["host"]: e for e in body["sources"]}

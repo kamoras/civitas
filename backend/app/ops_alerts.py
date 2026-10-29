@@ -225,7 +225,7 @@ CONDITIONS = (
     "member-failed-*", "nightly-crashed", "nightly-crashed-*", "nightly-skipped-*", "overrun-*",
     "pipeline-heartbeat-unreadable", "pipeline-service-silent", "president-ptr-empty-index-*",
     "reference-coverage-*", "results-readiness", "roster-skipped-*", "score-drift-*", "senate-holdings-notes",
-    "signal-overlap-*", "sitting-president-mismatch", "slate-incomplete-*", "source-stale:*",
+    "signal-overlap-*", "sitting-president-mismatch", "slate-incomplete-*", "social-token-*", "source-stale:*",
     "special-elections-read", "sponsorship-unread-*", "stale-pipeline-*", "step-failed-*",
     "trend-posts-party-balance", "visits-unconfirmed", "voteview-switcher-*",
 )
