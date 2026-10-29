@@ -284,6 +284,12 @@ def official_host(host: str, cited: set[str]) -> bool:
             or domain in {".".join(h.split(".")[-2:]) for h in cited})
 
 
+class Unread(str):
+    """Why a register page wasn't checked when its site gave no answer (a
+    dropped connection, a server error, a wall's 5xx): that says nothing
+    about the page, so build() keeps the calendar in use's check of it."""
+
+
 def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pathlib.Path | None,
                    today: str) -> tuple[dict | None, str | None]:
     """(what the page may link, why it may not). The register page must
@@ -299,6 +305,8 @@ def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pa
         return None, f"{url} is not on an official government host"
     if entry.get("none"):
         text, how = fetch(url, client, cache)
+        if text is None and not how.startswith("HTTP 4"):
+            return None, Unread(f"no-registration page unread ({how}, {url})")
         if text is None or not entry.get("quote") or normalise(entry["quote"]) not in text:
             return None, f"no-registration quote not verified ({how if text is None else 'quote not on the page'}, {url})"
         return {**out, "none": True, "status": "verified"}, None
@@ -317,9 +325,11 @@ def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pa
         if r.status_code < 400 or is_bot_challenge(r):
             break
     if r is None:
-        return None, f"{url}: fetch failed ({failed})"
+        return None, Unread(f"{url}: fetch failed ({failed})")
     if is_bot_challenge(r):
         return {**out, "status": "blocked"}, None
+    if r.status_code >= 500:
+        return None, Unread(f"{url}: HTTP {r.status_code}")
     if r.status_code >= 400:
         return None, f"{url}: HTTP {r.status_code}"
     if not official_host(r.url.host, cited):
@@ -416,8 +426,11 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, in_us
     today = now.date().isoformat()
     pages: dict[str, tuple[str | None, str]] = {}
     prior = {}
+    prior_register = {}
     if in_use and in_use.get("electionDate") == election.isoformat():
         for code, entry in (in_use.get("states") or {}).items():
+            if entry.get("register"):
+                prior_register[code] = entry["register"]
             for item in entry.get("items") or []:
                 if item.get("verification", {}).get("status") in ("verified", "statute", "republished"):
                     prior[(code, *_key(item))] = item
@@ -437,7 +450,13 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, in_us
             text, how = pages[src["url"]]
             rep = item.get("republished")
             republished = None
-            if text is None and rep:
+            last = prior.get((code, *_key(item)))
+            same_dates = last is not None and all(last.get(f) == item.get(f) for f in _DATE_FIELDS)
+            state_verified = same_dates and last["verification"].get("status") == "verified"
+            if text is None and rep and not state_verified:
+                # (A deadline the calendar in use has verified on the state's
+                # own source, with the same dates, keeps that verification
+                # below rather than becoming the county's printing.)
                 # The item's own source can't be read (a wall or an outage,
                 # never a page that answered without the passage): the same
                 # deadline as a county election office prints it, labelled
@@ -454,8 +473,6 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, in_us
                     item["source"] = src
             item.pop("republished", None)
             moved_from = None
-            last = prior.get((code, *_key(item)))
-            same_dates = last is not None and all(last.get(f) == item.get(f) for f in _DATE_FIELDS)
             passed = _passed(item, local_today)
             if text is not None and normalise(src["quote"]) not in text and not republished:
                 moved = find_moved(src, client, cache, pages)
@@ -494,6 +511,14 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, in_us
         if entry.get("register"):
             cited = {httpx.URL(i["source"]["url"]).host for i in entry.get("items") or []}
             reg, why = check_register(entry["register"], cited, client, cache, today)
+            last_reg = prior_register.get(code)
+            if isinstance(why, Unread) and last_reg and last_reg.get("url") == entry["register"].get("url"):
+                # No answer from the state's site: the check the calendar in
+                # use made stands, with this run's read beside it, never
+                # vote.gov in its place (for a state with no registration,
+                # that would tell its voters to register).
+                print(f"{code} register: {why}; kept as checked on {last_reg.get('checkedOn')}", file=sys.stderr)
+                reg, why = {**last_reg, "recheck": {"on": today, "result": str(why)}}, None
             if why:
                 # Never linked, but not a reason to hold back the deadlines:
                 # the page links vote.gov instead. Named, so it gets fixed.

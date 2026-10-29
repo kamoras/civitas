@@ -31,6 +31,7 @@ so the verifier writes /data/ and this module reads both.
 import json
 import logging
 import os
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -222,6 +223,13 @@ def vote_steps(state: str, calendar: dict | None) -> list[dict[str, Any]]:
 
 
 VERIFIED, BLOCKED, DEAD = "verified", "blocked", "dead"
+# No answer at all (timeouts, resets, server errors on every try): says
+# nothing about the page, so the link keeps its last check, for up to
+# UNANSWERED_GRACE_DAYS of nights with no answer. A convention: long enough
+# for a state's site to ride out an outage or a busy week, short enough
+# that a site gone for good stops being linked within the week.
+UNANSWERED = "unanswered"
+UNANSWERED_GRACE_DAYS = 7
 
 # A refusal, not an answer about the page: a wall that will not talk to an
 # automated client (Akamai's "Access Denied" 403 carries no challenge
@@ -250,8 +258,9 @@ def _check(requested: str, response: httpx.Response) -> str:
 
 
 async def _check_url(client: httpx.AsyncClient, url: str, attempts: int = 2) -> str:
-    """No answer (a timeout, a reset) or a server error is asked once more
-    before the link is hidden for the night: local runs of the check on
+    """No answer (a timeout, a reset) or a server error is asked once more,
+    and still none is UNANSWERED (refresh_link_verification keeps the
+    link's last check): local runs of the check on
     2026-10-20 lost a different live page each run (South Carolina's
     registration lookup, then Montana's), while the same URL listed for
     another task verified in the same run. A challenge, a refusal or a 404
@@ -260,7 +269,7 @@ async def _check_url(client: httpx.AsyncClient, url: str, attempts: int = 2) -> 
         result = await _check_once(client, url)
         if result is not None:
             return result
-    return DEAD
+    return UNANSWERED
 
 
 async def _check_once(client: httpx.AsyncClient, url: str) -> str | None:
@@ -303,9 +312,11 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
     shown rather than continuing to be served on the strength of a check
     that passed weeks ago. A URL whose site refuses the check (a bot wall)
     gets `blocked_at` instead: shown as the state's own page, worded as
-    unconfirmed, with the task's fallback beside it. A URL that fails any
-    other way (a 404, a redirect to the homepage, no answer) clears both
-    and falls back.
+    unconfirmed, with the task's fallback beside it. A URL whose site
+    gives no answer at all keeps its last check for UNANSWERED_GRACE_DAYS
+    (`unanswered_since`): an outage is not the page going away. A URL that
+    fails any other way (a 404, a redirect to the homepage, or no answer
+    past the grace) clears both and falls back.
 
     The fallbacks (NASS's Can I Vote, USAGov, vote.gov) are never checked
     or gated: they are what a step falls back TO, and gating them would
@@ -313,23 +324,34 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
     """
     data = read_json(_BUNDLED_PATH) or {}
     states = data.get("states") or {}
-    was_shown = {
-        (code, task)
+    previous = {
+        (code, task): link
         for code, entry in (_load().get("states") or {}).items()
-        for task, link in (entry.get("tasks") or {}).items() if link.get("verified_at")
+        for task, link in (entry.get("tasks") or {}).items()
     }
+    was_shown = {key for key, link in previous.items() if link.get("verified_at")}
     register, _ = register_pages()
     for code, page in register.items():
         if page.get("url") and not page.get("none") and code in states:
             states[code].setdefault("tasks", {})["register"] = {"url": page["url"]}
-    counts = {"checked": 0, "verified": 0, "blocked": 0, "failed": 0}
-    now = utcnow().isoformat()
+    counts = {"checked": 0, "verified": 0, "blocked": 0, "failed": 0, "unanswered": 0}
+    now_at = utcnow()
+    now = now_at.isoformat()
     for code, entry in states.items():
         for task, link in (entry.get("tasks") or {}).items():
             if not link.get("url"):
                 continue
             result = await _check_url(client, link["url"])
             counts["checked"] += 1
+            last = previous.get((code, task)) or {}
+            if result == UNANSWERED and last.get("url") == link["url"]:
+                since = last.get("unanswered_since") or now
+                if now_at - datetime.fromisoformat(since) < timedelta(days=UNANSWERED_GRACE_DAYS):
+                    link.update(verified_at=last.get("verified_at"), blocked_at=last.get("blocked_at"),
+                                unanswered_since=since)
+                    counts["unanswered"] += 1
+                    continue
+            link["unanswered_since"] = None
             link["blocked_at"] = now if result == BLOCKED else None
             link["verified_at"] = now if result == VERIFIED else None
             if result == VERIFIED:

@@ -553,6 +553,31 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
     assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tonight", [None, []], ids=["walled", "taken-down"])
+async def test_a_certified_list_that_cannot_answer_keeps_what_it_certified(db_session, monkeypatch, tonight):
+    # The same race: the list replaced Colfax with Penrose. On a night the
+    # list can't be read (a wall, or the page gone), primary results naming
+    # Colfax must not confirm him again or take the race's certified basis.
+    _one_state(monkeypatch, "ME")
+    results = AsyncMock(return_value=[_rec("S", None, "D", "Colfax", "Gordon Colfax")])
+    certified = AsyncMock(return_value=[_rec("S", None, "D", "Penrose", "Reid D. Penrose")])
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", results)
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", certified)
+    _race(db_session, "2026-SEN-ME", "ME")
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "COLFAX, WHITFIELD", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "PENROSE, TROY", "DEM")
+    db_session.commit()
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    certified.return_value = tonight
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags == {"S6ME1": False, "S6ME2": True}
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
+
+
 # --- Florida's candidate list ---
 
 from app.pipeline.fetch.state_candidates_dos_canlist import parse_canlist  # noqa: E402
@@ -1280,3 +1305,52 @@ async def test_a_basis_rewritten_before_the_hold_is_restored_from_the_state_offi
     assert marker["complete"] is True and marker["sourceName"] == listed
     assert marker["checkedAt"] == "2026-10-28T18:50:50Z"
     assert db_session.query(Candidate).one().confirmed_general is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tonight", [None, []], ids=["down", "nothing"])
+async def test_a_vip_ballot_that_cannot_answer_keeps_what_it_certified(db_session, civic_first, monkeypatch, tonight):
+    """Pennsylvania's own source is primary results. A night the VIP ballot
+    is down must not hand its races to them: the independent it listed
+    stays on the ballot, and the race stays certified by it."""
+    from app.api.elections import _ballot_marker
+    _race(db_session, "2026-HOUSE-PA-1", "PA", office="H", district=1)
+    _db_cand(db_session, "H6PA01001", "2026-HOUSE-PA-1", "FITZPATRICK, BRIAN", "REP")
+    db_session.commit()
+    civic_first("PA", [_rec("H", 1, "R", "Fitzpatrick", "Brian Fitzpatrick"),
+                       _rec("H", 1, "I", "Quill", "Dana Quill")],
+                [_rec("H", 1, "R", "Fitzpatrick", "Brian Fitzpatrick")])
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    before = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert any(cid.startswith(sc.BALLOT_ONLY_ID_PREFIX) and ok for cid, ok in before.items())
+
+    monkeypatch.setitem(sc.STRATEGIES, "google_civic", AsyncMock(return_value=tonight))
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert {c.id: c.confirmed_general for c in db_session.query(Candidate)} == before
+    assert _ballot_marker(db_session, "PA", 2026)["raceSources"]["2026-HOUSE-PA-1"] == sc.CIVIC_SOURCE_NAME
+
+
+@pytest.mark.asyncio
+async def test_state_offices_the_vip_ballot_certified_stay_when_it_cannot_answer(db_session, civic_first, monkeypatch):
+    """Minnesota's own source is primary results: a night the VIP ballot is
+    down, they never replace the offices it certified (its independents)."""
+    _race(db_session, "2026-SEN-MN", "MN")
+    db_session.commit()
+    civic_first("MN", _civic_state([
+        {"office": "governor", "district": None, "party": "D", "last_name": "A Ticket"},
+        {"office": "governor", "district": None, "party": "I", "last_name": "An Independent"},
+        {"office": "lower", "district": "1A", "party": "D", "last_name": "A Member"},
+    ]), [])
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    before = sorted(r.display_name for r in db_session.query(StatewideNominee))
+    assert before == ["A Ticket", "An Independent"]
+
+    monkeypatch.setitem(sc.STRATEGIES, "google_civic", AsyncMock(return_value=None))
+    monkeypatch.setitem(sc.STRATEGIES, sc.source_for_state("MN")["strategy"], AsyncMock(return_value=[
+        _rec("S", None, "D", "Smith", "Tina Smith"),
+        {"office": "governor", "district": None, "party": "D", "last_name": "A Ticket"},
+    ]))
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert sorted(r.display_name for r in db_session.query(StatewideNominee)) == before

@@ -448,7 +448,7 @@ async def test_link_check_asks_again_after_no_answer_but_never_after_an_answer()
     error_then_ok = _Flaky((502, {}), (200, {}))
     assert await ballot_lookup._check_url(error_then_ok, url) == ballot_lookup.VERIFIED
     always_down = _Flaky(httpx.ConnectError("down"), (503, {}))
-    assert await ballot_lookup._check_url(always_down, url) == ballot_lookup.DEAD
+    assert await ballot_lookup._check_url(always_down, url) == ballot_lookup.UNANSWERED
     for answer, result in (((404, {}), ballot_lookup.DEAD), ((403, {}), ballot_lookup.BLOCKED),
                            ((503, {"cf-mitigated": "challenge"}), ballot_lookup.BLOCKED)):
         client = _Flaky(answer, (200, {}))
@@ -475,6 +475,30 @@ async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch,
     shown = ballot_lookup.lookup_for_state("GA")
     assert shown["isStateSpecific"] is False
     assert shown["url"] == "https://nat.example"
+
+
+@pytest.mark.asyncio
+async def test_a_site_that_gives_no_answer_keeps_its_link_for_the_grace(monkeypatch, tmp_path, freeze_utcnow):
+    """An outage is not the page going away: a verified link whose site
+    answers nothing keeps its last check, until a week of no answer."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"GA": {"url": "https://ga.example/lookup", "verified_at": None}},
+        volume_states={"GA": {"url": "https://ga.example/lookup", "verified_at": "2026-10-20T00:00:00"}},
+    )
+
+    class Down:
+        async def get(self, url, **kwargs):
+            raise httpx.ConnectTimeout("no answer")
+
+    freeze_utcnow(datetime(2026, 10, 21, 3))
+    assert (await ballot_lookup.refresh_link_verification(Down()))["unanswered"] == 1
+    assert _stored(volume, "GA")["verified_at"] == "2026-10-20T00:00:00"
+    assert ballot_lookup.lookup_for_state("GA")["isStateSpecific"] is True
+
+    freeze_utcnow(datetime(2026, 10, 28, 4))
+    assert (await ballot_lookup.refresh_link_verification(Down()))["failed"] == 1
+    assert _stored(volume, "GA")["verified_at"] is None
 
 
 @pytest.mark.asyncio

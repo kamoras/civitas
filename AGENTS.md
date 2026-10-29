@@ -1173,7 +1173,12 @@ Corollaries that follow from the same rule, all enforced in code:
   registry entry naming such a host (`terms`) is not read, its stored
   measures stand and its page says why (`termsBlock`), or with
   `"archive": true` is read from the Internet Archive's capture; a certified
-  candidate list on one is held (`state_candidates._held_races`).
+  candidate list on one is held (`state_candidates._held_races`), and so
+  is any certified list that answered once and can't answer tonight
+  (walled, down, or taken off its site, 2026-10-29): the races it
+  certified keep that read, the VIP ballot still speaks first for the
+  races it names, and primary results answer only for the rest, never
+  re-confirming a nominee the list replaced.
   **Google Civic (VIP) first** (owner decision, 2026-10-28): the candidate
   sync reads each state's VIP ballot before its own sources
   (`state_candidates_civic.py`, at points inside every district,

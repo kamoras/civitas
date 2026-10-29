@@ -673,3 +673,35 @@ def test_a_state_source_that_answers_without_the_passage_never_falls_back(genera
                           now=_NOW)
     assert out["states"]["NY"]["items"] == [] and out["states"]["NY"]["unread"] is True
     assert out["states"]["NY"]["unconfirmed"][0]["source"]["url"] == "https://law.example.gov/5-210"
+
+
+def test_a_register_page_whose_site_gives_no_answer_keeps_its_last_check(generator):
+    """A dropped connection or a server error says nothing about the page:
+    the register link the calendar in use checked stays, never vote.gov in
+    its place; a 404 is the state's answer and drops it."""
+    item = _reg("https://sos.example.gov/a", "at least 8 days before")
+    reg_url = "https://olvr.sos.example.gov/"
+    in_use = _in_use("WA", generator.resolve(item, date(2026, 11, 3), "WA[0]"))
+    in_use["states"]["WA"]["register"] = {"url": reg_url, "status": "verified", "checkedOn": "2026-10-17"}
+    sources = _sources({"WA": {"timeZone": "America/Los_Angeles", "items": [item], "register": {"url": reg_url}}})
+    page = (200, "<p>Register at least 8 days before.</p>")
+    down = generator.build(sources, _Redirecting({"https://sos.example.gov/a": page, reg_url: (503, "busy")}),
+                           None, in_use=in_use, now=_NOW)
+    assert down["states"]["WA"]["register"]["checkedOn"] == "2026-10-17"
+    assert down["states"]["WA"]["register"]["recheck"]["result"].endswith("HTTP 503")
+    gone = generator.build(sources, _Redirecting({"https://sos.example.gov/a": page, reg_url: (404, "")}),
+                           None, in_use=in_use, now=_NOW)
+    assert "register" not in gone["states"]["WA"]
+
+
+def test_a_state_verified_deadline_is_not_traded_for_a_county_copy(generator):
+    item = {**_reg("https://sos.example.gov/a", "at least 8 days before"),
+            "republished": {"publisher": "Example County", "url": "https://county.example.gov/c",
+                            "quote": "at least 8 days before"}}
+    in_use = _in_use("WA", generator.resolve(item, date(2026, 11, 3), "WA[0]"))
+    out = generator.build(_sources({"WA": {"timeZone": "America/Los_Angeles", "items": [item]}}), _Redirecting({
+        "https://sos.example.gov/a": (403, "<title>Just a moment...</title>", None, {"cf-mitigated": "challenge"}),
+        "https://county.example.gov/c": (200, "<p>Register at least 8 days before.</p>")}), None,
+        in_use=in_use, now=_NOW)
+    [kept] = out["states"]["WA"]["items"]
+    assert kept["verification"]["status"] == "verified" and kept["verification"]["recheck"]
