@@ -1146,28 +1146,25 @@ Corollaries that follow from the same rule, all enforced in code:
   a new fetch module is listed by its URL constants and its RateLimiter,
   and a new scheduled job that reads from outside takes its trigger from
   `crawler.SCHEDULE`.
-  **A host whose terms of use forbid automated access is never asked**
-  (owner decision, 2026-10-28): `app/data/host_terms.json` quotes each
-  host's terms, and `crawl_policy` refuses every request to it before it is
-  sent (`TermsForbid`), from the readers, the link check (shown unconfirmed),
+  **Notice and stop** (owner policy, 2026-10-29). Public election records
+  are read openly from every site, identified, signed and paced, whatever a
+  site's terms boilerplate says; Civitas stops when a site technically
+  blocks it (the refusal backoff above, §7's walls) or its owner tells
+  Civitas directly not to read it. Those hosts are `app/data/host_terms.json`
+  (each entry: who asked and when, `asked`, and the site's terms quoted),
+  and `crawl_policy` refuses every request to them before it is sent
+  (`TermsForbid`), from the readers, the link check (shown unconfirmed),
   the weekly crawl (`state_source_crawler.election_domains`) and the data
   refresh's scripts, which run under `app/script_gate.py` so plain httpx,
-  requests and urllib calls keep the crawler's manners too. Each entry's
-  terms are re-read weekly from the Internet Archive's copy
-  (`app/host_terms_check.py`), and a change alerts (`host-terms-*`) while the
-  host stays unasked. A host is listed only where its terms explicitly
-  forbid automated access to it (owner rule; vetted 2026-10-28 from the
-  Internet Archive's copies: Michigan, Hawaii, Colorado's Secretary of State,
-  www.sos.mn.gov, Nebraska's Secretary of State and portal, SC.GOV); an entry
-  with `"subdomains": false` covers its own name only, for terms that name
-  exact sites. Its data is read where the state shares it (Michigan's and
-  Minnesota's from the Voting Information Project); a measures registry
-  entry naming such a host (`terms`) is not read, its stored measures stand,
-  and its page says why (`termsBlock`); with `"archive": true` (owner's
-  go-ahead per state: Hawaii, whose terms restrict only access and
-  commercial use) its document is read from the Internet Archive's capture
-  instead, under §7's archive rules. Not Colorado or Nebraska, whose terms
-  reach the information itself (data mining of it; republishing it).
+  requests and urllib calls keep the crawler's manners too. Their terms are
+  re-read weekly from the Internet Archive's copy
+  (`app/host_terms_check.py`, alert `host-terms-*`). Today: Michigan's
+  Department of State, which refused a written request and pointed to the
+  Voting Information Project, whose data is read instead. A measures
+  registry entry naming such a host (`terms`) is not read, its stored
+  measures stand and its page says why (`termsBlock`), or with
+  `"archive": true` is read from the Internet Archive's capture; a certified
+  candidate list on one is held (`state_candidates._held_races`).
   **Google Civic (VIP) first** (owner decision, 2026-10-28): the candidate
   sync reads each state's VIP ballot before its own sources
   (`state_candidates_civic.py`, at points inside every district,

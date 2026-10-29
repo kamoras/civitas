@@ -1,6 +1,7 @@
-"""Hosts whose own terms of use forbid automated access
-(app/data/host_terms.json): crawl_policy never asks them, /about/crawler
-lists them and the source map says why."""
+"""Hosts whose owner asked Civitas not to read them automatically
+(app/data/host_terms.json; notice and stop, owner policy 2026-10-29):
+crawl_policy never asks them, /about/crawler lists them and the source map
+says why."""
 
 import json
 import os

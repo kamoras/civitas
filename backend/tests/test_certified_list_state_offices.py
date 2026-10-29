@@ -309,10 +309,6 @@ def colorado(db_session, monkeypatch):
     # offices itself, and so does its certified general_list.
     assert _SOURCES["CO"].get("statewide_offices") and _general("CO").get("statewide_offices")
     _state_fixture(db_session, monkeypatch, "CO", "2026-HOU-CO-08", 8)
-    # About the list's own logic: the Secretary of State's terms of use
-    # (host_terms.json, which holds the list since 2026-10-28) are set aside.
-    from app import host_terms
-    monkeypatch.setattr(host_terms, "forbid", lambda host: None)
     return db_session
 
 

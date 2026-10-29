@@ -33,7 +33,7 @@ def test_every_entry_quotes_its_terms_and_says_when_they_were_read():
 def test_the_gate_refuses_before_anything_is_sent():
     with pytest.raises(crawl_policy.TermsForbid) as refused:
         crawl_policy._check("www.michigan.gov")
-    assert isinstance(refused.value, crawl_policy.HostRefusing) and "terms of use" in str(refused.value)
+    assert isinstance(refused.value, crawl_policy.HostRefusing) and "asked Civitas not to" in str(refused.value)
 
 
 @pytest.fixture()
@@ -78,11 +78,12 @@ async def test_a_link_on_a_host_that_refuses_checks_is_shown_unconfirmed_never_h
     assert await ballot_lookup._check_once(Client(), "https://mvic.sos.state.mi.us/") == ballot_lookup.BLOCKED
 
 
-def test_the_weekly_crawl_leaves_out_a_state_s_terms_hosts():
+def test_the_weekly_crawl_leaves_out_a_refused_state_s_hosts(monkeypatch):
     assert state_source_crawler.election_domains("MI") == []
     assert state_source_crawler._hosts_for("MI") == []
-    # Minnesota's terms name only some of its hosts: the rest are still probed.
     assert state_source_crawler.election_domains("MN") == ["sos.mn.gov"]
+    # An entry naming exact hosts leaves the rest of the domain to be probed.
+    monkeypatch.setattr(host_terms, "all_hosts", lambda: {"sos.mn.gov": {"subdomains": False}})
     probed = set(state_source_crawler._hosts_for("MN"))
     assert probed.isdisjoint({"sos.mn.gov"}) and probed >= {"results.sos.mn.gov"}
 
@@ -100,9 +101,9 @@ def test_the_source_map_says_terms_not_failure(db_session, monkeypatch):
     source_reads.answered("mi-boe.entellitrak.com", 200, False)  # an old good read
     body = source_health.build(db_session)
     entry = body["sources"][0]
-    assert entry["state"] == "terms" and entry["stateLabel"] == "Not read: its terms forbid it"
-    assert entry["line"].startswith("Not read automatically since Oct 28, 2026: its terms of use forbid")
-    assert "not read automatically because its terms of use forbid it" in body["summary"]
+    assert entry["state"] == "terms" and entry["stateLabel"] == "Not read: asked us not to"
+    assert entry["line"].startswith("Not read automatically since Oct 28, 2026: its owner asked Civitas not to")
+    assert "not read automatically because its owner asked us not to" in body["summary"]
 
 
 # ---- the weekly check of the terms themselves ----------------------------
@@ -157,31 +158,31 @@ async def test_a_changed_page_alerts_and_the_host_stays_unasked(db_session, monk
 
 
 
-def test_an_exact_entry_covers_its_own_name_only():
-    # Minnesota's terms name www.sos.mn.gov and mblsportal.sos.mn.gov; its
-    # results files and voter tools are other hosts.
-    assert host_terms.forbid("www.sos.mn.gov") and host_terms.forbid("sos.mn.gov")
-    assert host_terms.forbid("electionresultsfiles.sos.mn.gov") is None
-    # Nebraska's portal policies are adopted by the Secretary of State's site.
-    assert host_terms.forbid("sos.nebraska.gov") and host_terms.forbid("www.nebraska.gov")
-    assert host_terms.forbid("electionresults.nebraska.gov") is None
-    # Hawaii's terms define the site as any address containing hawaii.gov.
-    assert host_terms.forbid("elections.hawaii.gov") and host_terms.forbid("olvr.hawaii.gov")
-    # SC.GOV's terms govern SC.GOV, not the Election Commission's sites.
-    assert host_terms.forbid("vrems.scvotes.sc.gov") is None and host_terms.forbid("scvotes.gov") is None
+def test_only_a_site_that_asked_us_to_stop_is_listed():
+    """Notice and stop (owner policy, 2026-10-29): boilerplate terms alone
+    don't list a site; Michigan, which refused Civitas directly, is."""
+    assert set(host_terms.all_hosts()) == {"michigan.gov", "mvic.sos.state.mi.us", "mi-boe.entellitrak.com"}
+    assert all(e["asked"] for e in host_terms.all_hosts().values())
+    for host in ("elections.hawaii.gov", "www.coloradosos.gov", "www.sos.mn.gov", "sos.nebraska.gov", "sc.gov"):
+        assert host_terms.forbid(host) is None, host
 
 
-def test_every_measure_registry_terms_entry_names_a_forbidden_host():
+def test_an_exact_entry_covers_its_own_name_only(monkeypatch):
+    monkeypatch.setattr(host_terms, "all_hosts", lambda: {"sos.example.gov": {"subdomains": False}})
+    assert host_terms.forbid("sos.example.gov") and host_terms.forbid("results.sos.example.gov") is None
+
+
+def _refuse(monkeypatch, state, host):
+    """A measures registry entry naming a refused host (`terms`)."""
     from app.pipeline.fetch import ballot_measure_pdf_sources as registry
-    named = {s: e["terms"]["host"] for s, e in (registry._load().get("states") or {}).items() if e.get("terms")}
-    assert named == {"HI": "elections.hawaii.gov", "NE": "sos.nebraska.gov"}
-    assert all(registry.terms_block(s) for s in named)
-    # Hawaii's is read from the Internet Archive's copy, with the owner's go-ahead.
-    assert registry.terms_block("HI")["archive"] and not registry.terms_block("NE")["archive"]
+    entry = {**registry.source_for_state(state), "terms": {"host": host}}
+    monkeypatch.setattr(registry, "source_for_state", lambda s, _real=registry.source_for_state: entry if s == state else _real(s))
+    monkeypatch.setattr(host_terms, "all_hosts", lambda: {host: {"publisher": "Example", "terms_url": "https://example.gov/t"}})
 
 
 @pytest.mark.asyncio
 async def test_a_terms_blocked_state_s_reader_is_never_called_and_its_measures_stand(db_session, monkeypatch):
+    _refuse(monkeypatch, "NE", "sos.nebraska.gov")
     from app.models import MeasureCoverage
     from app.pipeline import election_pipeline as ep
 
@@ -195,4 +196,4 @@ async def test_a_terms_blocked_state_s_reader_is_never_called_and_its_measures_s
     await ep._sync_pdf_measures(db_session, None, "2026-11-03", states=["NE"])
     row = db_session.query(MeasureCoverage).filter_by(state="NE").one()
     assert row.status == MeasureCoverage.COVERED and row.measure_count == 2
-    assert "terms of use forbid automated access" in row.error_detail
+    assert "asked Civitas not to read it automatically" in row.error_detail

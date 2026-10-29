@@ -1217,15 +1217,18 @@ async def test_civic_never_takes_state_offices_missing_one_already_on_file(db_se
 
 
 @pytest.mark.asyncio
-async def test_a_certified_list_refused_by_its_terms_is_held_not_downgraded(db_session, only):
-    """Colorado's certified general list is on www.sos.state.co.us, whose
-    terms forbid automated access; its Clarity primary results still answer.
+async def test_a_certified_list_refused_by_its_terms_is_held_not_downgraded(db_session, only, monkeypatch):
+    """A certified general list on a host that asked Civitas to stop (here
+    Colorado's, for the test); its Clarity primary results still answer.
     The races the list last certified keep that read (an independent it
     listed stays, the basis stays the certified list's), never rewritten
     from primary results."""
     from app.api.elections import _ballot_marker
     from app.pipeline.cache import api_cache_set
     from app.pipeline.fetch.state_candidates_common import BALLOT_BASIS_TIER, ballot_basis_key
+    # A list on a host that asked us to stop (host_terms.json).
+    from app import host_terms
+    monkeypatch.setattr(host_terms, "all_hosts", lambda: {"www.sos.state.co.us": {"publisher": "x"}})
     _race(db_session, "2026-SEN-CO", "CO")
     _db_cand(db_session, "S6CO00001", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM", confirmed_general=True)
     _db_cand(db_session, "ballot:2026-SEN-CO:indie", "2026-SEN-CO", "INDIE, PAT", "UNAFFILIATED", confirmed_general=True)
@@ -1246,7 +1249,7 @@ async def test_a_certified_list_refused_by_its_terms_is_held_not_downgraded(db_s
 
 
 @pytest.mark.asyncio
-async def test_a_basis_rewritten_before_the_hold_is_restored_from_the_state_office_record(db_session, only):
+async def test_a_basis_rewritten_before_the_hold_is_restored_from_the_state_office_record(db_session, only, monkeypatch):
     """Colorado's basis was rewritten from primary results between two
     deploys (2026-10-29), but its state-office record still names the
     certified list: the list's races are held again and its basis restored,
@@ -1256,6 +1259,9 @@ async def test_a_basis_rewritten_before_the_hold_is_restored_from_the_state_offi
     from app.pipeline.fetch.state_candidates_common import (
         BALLOT_BASIS_TIER, STATEWIDE_MARKER_TIER, ballot_basis_key, statewide_marker_key,
     )
+    # A list on a host that asked us to stop (host_terms.json).
+    from app import host_terms
+    monkeypatch.setattr(host_terms, "all_hosts", lambda: {"www.sos.state.co.us": {"publisher": "x"}})
     _race(db_session, "2026-SEN-CO", "CO")
     _db_cand(db_session, "ballot:2026-SEN-CO:indie", "2026-SEN-CO", "INDIE, PAT", "UNAFFILIATED", confirmed_general=True)
     listed = sc.source_for_state("CO")["general_list"]["source_name"]
