@@ -138,7 +138,11 @@ async def test_requests_fetches_name_civitas(monkeypatch):
 # Calls that send a request without Civitas's User-Agent, each for a reason:
 # (file, call). Ollama's API is an in-stack service on this machine, never a
 # source, and its module is fingerprinted (AGENTS.md §2); FTP has no headers.
+# The archived measures read's client has web_archive.ArchiveTransport for its
+# transport: it sends nothing itself, answering from captures it reads
+# through the governed client.
 _NO_USER_AGENT = {
+    ("app/pipeline/fetch/ballot_measures_pdf.py", "httpx.AsyncClient"),
     ("app/pipeline/analyze/ollama_client.py", "urllib.request.Request"),
     ("app/pipeline/fetch/state_candidates_canvass_xml.py", "urlopen"),
 }
