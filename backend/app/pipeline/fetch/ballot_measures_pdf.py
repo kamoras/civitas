@@ -467,8 +467,8 @@ def _stored_measures(db, state: str, election_date: str) -> list:
 
 
 def _agrees_with_stored(state: str, pairs: list[tuple[dict, str]], stored: list) -> bool:
-    """Whether an archived answer quotes exactly the measures already
-    stored for this election. Nothing stored: nothing to disagree with (the
+    """Whether an archived or republished answer quotes exactly the
+    measures already stored for this election. Nothing stored: nothing to disagree with (the
     reader's own checks stand alone). A capture that differs is refused:
     it may be older than the read on file, and a change of wording has to
     come from a copy that can be dated after it."""
@@ -619,6 +619,11 @@ async def fetch_state_measures_pdf(
             raise
         except SourceBlocked as blocked:
             pairs = await _from_republished_copy(client, state, source, strategy_key, year, blocked)
+            # A county's copy is the state's document only when it quotes
+            # what is stored from the state's own read word for word: a copy
+            # posted before a correction must not replace the corrected text.
+            if pairs is not None and not _agrees_with_stored(state, pairs, _stored_measures(db, state, election_date)):
+                pairs = None
             if pairs is None:
                 pairs = await _from_archive(client, db, state, strategy_key, year, election_date)
         except Exception:

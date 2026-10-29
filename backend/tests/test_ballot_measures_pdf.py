@@ -695,6 +695,22 @@ async def test_a_blocked_state_is_read_from_the_county_copy_and_says_so(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_a_county_copy_that_differs_from_the_stored_text_is_refused(monkeypatch, db_session):
+    """A county's copy posted before the state corrected its text must not
+    replace the corrected text read from the state's own host."""
+    from app.models import BallotMeasure
+
+    async def county_reader(client, year, page_url):
+        return [(dict(_PARSED), "https://county.example.gov/2026-booklet.pdf")]
+
+    db_session.add(BallotMeasure(id="ZZ-2026-11-03-6", state="ZZ", election_date="2026-11-03", number="6",
+                                 title="T", official_summary="the corrected text", status="active"))
+    db_session.commit()
+    _blocked_state(monkeypatch, county_reader, republished_by=[_COUNTY])
+    assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") is None
+
+
+@pytest.mark.asyncio
 async def test_a_state_page_that_was_read_and_refused_never_falls_back(monkeypatch, db_session):
     """Only a page the reader couldn't see may fall back: one it read and
     refused (two booklets, a referendum document beside the amendments)

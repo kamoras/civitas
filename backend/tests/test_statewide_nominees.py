@@ -124,6 +124,15 @@ class TestPersistence:
         assert [r["office"] for r in races] == ["governor"]
         assert [n["name"] for n in races[0]["nominees"]] == ["Helena Buonanno Foulkes"]
 
+    def test_a_read_naming_too_few_offices_keeps_the_rest(self, db_session):
+        """A page that failed for most of a state's offices is a partial
+        read: the offices it left out keep their nominees (PARTIAL_READ_SHARE),
+        and a read naming none is never a confirmed none."""
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D, GOVERNOR_R, TREASURER_D])
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
+        races, _ = _statewide_section(db_session, "RI", CYCLE)
+        assert sorted(r["office"] for r in races) == ["governor", "treasurer"]
+
     def test_another_states_rows_are_untouched(self, db_session):
         _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D])
         _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [])
@@ -185,6 +194,12 @@ class TestStateLegislativePersistence:
         _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [UPPER_5_D])
         rows = db_session.query(StateLegNominee).all()
         assert [(r.chamber, r.district) for r in rows] == [("upper", "5")]
+
+    def test_a_read_naming_too_few_districts_keeps_the_rest(self, db_session):
+        districts = [{"office": "lower", "district": str(n), "party": "D", "last_name": f"Member {n}"} for n in range(1, 5)]
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, districts)
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, districts[:1])
+        assert db_session.query(StateLegNominee).count() == 4
 
     def test_a_state_that_has_not_opted_in_stores_nothing(self, db_session):
         stored = _sync_state_leg_nominees(

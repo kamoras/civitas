@@ -1403,6 +1403,21 @@ def statewide_none_basis(source: dict, state: str, cycle: int) -> str | None:
     return None if basis is None or on_november_ballot(state, "statewide_executive", cycle) else basis
 
 
+# A read naming fewer than this share of the offices (or legislative
+# districts) already on file for a state is a partial read: the ones it
+# left out keep their stored nominees. The same convention as the ballot
+# measures' MEASURE_SHRINK_FLOOR (election_pipeline): withdrawals and
+# replacements are real, but they do not look like "twelve offices became
+# one" overnight.
+PARTIAL_READ_SHARE = 0.5
+
+
+def _partial_read(read: set, on_file: set) -> bool:
+    """Whether a read naming `read` covers too little of `on_file` to be
+    taken for the whole ballot (PARTIAL_READ_SHARE)."""
+    return bool(on_file) and len(read & on_file) < PARTIAL_READ_SHARE * len(on_file)
+
+
 def _sync_statewide_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
     *, ballot_list: bool = False,
@@ -1424,7 +1439,12 @@ def _sync_statewide_nominees(
     Rows absent from this run are DELETED rather than left behind: a
     nominee who withdraws, or one resolved from an amended re-post,
     must not linger as a confirmed name. The feed is the whole truth for
-    (state, cycle) every time it is read.
+    every office it names each time it is read, and for the offices it
+    leaves out, unless it names fewer than PARTIAL_READ_SHARE of the
+    offices on file (_partial_read): a read that loses most of a state's
+    offices overnight is a page that failed, not a ballot that changed,
+    and those offices keep their stored nominees. One office leaving (its
+    only nominee withdrew) is still the feed's truth.
     """
     if not source.get("statewide_offices"):
         return 0
@@ -1472,13 +1492,22 @@ def _sync_statewide_nominees(
         row.updated_at = utcnow()
         keep.add((office, district, party, name))
 
-    for row in (
+    offices_read = {office for office, _, _, _ in keep}
+    stored = (
         db.query(StatewideNominee)
         .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
         .all()
-    ):
-        if (row.office, row.district, row.party, row.display_name) not in keep:
+    )
+    partial = _partial_read(offices_read, {row.office for row in stored})
+    kept_unread = 0
+    for row in stored:
+        if partial and row.office not in offices_read:
+            kept_unread += 1
+        elif (row.office, row.district, row.party, row.display_name) not in keep:
             db.delete(row)
+    if kept_unread:
+        logger.warning("%s: %s did not name every stored statewide office tonight; kept %d stored nominee(s)",
+                       state, source.get("source_name"), kept_unread)
 
     api_cache_set(
         db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
@@ -1488,7 +1517,7 @@ def _sync_statewide_nominees(
             # elections._iso_utc exists to prevent for every other
             # timestamp this API returns.
             "checkedAt": utcnow().isoformat() + "Z",
-            "count": len(keep),
+            "count": len(keep) + kept_unread,
             "sourceName": str(source.get("source_name") or ""),
             # Set only for a state whose adapter reads no executive
             # contests at all, because the state elects none this cycle
@@ -1577,14 +1606,21 @@ def _sync_state_leg_nominees(
         row.updated_at = utcnow()
         keep.add((chamber, district, seat, party, name))
 
-    for row in (
+    districts_read = {(chamber, district) for chamber, district, _, _, _ in keep}
+    stored = (
         db.query(StateLegNominee)
         .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
         .all()
-    ):
-        if (row.chamber, row.district) in leave:
+    )
+    partial = _partial_read(districts_read, {(row.chamber, row.district) for row in stored} - set(leave))
+    if partial:
+        logger.warning("%s: %s named %d of the %d legislative districts on file tonight; the rest keep their nominees",
+                       state, source.get("source_name"), len(districts_read), len({(r.chamber, r.district) for r in stored}))
+    for row in stored:
+        if (row.chamber, row.district) in leave or (partial and (row.chamber, row.district) not in districts_read):
             # A district this source did not read tonight (the VIP ballot's
-            # unread_districts): its stored nominees stand, as their source
+            # unread_districts), or left out of a partial read
+            # (_partial_read): its stored nominees stand, as their source
             # left them.
             continue
         if (row.chamber, row.district, row.seat, row.party,
@@ -1656,12 +1692,20 @@ def _sync_judicial_nominees(
         row.updated_at = utcnow()
         keep.add((court, district, seat, party, name))
 
-    for row in (
+    stored = (
         db.query(JudicialNominee)
         .filter(JudicialNominee.state == state, JudicialNominee.cycle_year == cycle)
         .all()
-    ):
-        if (row.court, row.district, row.seat, row.party,
+    )
+    seats_read = {(court, district, seat) for court, district, seat, _, _ in keep}
+    # A read naming too few of the seats on file is a partial read: the
+    # seats it left out keep their nominees (_partial_read).
+    partial = _partial_read(seats_read, {(r.court, r.district, r.seat) for r in stored})
+    kept_unread = 0
+    for row in stored:
+        if partial and (row.court, row.district, row.seat) not in seats_read:
+            kept_unread += 1
+        elif (row.court, row.district, row.seat, row.party,
                 row.display_name) not in keep:
             db.delete(row)
 
@@ -1676,7 +1720,7 @@ def _sync_judicial_nominees(
         db, JUDICIAL_MARKER_TIER, judicial_marker_key(state, cycle),
         {
             "checkedAt": utcnow().isoformat() + "Z",
-            "count": len(keep),
+            "count": len(keep) + kept_unread,
             "sourceName": str(source.get("source_name") or ""),
             # See the statewide marker's field of the same name.
             "ballotList": ballot_list,
@@ -1711,7 +1755,7 @@ def _refused_by_terms(entry: dict | None) -> bool:
     return any(host_terms.forbid(h) for h in re.findall(r"https?://([A-Za-z0-9.-]+)", text))
 
 
-def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[str]:
+def _held_races(db: Session, cycle: int, state: str, entry: dict | None, *, restore_basis: bool = True) -> set[str]:
     """The races a certified list that can't answer tonight last certified
     (refused by its terms, walled, down, or taken off its site): every race
     here when the ballot-basis marker says that list answered for the whole
@@ -1728,7 +1772,7 @@ def _held_races(db: Session, cycle: int, state: str, entry: dict | None) -> set[
     if marker.get("sourceName") == name:
         return races_here if marker.get("complete") else set(marker.get("races") or ())
     credited = {rid for rid, src in (marker.get("raceSources") or {}).items() if src == name}
-    if credited:
+    if credited or not restore_basis:
         return credited & races_here
     # The basis was rewritten by a weaker source before the hold existed
     # (Colorado and Nebraska, 2026-10-29 00:51 and 01:29 UTC, between two
@@ -1833,6 +1877,14 @@ def _state_office_source(
     return source, records, main_answered
 
 
+def _statewide_source_is(db: Session, cycle: int, state: str, entry: dict) -> bool:
+    """Whether the stored state-office marker names `entry` as the source
+    that last answered for this state's statewide offices."""
+    marker = api_cache_get(db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+                           max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {}
+    return bool(entry.get("source_name")) and marker.get("sourceName") == entry.get("source_name")
+
+
 def _judicial_source(
     db: Session, cycle: int, state: str,
     source: dict, records: list[dict], main_answered: bool,
@@ -1933,6 +1985,13 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         civic_records = await _fetch(client, cycle, state, civic, "Google Civic") if civic else None
         if not civic_records:
             civic_records = None
+        # A VIP ballot that answered before and can't tonight (down, or
+        # answering nothing) still certified the races it named: they keep
+        # that read, as a certified list's do (_held_races), never handed to
+        # primary results that would prune its independents. Decided per
+        # race, so its marker is never restored as the whole ballot.
+        civic_held = (_held_races(db, cycle, state, civic, restore_basis=False)
+                      if civic and civic_records is None else set())
 
         # A state's certified November list, when it has one, speaks for its
         # federal races outright (see general_list in the sources file). It
@@ -1947,7 +2006,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # access is held, not failed: the races its last read certified keep
         # that read (their nominees, their basis), and weaker sources answer
         # only for the races it never covered (_held_races).
-        held = _held_races(db, cycle, state, general) if _refused_by_terms(general) else set()
+        held = (_held_races(db, cycle, state, general) if _refused_by_terms(general) else set()) | civic_held
         if general and not _refused_by_terms(general):
             general_records = await _fetch(client, cycle, state, general, "Certified general list")
             spare_list = general.get("fallback")
@@ -1978,7 +2037,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 # refused by its terms does, and weaker sources answer only
                 # for the races it never covered. A list never read this
                 # cycle holds nothing.
-                held = _held_races(db, cycle, state, general)
+                held = _held_races(db, cycle, state, general) | civic_held
 
         records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
@@ -2048,9 +2107,17 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         if civic_records is not None and _civic_speaks_for_state_offices(db, cycle, state, configured, civic_records):
             state_source, state_records, state_answered = civic, civic_records, True
         else:
+            # A spare answering for the list (ballot_source) is not the list:
+            # its rows never stand in for the list's state offices.
+            list_records = general_records if ballot_source is general else None
             state_source, state_records, state_answered = _state_office_source(
-                db, cycle, state, source, records, main_state_answered, general, general_records,
+                db, cycle, state, source, records, main_state_answered, general, list_records,
             )
+            if state_source is source and civic and _statewide_source_is(db, cycle, state, civic):
+                # The VIP ballot certified these offices before and can't
+                # tonight (or read them only in part): primary results
+                # replacing them would delete its independents.
+                state_source, state_records, state_answered = civic, [], False
         statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
         if configured.get("joint_governor_ticket"):
             # One vote for governor and lieutenant governor together: the
@@ -2075,7 +2142,8 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 leave=getattr(state_records, "unread_districts", frozenset()),
             )
         judicial_source, judicial_records, judicial_answered = _judicial_source(
-            db, cycle, state, source, judicial, main_state_answered, general, general_records,
+            db, cycle, state, source, judicial, main_state_answered, general,
+            general_records if ballot_source is general else None,
         )
         if judicial_answered:
             judicial_count = _sync_judicial_nominees(
@@ -2125,7 +2193,12 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             # A held list's races keep its last read, after the VIP ballot
             # (which speaks first for every race it names tonight).
             kept = (held & races_here) - covered
-            race_sources.update({rid: str(general.get("source_name") or "") for rid in kept})
+            last_basis = (api_cache_get(db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+                                        max_age_hours=STATEWIDE_MARKER_TTL_HOURS) or {})
+            last_sources = last_basis.get("raceSources") or {}
+            race_sources.update({
+                rid: last_sources.get(rid) or str((general or civic or {}).get("source_name") or "") for rid in kept
+            })
             covered |= kept
             rest = [r for r in records if _race_id_for(db, cycle, state, r["office"], r["district"]) not in covered]
             if rest:
@@ -2255,8 +2328,13 @@ async def _sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: in
             # The list speaks for November but names nobody for it yet (a
             # primary-season list): until it does, the ballot is not known
             # whole, whatever the state's entry claims for later — and
-            # nothing else records a basis for this state.
-            _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
+            # nothing else records a basis for this state. Once a night has
+            # read its November rows, a list naming none is a page that
+            # changed or failed, not the ballot going away: that basis is
+            # left alone, as for a failed fetch above.
+            if api_cache_get(db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+                             max_age_hours=STATEWIDE_MARKER_TTL_HOURS) is None:
+                _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
         elif found["general"] and not _filings_speak_for_november(state):
             logger.info(
                 "%s: %d general row(s) on a crawler-found filing list not applied — "
