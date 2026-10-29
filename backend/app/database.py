@@ -1132,7 +1132,7 @@ RESET_KEEPS = frozenset({
     # posting modules check before publishing again (broadcast.py). Wiped,
     # every feed would empty, and the Congress days and races posted in
     # the last few days would be posted a second time.
-    "broadcast_posts",
+    "broadcast_posts", "broadcast_deliveries",
     # The trend posts' audit (what was eligible, posted and why, and the
     # parties involved) and the trend observations their lifetimes come
     # from: history a re-ingest can't rebuild, since the trends are gone.

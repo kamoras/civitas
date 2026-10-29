@@ -183,6 +183,14 @@ class Settings(BaseSettings):
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
+    # Threads and Instagram (app/social/): each is on only when both its user
+    # id and its long-lived access token are set. The token is the one the
+    # owner generates once (docs/social-accounts.md); the pipeline refreshes
+    # it itself and keeps the refreshed copy on the data volume.
+    THREADS_USER_ID: str = ""
+    THREADS_ACCESS_TOKEN: str = ""
+    INSTAGRAM_USER_ID: str = ""
+    INSTAGRAM_ACCESS_TOKEN: str = ""
     # Where the pipeline reads a post's image from inside the stack (the
     # frontend's /api/og renderer), without going out through Cloudflare.
     FRONTEND_INTERNAL_URL: str = "http://frontend:3000"

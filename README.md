@@ -30,7 +30,7 @@ address or personal data.
 - **Action Center:** the day's civic issues from news feeds, in the sources' own words, with what a reader can do about each; ongoing national stories; a year-in-review archive.
 - **Elections:** every state's ballot (federal contests, statewide offices, legislative seats and ballot measures quoted verbatim), voter deadlines, a pre-election Senate and House map, and live results on election night.
 - **Search:** one search box over every page and over federal documents (Federal Register, Congressional Record, court opinions), with hybrid keyword and semantic ranking.
-- **Feeds and API:** Atom feeds, Bluesky posts, and an open read-only public API with an MCP server.
+- **Feeds and API:** Atom feeds, Bluesky posts (and Threads and Instagram where configured), and an open read-only public API with an MCP server.
 
 ## Architecture
 
@@ -54,7 +54,7 @@ More detail:
 | Congress record, votes with the president, agencies | [docs/congress.md](docs/congress.md) |
 | Elections, the map and live results | [docs/elections.md](docs/elections.md) |
 | Site search and Explore's hybrid ranking | [docs/search.md](docs/search.md) |
-| Feeds and Bluesky | [docs/publishing.md](docs/publishing.md) |
+| Feeds, Bluesky, Threads and Instagram | [docs/publishing.md](docs/publishing.md), [docs/social-accounts.md](docs/social-accounts.md) |
 | Public API and MCP server | [docs/public-api.md](docs/public-api.md) |
 | Frontend layout, type and performance notes | [docs/frontend.md](docs/frontend.md) |
 | Operations: LLM options, alerts, Swarm, health checks, environment variables | [docs/operations.md](docs/operations.md) |
