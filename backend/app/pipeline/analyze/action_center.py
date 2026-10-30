@@ -5680,6 +5680,10 @@ def _run_refresh(db: Session) -> int:
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
     relevant = _filter_policy_relevant(db, articles)
+    # The judged articles' upsert (policy_relevance._store) opened the write
+    # transaction; the trending fetch and the embedding passes after it are
+    # slow work it must not stay open through.
+    _commit_stage(db, "relevance filter")
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")
