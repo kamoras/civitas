@@ -53,11 +53,25 @@ def test_captured_on_reads_only_a_wayback_address():
     assert web_archive.original_url(BALLOT) == BALLOT
 
 
-def _archive(rows_by_url: dict, bodies: dict, seen: list):
+ARCHIVE_HOSTS = {"web.archive.org", "wayback.archive-it.org", "partner.archive-it.org"}
+
+
+@pytest.fixture(autouse=True)
+def _no_remembered_collections(monkeypatch):
+    monkeypatch.setattr(web_archive, "_collections_by_host", {})
+    monkeypatch.setattr(web_archive, "_archive_it_rests_until", 0.0)
+
+
+def _archive(rows_by_url: dict, bodies: dict, seen: list, seeds: list | None = None, archive_it: dict | None = None):
     def answer(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        assert request.url.host == "web.archive.org"  # never the walled host
+        assert request.url.host in ARCHIVE_HOSTS  # never the walled host
         assert "Civitas/1.0" in request.headers["user-agent"]
+        if request.url.host == "partner.archive-it.org":
+            return httpx.Response(200, json=seeds or [])
+        if request.url.path.endswith("/timemap/cdx"):
+            collection = request.url.path.split("/")[1]
+            return httpx.Response(200, text=(archive_it or {}).get((collection, request.url.params["url"]), ""))
         if request.url.path == "/cdx/search/cdx":
             return httpx.Response(200, json=rows_by_url.get(request.url.params["url"], []))
         return httpx.Response(200, content=bodies[str(httpx.URL(str(request.url)))])
@@ -101,7 +115,110 @@ async def test_no_capture_and_off_host_addresses_are_no_copy(ballot_pages):
     seen = []
     async with _archive({}, {}, seen) as client:
         assert await oh.fetch_archived(client, 2026, [BALLOT, "https://county.example.gov/ballot.pdf"]) is None
-    assert all(urlparse(u).hostname == "web.archive.org" for u in seen)
+    assert all(urlparse(u).hostname in ARCHIVE_HOSTS for u in seen)
+
+
+def _seed(collection, url, **over):
+    return {"collection": collection, "url": url, "active": True, "publicly_visible": True, "deleted": False, **over}
+
+
+def _timemap_line(url, body, stamp, mimetype="application/pdf"):
+    return f"key {stamp} {url} {mimetype} 200 {_digest(body)} - - 10 20 ARCHIVEIT-1.warc.gz"
+
+
+FRONT = {("5763", "https://www.ohiosos.gov/"): _timemap_line("https://www.ohiosos.gov/", b"front", "20261001000000", "text/html")}
+
+
+def test_archive_it_capture_addresses_are_read_like_wayback_ones():
+    page = f"https://wayback.archive-it.org/5763/20260915190620/{BALLOT}"
+    assert web_archive.captured_on(page) == date(2026, 9, 15)
+    assert web_archive.original_url(page) == BALLOT
+    assert web_archive.original_url(f"https://wayback.archive-it.org/5763/20260915190620id_/{BALLOT}") == BALLOT
+
+
+def test_an_archive_it_timemap_gives_its_newest_200_and_skips_revisits():
+    text = "\n".join([
+        _timemap_line(BALLOT, b"old", "20250101000000"),
+        _timemap_line(BALLOT, b"new", "20260915190620"),
+        f"key 20261001000000 {BALLOT} warc/revisit 200 {_digest(b'new')} - - 1 2 f.warc.gz",
+        f"key 20261002000000 {BALLOT} text/html 403 {_digest(b'wall')} - - 1 2 f.warc.gz",
+    ])
+    capture = web_archive.newest_from_archive_it(text, "5763")
+    assert capture.timestamp == "20260915190620"
+    assert capture.raw_url == f"https://wayback.archive-it.org/5763/20260915190620id_/{BALLOT}"
+    assert capture.page_url == f"https://wayback.archive-it.org/5763/20260915190620/{BALLOT}"
+
+
+@pytest.mark.asyncio
+async def test_a_state_librarys_capture_is_read_when_the_wayback_index_lacks_it(ballot_pages):
+    # California's 2026 proposition pages, 2026-10-29: held by the state
+    # library's Archive-It collection and absent from the Wayback index.
+    seeds = [
+        _seed(5763, "https://www.ohiosos.gov/"),
+        _seed(965, "https://www.ohiosos.gov/", active=False),  # a closed collection is not asked
+        _seed(17, "https://www.ohiosos.gov/", publicly_visible=False),  # nor a private one
+        _seed(18, "https://elsewhere.example.org/www.ohiosos.gov"),  # nor one seeded on another host
+    ]
+    archive_it = {("5763", BALLOT): _timemap_line(BALLOT, b"%PDF ballot", "20260915190620"), **FRONT}
+    bodies = {f"https://wayback.archive-it.org/5763/20260915190620id_/{BALLOT}": b"%PDF ballot"}
+    seen = []
+    async with _archive({}, bodies, seen, seeds, archive_it) as client:
+        ((three, url),) = await oh.fetch_archived(client, 2026, [BALLOT])
+    assert three["official_title"] == "TO REQUIRE VOTERS TO PRESENT PHOTO IDENTIFICATION IN ORDER TO VOTE"
+    assert url == f"https://wayback.archive-it.org/5763/20260915190620/{BALLOT}"
+    assert web_archive.captured_on(url) == date(2026, 9, 15)
+    asked = {urlparse(u).path.split("/")[1] for u in seen if u.endswith("cdx") or "/timemap/" in u}
+    assert asked <= {"5763", "cdx"}
+
+
+@pytest.mark.asyncio
+async def test_the_newer_capture_of_the_two_indexes_is_the_copy(ballot_pages):
+    rows = {BALLOT: _row(BALLOT, b"%PDF ballot", stamp="20261021090000")}
+    archive_it = {("5763", BALLOT): _timemap_line(BALLOT, b"%PDF older", "20260915190620"), **FRONT}
+    bodies = {f"https://web.archive.org/web/20261021090000id_/{BALLOT}": b"%PDF ballot"}
+    async with _archive(rows, bodies, [], [_seed(5763, "https://www.ohiosos.gov/")], archive_it) as client:
+        ((_, url),) = await oh.fetch_archived(client, 2026, [BALLOT])
+    assert url == f"https://web.archive.org/web/20261021090000/{BALLOT}"
+
+
+@pytest.mark.asyncio
+async def test_the_collection_with_the_newest_front_page_is_asked():
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "partner.archive-it.org":
+            return httpx.Response(200, json=[_seed(c, "https://www.ohiosos.gov/") for c in (12, 5763, 99)])
+        collection = request.url.path.split("/")[1]
+        stamps = {"12": "20200101000000", "5763": "20261001000000"}  # 99 holds no copy
+        front = request.url.params["url"]
+        return httpx.Response(200, text=_timemap_line(front, b"f", stamps[collection], "text/html") if collection in stamps else "")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        assert await web_archive._collections(client, "www.ohiosos.gov") == ["5763"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unread", ["seeds", "front"])
+async def test_an_unread_archive_it_index_is_not_remembered_as_none(unread):
+    # Archive-It answers its rate limit with an HTML page and a 200.
+    calls = []
+    rate_limited = "<html><body>You have exceeded the limit for the number of requests</body></html>"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        first = len([h for h in calls if h == request.url.host]) == 1
+        if request.url.host == "partner.archive-it.org":
+            if unread == "seeds" and first:
+                return httpx.Response(200, text="not json")
+            return httpx.Response(200, json=[_seed(5763, "https://www.ohiosos.gov/")])
+        if unread == "front" and first:
+            return httpx.Response(200, text=rate_limited)
+        return httpx.Response(200, text=_timemap_line(request.url.params["url"], b"f", "20261001000000", "text/html"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        assert await web_archive._collections(client, "www.ohiosos.gov") == []
+        if unread == "front":  # a rate-limit page rests Archive-It for the run's next pages
+            assert await web_archive._archive_it_captures(client, BALLOT) == []
+            web_archive._archive_it_rests_until = 0.0
+        assert await web_archive._collections(client, "www.ohiosos.gov") == ["5763"]
 
 
 @pytest.mark.asyncio
