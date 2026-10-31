@@ -200,3 +200,15 @@ async def test_a_state_none_of_whose_points_are_placed_is_a_failed_read(monkeypa
     monkeypatch.setattr(civic, "_points", lambda state: {k.replace("XX", state): v for k, v in many.items()})
     _serve(monkeypatch, {f"{float(n)},{float(n)}": civic._UNPLACED for n in range(30)})
     assert await _read() is None
+
+
+def test_disagreeing_answers_about_unlike_races_are_logged_not_raised():
+    """California, 2026-10-30: the warning naming the races Google's answers
+    disagreed on sorted their keys, and a key's district or seat is None
+    beside another's string, so the TypeError took down the state's whole
+    read. Those races are left out; every other race still reads."""
+    reading = civic._Reading(one_seat=False)
+    kept = {"office": "S", "district": None, "seat": None, "last_name": "Doe", "party": "DEM"}
+    reading.races = {("S", None, None): [kept], ("S", None, "special"): [], ("upper", "7", None): []}
+    reading.conflicts = {("S", None, "special"), ("upper", "7", None), ("upper", None, None)}
+    assert reading.records() == [kept]

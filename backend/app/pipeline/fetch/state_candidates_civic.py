@@ -278,7 +278,7 @@ class _Reading:
     def records(self) -> list[dict]:
         if self.conflicts:
             logger.warning("Civic answers disagreed about %d race(s); left out this run: %s",
-                           len(self.conflicts), sorted(self.conflicts)[:10])
+                           len(self.conflicts), sorted(self.conflicts, key=str)[:10])
         return [r for key, rs in self.races.items() if key not in self.conflicts for r in rs]
 
 
