@@ -32,14 +32,19 @@ offices from it only when it names every statewide office already on file
 holds VIP data for some states only, and only near an election) is a
 healthy empty answer, read in a few requests.
 
-Answers are kept per point for a day in this process (`_answers`), so the
-measures reader (ballot_measures_civic.py) and a second sync that day ask
-nothing again. Data for a concluded election is removed from the API: what was read
+Answers are kept per point for a day (`_answers` in this process, and the
+`api_cache` tier `ANSWER_TIER` across restarts), so the measures reader
+(ballot_measures_civic.py) and a second sync that day ask nothing again. A
+whole read is about 5,300 questions at 0.9 a second: on 2026-10-31 a deploy
+between the evening ballot sync and the nightly run emptied the in-process
+copy, the Election run asked all of them again, and its candidate phase was
+cut off at its budget. Data for a concluded election is removed from the API: what was read
 stays in the database and the election archive.
 
 The API key is merged into the request URL only, never the logged `url`.
 """
 
+import asyncio
 import logging
 import re
 import time
@@ -47,6 +52,7 @@ import time
 import httpx
 
 from app.config import settings
+from app.database import SessionLocal
 from app.data_refresh import read as read_data
 from app.pipeline.fetch.civic_info import CIVIC_BASE, _parse_contests
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -54,6 +60,7 @@ from app.pipeline.fetch.state_candidates_common import (
     SourceRecords, ballot_list_party, clean_display_name, federal_record, normalize_party,
     parse_office, parse_state_leg_office, parse_statewide_office,
 )
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -69,6 +76,8 @@ POINTS_FILE = "civic_query_points.json"
 # everyone (ballot data, never a visitor's).
 CACHE_TTL_S = 20 * 3600
 _answers: dict[str, tuple[float, list[dict]]] = {}
+# The same answers on the database, so a restart (a deploy) doesn't ask again.
+ANSWER_TIER = "google_civic_voterinfo"
 SOURCE_NAME = "the Voting Information Project (Google Civic Information API)"
 # A state whose first few placed points carry no contests has no VIP ballot
 # loaded. A point Google fails to place ("Failed to parse address", about
@@ -145,6 +154,10 @@ async def contests_at(client: httpx.AsyncClient, election_id: str, where: str, l
     kept = _answers.get(key)
     if kept and time.monotonic() - kept[0] < CACHE_TTL_S:
         return kept[1]
+    stored = await asyncio.to_thread(_stored, key)
+    if stored is not None:
+        _answers[key] = (time.monotonic(), stored)
+        return stored
     payload = await _get_json(client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": where},
                               label, expected_statuses=(400, 404))
     if payload is None:
@@ -154,7 +167,33 @@ async def contests_at(client: httpx.AsyncClient, election_id: str, where: str, l
     else:
         contests = [] if payload is _NO_DATA or not isinstance(payload, dict) else _parse_contests(payload)
     _answers[key] = (time.monotonic(), contests)
+    await asyncio.to_thread(_store, key, contests)
     return contests
+
+
+def _stored(key: str) -> list[dict] | None:
+    """A kept answer from the database, None when there is none (or it
+    can't be read: a cache only saves requests)."""
+    try:
+        with SessionLocal() as db:
+            kept = api_cache_get(db, ANSWER_TIER, key, max_age_hours=CACHE_TTL_S // 3600)
+    except Exception:
+        logger.warning("Civic answer cache read failed for %s", key, exc_info=True)
+        return None
+    if not isinstance(kept, dict):
+        return None
+    return (Unplaced if kept.get("unplaced") else list)(kept.get("contests") or [])
+
+
+def _store(key: str, contests: list[dict]) -> None:
+    # Wrapped, so an answer of no contests keeps the full day (api_cache_set
+    # shortens an empty payload's life).
+    try:
+        with SessionLocal() as db:
+            api_cache_set(db, ANSWER_TIER, key, {"unplaced": isinstance(contests, Unplaced), "contests": contests},
+                          normal_ttl_hours=CACHE_TTL_S // 3600)
+    except Exception:
+        logger.warning("Civic answer cache write failed for %s", key, exc_info=True)
 
 
 def _label(contest: dict) -> str:
