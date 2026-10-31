@@ -26,6 +26,7 @@ from sqlalchemy.exc import OperationalError
 
 from app import database
 from app.models import (
+    FeedArticle,
     ActionIssue,
     ActionIssueStatus,
     ApiCache,
@@ -37,6 +38,7 @@ from app.models import (
 from app.pipeline import cache
 from app.pipeline.analyze import action_center as ac
 from app.pipeline.analyze import bill_analyzer, donor_classifier_ai, early_signal
+from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.transform import industry_classifier
 
 TODAY = "2026-10-15"
@@ -337,3 +339,94 @@ def test_a_long_write_hold_is_logged_with_where_it_began(tmp_path, monkeypatch, 
             conn.commit()
     engine.dispose()
     assert "SQLite write lock held" in caplog.text
+
+
+def test_the_relevance_filter_commits_before_the_trending_fetch(file_sessionmaker, pipeline_write, monkeypatch, freeze_utcnow):
+    """The judged articles' upsert (policy_relevance._store) is committed
+    before the trending fetch and the embedding passes after it. Until
+    2026-10-30 nothing committed it, and the lock stayed open through them."""
+    freeze_utcnow(datetime(2026, 10, 15, 12))
+    article = NewsArticle(title="Senate passes parks bill", url="https://example.org/parks", source_name="NPR")
+
+    def judge(session, articles):
+        session.add(FeedArticle(url=article.url, seen_at=datetime(2026, 10, 15), source_name="NPR",
+                                title=article.title, description="", text=article.title, embedding=b"\0" * 4, model="m"))
+        session.flush()
+        return [(article, np.eye(64, dtype=np.float32)[0], 1.0)], {"k": 7, "threshold": 0.5}
+
+    class Stop(Exception):
+        pass
+
+    def trending():
+        pipeline_write("trending fetch")
+        raise Stop
+
+    monkeypatch.setattr(early_signal, "_fetch_recent_votes", lambda session: [])
+    monkeypatch.setattr(early_signal, "_fetch_recent_rules", lambda session: [])
+    monkeypatch.setattr(ac, "fetch_news_articles", lambda: [article])
+    monkeypatch.setattr(ac.policy_relevance, "judge", judge)
+    monkeypatch.setattr(ac, "fetch_trending_topics", trending)
+
+    db = file_sessionmaker()
+    try:
+        with pytest.raises(Stop):
+            ac._run_refresh(db)
+    finally:
+        db.rollback()
+        db.close()
+
+    assert pipeline_write.results == [("trending fetch", True)]
+
+
+def test_a_hold_begun_in_the_cache_helper_names_its_caller(file_sessionmaker, monkeypatch, caplog):
+    monkeypatch.setattr(database, "WRITE_HOLD_WARN_S", -1.0)
+    db = file_sessionmaker()
+    database.watch_write_holds(db.get_bind())
+
+    def caller():
+        cache.api_cache_set(db, "t", "k", {"x": 1})
+
+    with caplog.at_level(logging.WARNING, logger="app.database"):
+        caller()
+    db.close()
+    assert "(api_cache_set)" in caplog.text
+    assert "pipeline/cache.py" in caplog.text
+
+
+def test_the_daily_refits_commit_before_the_next_slow_step(file_sessionmaker, pipeline_write, monkeypatch, freeze_utcnow):
+    """The actor-threshold and cut refits store their fits uncommitted; each
+    is committed before the next embedding pass. Until 2026-10-31 nothing
+    committed them before the relevance filter (three holds in 48 hours)."""
+    freeze_utcnow(datetime(2026, 10, 15, 12))
+    article = NewsArticle(title="Senate passes parks bill", url="https://example.org/parks", source_name="NPR")
+
+    class Stop(Exception):
+        pass
+
+    def actor_refit(session):
+        cache.api_cache_set(session, "claim_actor", "threshold", {"threshold": 0.5}, commit=False)
+
+    def cut_refit(session):
+        pipeline_write("cut refit")
+        cache.api_cache_set(session, "action_cuts", "cluster", {"threshold": 0.9}, commit=False)
+
+    def judge(session, articles):
+        pipeline_write("relevance filter")
+        raise Stop
+
+    monkeypatch.setattr(early_signal, "_fetch_recent_votes", lambda session: [])
+    monkeypatch.setattr(early_signal, "_fetch_recent_rules", lambda session: [])
+    monkeypatch.setattr(ac, "fetch_news_articles", lambda: [article])
+    monkeypatch.setattr(ac, "refit_actor_threshold", actor_refit)
+    monkeypatch.setattr(ac, "refit_cuts", cut_refit)
+    monkeypatch.setattr(ac.policy_relevance, "judge", judge)
+
+    db = file_sessionmaker()
+    try:
+        with pytest.raises(Stop):
+            ac._run_refresh(db)
+    finally:
+        db.rollback()
+        db.close()
+
+    assert pipeline_write.results == [("cut refit", True), ("relevance filter", True)]

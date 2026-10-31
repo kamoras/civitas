@@ -110,15 +110,24 @@ _DML = ("INSERT", "UPDATE", "DELETE", "REPLACE")
 _APP_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
+# Shared write helpers: a hold that began in one is named by its caller too
+# (three holds on 2026-10-29/30 named only api_cache_set).
+_HELPER_FILES = {os.path.join(_APP_DIR, "pipeline", "cache.py")}
+
+
 def _first_app_frame() -> str:
-    """The innermost caller in this app's own code, outside this module."""
+    """The innermost caller in this app's own code, outside this module,
+    followed by the callers of any shared write helper it is in."""
     frame = sys._getframe(2)
+    names = []
     while frame is not None:
-        path = frame.f_code.co_filename
-        if path.startswith(_APP_DIR) and os.path.abspath(path) != os.path.abspath(__file__):
-            return f"{path.removeprefix(_APP_DIR)}:{frame.f_lineno} ({frame.f_code.co_name})"
+        path = os.path.abspath(frame.f_code.co_filename)
+        if path.startswith(_APP_DIR) and path != os.path.abspath(__file__):
+            names.append(f"{path.removeprefix(_APP_DIR)}:{frame.f_lineno} ({frame.f_code.co_name})")
+            if path not in _HELPER_FILES:
+                return " < ".join(names)
         frame = frame.f_back
-    return "unknown"
+    return " < ".join(names) or "unknown"
 
 
 def _note_write(conn, _cursor, statement, _parameters, _context, _executemany) -> None:

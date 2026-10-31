@@ -5669,6 +5669,10 @@ def _run_refresh(db: Session) -> int:
         refit_actor_threshold(db)
     except Exception:
         logger.warning("Actor threshold refit failed; the stored one stands", exc_info=True)
+    # Each refit stores its fit (api_cache_set, uncommitted); the next
+    # refit and the relevance filter are embedding passes it must not stay
+    # open through.
+    _commit_stage(db, "actor threshold refit")
 
     # The clustering and restatement cuts, refit once a day from the stored
     # articles and issues before either is used (refit_cuts).
@@ -5676,10 +5680,15 @@ def _run_refresh(db: Session) -> int:
         refit_cuts(db)
     except Exception:
         logger.warning("Cut refit failed; the stored cuts stand", exc_info=True)
+    _commit_stage(db, "cut refit")
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
     relevant = _filter_policy_relevant(db, articles)
+    # The judged articles' upsert (policy_relevance._store) opened the write
+    # transaction; the trending fetch and the embedding passes after it are
+    # slow work it must not stay open through.
+    _commit_stage(db, "relevance filter")
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")
