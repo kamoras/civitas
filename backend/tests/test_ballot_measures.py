@@ -1722,13 +1722,15 @@ async def test_the_ingest_alert_fires_every_night_a_state_fails(monkeypatch, db_
     first failure ever was the last one anyone heard about."""
     import app.ops_alerts as ops_alerts
 
+    from datetime import datetime as dt
+
     keys = []
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: keys.append(dedupe_key))
+    monkeypatch.setattr(election_pipeline, "utcnow", lambda: dt(2026, 10, 29))
     election_pipeline._alert_ingest_failures(db_session, ["CA"], "2026-11-03")
     election_pipeline._alert_ingest_failures(db_session, ["CA", "MI"], "2026-11-03")
     assert len(set(keys)) == 2
-    assert all(k.startswith(f"ballot-measure-ingest-2026-11-03-{utcnow().date().isoformat()}-") for k in keys)
-    from datetime import datetime as dt
+    assert all(k.startswith("ballot-measure-ingest-2026-11-03-2026-10-29-") for k in keys)
 
     monkeypatch.setattr(election_pipeline, "utcnow", lambda: dt(2026, 10, 30))
     election_pipeline._alert_ingest_failures(db_session, ["CA"], "2026-11-03")
