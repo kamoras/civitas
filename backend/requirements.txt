@@ -91,7 +91,7 @@ starlette==1.7.0
 sympy==1.14.0
 threadpoolctl==3.7.0
 tokenizers==0.23.3
-truststore==0.10.4
+truststore==0.10.5
 # torch is the CPU-only build, pinned by URL and sha256 (pip verifies the
 # hash). PyPI's Linux torch wheels, aarch64 included (the Pi), depend on the
 # full NVIDIA CUDA stack and triton: ~4 GB in every backend image for a Pi 5
