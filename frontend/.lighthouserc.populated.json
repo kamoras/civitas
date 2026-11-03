@@ -52,7 +52,7 @@
     "assert": {
       "assertMatrix": [
         {
-          "matchingUrlPattern": "^(?!.*/search\\?q=).*$",
+          "matchingUrlPattern": "^(?!.*(/search\\?q=|/elections/map\\?)).*$",
           "assertions": {
             "categories:accessibility": [
               "error",
@@ -70,6 +70,26 @@
         },
         {
           "matchingUrlPattern": ".*/search\\?q=.*",
+          "assertions": {
+            "categories:accessibility": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ],
+            "is-crawlable": "off",
+            "document-title": "error",
+            "meta-description": "error",
+            "http-status-code": "error",
+            "link-text": "error",
+            "crawlable-anchors": "error",
+            "hreflang": "error",
+            "canonical": "error",
+            "image-alt": "error"
+          }
+        },
+        {
+          "matchingUrlPattern": ".*/elections/map\\?.*",
           "assertions": {
             "categories:accessibility": [
               "error",
