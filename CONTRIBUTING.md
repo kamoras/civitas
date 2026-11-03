@@ -100,6 +100,10 @@ resistance.
 
 No AI-generated comments explaining what code does. If a line needs a comment, the comment should explain *why* something non-obvious is done.
 
+## AI-generated work
+
+Civitas is built and reviewed by people. Do not submit code, prose, tests, labels or data that a model wrote and you have not read and understood in full; you are the author and you answer for every line. Unreviewed AI output ("slop") is closed without further review. Nothing in a commit, pull request or file may name an AI tool or model as author or co-author (no `Co-Authored-By` trailers, no "generated with" lines).
+
 ## Scoring methodology changes
 
 Changes to scoring weights (`config_definitions.py`), normalization anchors (`score_calculator.py`), or classification logic require a written rationale citing observable behavior or academic precedent. The methodology is documented in the About page and must be kept consistent.

@@ -55,8 +55,6 @@ next-env.d.ts
 /data/
 backend/.cache/
 
-# Claude Code local settings (session data, worktrees)
-.claude/settings.local.json
 
 # deploy state
 .deploy-*-slot
@@ -73,7 +71,6 @@ backend/data/
 *.egg-info/
 .venv/
 venv/
-.claude/worktrees/
 
 # host-specific ops scripts (not part of the shipped project)
 /backup.sh

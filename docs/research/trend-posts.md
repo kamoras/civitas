@@ -62,7 +62,7 @@ Four kNN votes over hand-labelled Bluesky trend topics, written to
 `app/data/trend_gates_calibration.json` by `scripts/calibrate_trend_gates.py`.
 The labelled sets are trend topics from the feed generators of Bluesky's
 trending-topics account. Each set's `_source` and `_rubric` say how it was
-sampled, and that an AI agent labelled it. The method is leave-one-out,
+sampled and labelled. The method is leave-one-out,
 with near-duplicates (cosine > 0.95) excluded and 95% bootstrap intervals.
 
 | Gate | Examples (positive) | k | Threshold | LOO AUC | Precision | Recall |
