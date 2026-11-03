@@ -1,5 +1,5 @@
 {
- "_source": "Bluesky trend topics, as in trend_relevance_examples.json: 160 drawn at random from the 260 topics most similar to three violence/death prototype sentences (so most are tragedies), plus the 350 relevance examples (a few duplicates dropped). Labelled 2026-10-15 by an AI agent (Claude) against _rubric, for trend_relevance's tragedy and political-violence gates.",
+ "_source": "Bluesky trend topics, as in trend_relevance_examples.json: 160 drawn at random from the 260 topics most similar to three violence/death prototype sentences (so most are tragedies), plus the 350 relevance examples (a few duplicates dropped). Labelled 2026-10-15 against _rubric, for trend_relevance's tragedy and political-violence gates.",
  "_rubric": "tragedy = the topic is about people killed, injured, attacked, abused or detained by force, a deadly disaster, a war's violence, or a death.",
  "examples": [
   {
