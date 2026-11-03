@@ -3631,7 +3631,8 @@ How to check, before asking for review:
   its route lists): every axe rule tagged WCAG 2.0, 2.1 or 2.2 A/AA, in
   Chrome, at 320px and 1280px, plus no horizontal scroll at 320px. A new
   route or page type goes into the Lighthouse configs so both gates see it.
-  The workflow is not a required GitHub check, so read its result on the PR.
+  Its job ("Accessibility & SEO") is a required check on `main`, so a
+  failure blocks the merge, Dependabot's included.
 - **By hand, on a production build**, for what axe cannot see: keyboard
   paths through anything interactive you touched (menus, tabs, disclosures,
   drawers, dialogs, maps), Shift+Tab as well as Tab; focus visible and never
