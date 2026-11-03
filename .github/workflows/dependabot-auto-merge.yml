@@ -1,0 +1,77 @@
+name: Dependabot auto-merge
+
+# Dependabot's patch and minor updates, and any update that fixes a
+# Dependabot security alert, merge on their own once every check main
+# requires has passed on the PR (AGENTS.md "Standing rules"). Majors that
+# fix no alert wait for the owner.
+#
+# How it stays safe:
+# - This job only *enables* GitHub's auto-merge. GitHub performs the merge,
+#   and only after the branch's required status checks pass. With no
+#   required checks GitHub would merge at once, so the job refuses to
+#   enable anything until main requires at least one.
+# - It merges with DEPENDABOT_AUTOMERGE_TOKEN, a fine-grained token stored
+#   as a *Dependabot* secret (Dependabot-triggered workflows can't read
+#   Actions secrets). A merge made with the workflow's own GITHUB_TOKEN
+#   would not trigger CI on main, and check-and-deploy.sh ships only a
+#   commit whose CI on main succeeded, so it would never deploy.
+# - Production deploys a merged update only after main's own CI run on the
+#   merge commit succeeds (check-and-deploy.sh).
+
+on: pull_request
+
+permissions: {}
+
+jobs:
+  enable:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'kamoras/civitas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN || secrets.GITHUB_TOKEN }}
+          alert-lookup: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN != '' }}
+
+      - name: Decide
+        id: decide
+        env:
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          GHSA: ${{ steps.meta.outputs.ghsa-id }}
+        run: |
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              echo "merge=true" >> "$GITHUB_OUTPUT"; echo "$UPDATE_TYPE: auto-merge" ;;
+            *)
+              if [ -n "$GHSA" ]; then
+                echo "merge=true" >> "$GITHUB_OUTPUT"; echo "$UPDATE_TYPE fixes $GHSA: auto-merge"
+              else
+                echo "merge=false" >> "$GITHUB_OUTPUT"; echo "$UPDATE_TYPE: left for the owner"
+              fi ;;
+          esac
+
+      - name: Enable auto-merge
+        if: steps.decide.outputs.merge == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::DEPENDABOT_AUTOMERGE_TOKEN is not set as a Dependabot secret; not enabling auto-merge."
+            exit 1
+          fi
+          # Required checks from a ruleset, or from classic branch protection.
+          ruleset=$(gh api "repos/$REPO/rules/branches/main" \
+            --jq '[.[] | select(.type == "required_status_checks")] | length')
+          classic=$(gh api "repos/$REPO/branches/main" \
+            --jq '.protection.required_status_checks.contexts // [] | length')
+          if [ "${ruleset:-0}" -eq 0 ] && [ "${classic:-0}" -eq 0 ]; then
+            echo "::error::main requires no status checks, so auto-merge would merge before CI. Add a ruleset requiring the CI checks first."
+            exit 1
+          fi
+          gh pr merge --auto --squash "$PR_URL"

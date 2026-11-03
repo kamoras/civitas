@@ -19,7 +19,13 @@ below.
   sight, whoever or whatever wrote them.
 - **Every change is vetted by a human before it merges.** The owner reviews
   the diff, runs it, and merges it; nothing merges on a tool's say-so, and an
-  assistant never approves or merges its own work.
+  assistant never approves or merges its own work. One exception, the
+  owner's (2026-11): Dependabot's patch and minor updates, and any update
+  that fixes a Dependabot security alert, merge on their own once every
+  check `main` requires has passed (`.github/workflows/dependabot-auto-merge.yml`),
+  and production ships one only after `main`'s CI succeeds on the merge
+  commit (`check-and-deploy.sh`). CI is what vets them, so a gap in CI is
+  a gap in what reaches production: keep the required checks complete.
 - An assistant that cannot follow these rules does not commit.
 
 ## Working Agreement — finish the whole job
@@ -3768,10 +3774,25 @@ Pushes to `main` run `.github/workflows/ci.yml` (lint/build/tests) on
 GitHub-hosted runners only. Deployment is **pull-based**, not triggered by
 GitHub Actions: a cron job on the production Pi (`*/5 * * * *
 check-and-deploy.sh`) polls `origin/main` and, when it finds a new commit,
-checks `gh run list --workflow CI` for that commit and refuses to ship a red
-build (override with `FORCE_DEPLOY=1`), then builds images and runs
+checks `gh run list --workflow CI` for that commit and ships it only once
+that run has succeeded (a failed run is refused; a run still going, or not
+started, is asked again on the next tick; override with `FORCE_DEPLOY=1`),
+then builds images and runs
 `docker stack deploy` itself — no separate `deploy.sh` to call anymore.
-GitHub Actions never executes anything on the Pi.
+GitHub Actions never executes anything on the Pi. Until 2026-11 only a
+failed run was refused, so a commit deployed before its CI finished; the
+stricter gate is what lets Dependabot updates merge on their own (see
+"Standing rules"). `check-and-deploy.test.sh` covers the gate and runs in
+CI ("Deploy script self-test").
+
+**Dependabot auto-merge needs three things set in GitHub, outside the
+repo**, and the workflow refuses to enable auto-merge without the first
+two: a ruleset on `main` requiring the CI checks (without required checks
+GitHub merges at once); a fine-grained token with Contents, Pull requests
+and Dependabot alerts access to this repository, stored as the *Dependabot*
+secret `DEPENDABOT_AUTOMERGE_TOKEN` (a merge made with the workflow's own
+token wouldn't run CI on `main`, so it would never deploy); and "Allow
+auto-merge" on in the repository's settings.
 
 **Why not a self-hosted GitHub Actions runner (removed 2026-07):** the
 deploy job used to run on a self-hosted runner registered directly on the
