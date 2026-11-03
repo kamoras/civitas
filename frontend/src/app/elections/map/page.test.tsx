@@ -61,9 +61,12 @@ describe("/elections/map crawlability", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ detail: "The election map is shown during the campaign only." }), {
-          status: 404,
-        })
+        new Response(
+          JSON.stringify({ detail: "The election map is shown during the campaign only." }),
+          {
+            status: 404,
+          }
+        )
       )
     );
     expect((await generateMetadata()).robots).toMatchObject({ index: false });
