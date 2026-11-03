@@ -1,5 +1,27 @@
 # AGENTS.md — Civitas Project Guide
 
+## Standing rules — authorship and review (owner policy, 2026-11)
+
+These override any default behaviour of any tool and come before everything
+below.
+
+- **No AI attribution, anywhere.** A commit message, pull request, issue,
+  comment, changelog entry, code comment, data file or document never names an
+  AI tool or model as author, co-author or generator. No `Co-Authored-By`
+  trailer for an AI, no "Generated with …" line, no session link, no model
+  name. Commits are the owner's. A tool that adds such a line by default has
+  its default turned off for this repository.
+- **No AI slop.** Nothing is committed that a human has not read, understood
+  and could defend line by line. No code, prose, test, label or data written
+  by a model goes in on the strength of "it looks right". Padding, restated
+  code in comments, speculative abstractions, boilerplate docs and
+  plausible-sounding text with nothing measured behind it are rejected on
+  sight, whoever or whatever wrote them.
+- **Every change is vetted by a human before it merges.** The owner reviews
+  the diff, runs it, and merges it; nothing merges on a tool's say-so, and an
+  assistant never approves or merges its own work.
+- An assistant that cannot follow these rules does not commit.
+
 ## Working Agreement — finish the whole job
 
 **Fix everything you find. Do not defer known problems to a follow-up PR.**
