@@ -63,7 +63,7 @@ pytesseract==0.3.13
 pluggy==1.7.0
 pydantic==2.14.2
 pydantic-settings==2.15.0
-pydantic_core==2.46.5
+pydantic_core==2.50.2
 Pygments==2.21.0
 playwright==1.63.0
 pytest==9.1.1
