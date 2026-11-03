@@ -42,3 +42,30 @@ describe("/elections/map with no backend", () => {
     expect(screen.getByText("The election map has not been built yet.")).toBeInTheDocument();
   });
 });
+
+// Lighthouse can't hold the map to `is-crawlable` (.lighthouserc.populated.json):
+// the backend shows the map only during the campaign, so which state the
+// audit meets depends on the day CI runs. These hold the rule on every day.
+describe("/elections/map crawlability", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("is indexable while the map is shown", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ cycle: 2026 }), { status: 200 }))
+    );
+    expect((await generateMetadata()).robots).not.toMatchObject({ index: false });
+  });
+
+  it("is noindex once the backend hides it (from election day)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "The election map is shown during the campaign only." }), {
+          status: 404,
+        })
+      )
+    );
+    expect((await generateMetadata()).robots).toMatchObject({ index: false });
+  });
+});
