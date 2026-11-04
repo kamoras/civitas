@@ -21,6 +21,7 @@ import type { LiveRaceResult } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { TYPE } from "@/lib/typeStyles";
+import CertificationLine from "@/components/elections/results/CertificationLine";
 
 /** Where the count stands, in the state's own words: leading, tied, or no
  * votes yet — with "official count" once the state lists it so, and "not
@@ -206,6 +207,7 @@ export function RaceResultCard({
         )}
         <span className="text-ink-min"> · read {formatEasternTime(result.fetchedAt)}</span>
       </p>
+      <CertificationLine certification={result.certification} state={result.state} />
     </article>
   );
 }

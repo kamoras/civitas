@@ -164,7 +164,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                       )}
                       {bill.commemorative && (
                         <span className="text-small px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
-                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Detected from the title by a classifier calibrated against their coding.">
+                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognizing a person or event. Detected from the title by a classifier calibrated against their coding.">
                             Commemorative · 1×
                           </MetricTooltip>
                         </span>

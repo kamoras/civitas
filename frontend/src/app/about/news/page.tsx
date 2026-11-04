@@ -31,7 +31,7 @@ export default function NewsChapter() {
         <Point>
           A model is used to find a claim in an article, not to write one. Every news sentence you
           read is copied word for word from its source and names the outlet; the one exception is
-          labelled &ldquo;Developing&rdquo;.
+          labeled &ldquo;Developing&rdquo;.
         </Point>
         <Point>
           When a story has no sentence that passes those checks, nothing is published for it.
@@ -88,9 +88,9 @@ export default function NewsChapter() {
               policy news whatever section it ran in. An article is kept when the ones it most
               resembles, weighted by how closely, are mostly U.S. policy news; how many it compares
               with and how much is mostly are worked out again each day from the stored articles.
-              Nobody labels articles by hand. Checked against the 827 articles a person had labelled
+              Nobody labels articles by hand. Checked against the 827 articles a person had labeled
               before, 88 to 96% of what it keeps is U.S. policy news (measured October 2026), about
-              the same as the hand-labelled version it replaced. The rule before that, closeness to
+              the same as the hand-labeled version it replaced. The rule before that, closeness to
               two dozen written descriptions of policy topics, kept 61 to 67% relevant articles
               (measured October 2026): storm and flood coverage, foreign politics and crime passed,
               while campaign coverage was dropped. Foreign news with no U.S. government role is not
@@ -207,7 +207,7 @@ export default function NewsChapter() {
               party that can act: a person, an institution, an official body or a group of
               officials. A named one passes on its name; one the story only describes (&ldquo;a
               federal judge&rdquo;, &ldquo;federal agents&rdquo;) is compared with nearly a thousand
-              hand-labelled examples, and passes only when its nearest examples are overwhelmingly
+              hand-labeled examples, and passes only when its nearest examples are overwhelmingly
               parties, a bar set so that, tested on those examples, it lets through nothing the name
               check would have kept out. A line from inside someone&apos;s quotation is dropped: it
               is their account, not the outlet&apos;s. Where the model stops short (&ldquo;Senator
@@ -243,7 +243,7 @@ export default function NewsChapter() {
             more="the template, and when a draft goes"
           >
             <P>
-              One exception, labelled on the page as{" "}
+              One exception, labeled on the page as{" "}
               <strong className="text-ink-hi">Developing</strong>: when the Senate or House passes a
               bill (a vote from the last two days, never an older one found later), or an agency
               publishes a significant rule (on its publication day, not while it waits on public
@@ -370,7 +370,7 @@ export default function NewsChapter() {
               the rest say nothing rather than guess. That clears the bar the site sets for stating
               something as fact (being confident at least 80% are right), so the row names the
               committee plainly; on a day the refit falls short, new issues say
-              &ldquo;likely&rdquo;. Checked against 136 issues read and labelled by hand, the
+              &ldquo;likely&rdquo;. Checked against 136 issues read and labeled by hand, the
               committee named was a right one 36 times in 38, where the setting learned from those
               labels was right 36 times in 44. The rules&apos; wording alone did much worse (38%,
               measured October 2026): it dates from 1946 in places and reads nothing like the news.
@@ -523,7 +523,7 @@ export default function NewsChapter() {
           </Box>
           <Box
             title="Where each item came from"
-            dek="Each item is labelled before its headline: an official record names its publisher; a news item names the newsroom and quotes its headline."
+            dek="Each item is labeled before its headline: an official record names its publisher; a news item names the newsroom and quotes its headline."
             more="the labels and the time"
           >
             <P>
@@ -626,7 +626,7 @@ export default function NewsChapter() {
               to be matched against the record: its category, read as Bluesky publishes it. The post
               doesn&apos;t quote the trend&apos;s name, but it answers it, so the name is checked
               before anything else: a name that reads as electioneering, editorializes, states
-              advocacy as fact, or that a vote of labelled examples finds loaded is skipped, not
+              advocacy as fact, or that a vote of labeled examples finds loaded is skipped, not
               reworded.
             </P>
           </Box>

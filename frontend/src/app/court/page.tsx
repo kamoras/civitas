@@ -233,10 +233,10 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
                 />
                 <RecordBox
                   compact
-                  title="Sources and licences"
+                  title="Sources and licenses"
                   dek="The Supreme Court Database, Oyez, Martin-Quinn scores and the slip opinions."
                   more={{
-                    label: "each source and its licence",
+                    label: "each source and its license",
                     children: (
                       <ul className="flex flex-col gap-1 text-ink-lo">
                         <li>
@@ -256,7 +256,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
                           <a href="https://mqscores.wustl.edu" className={LINK}>
                             Martin-Quinn scores
                           </a>
-                          : published by the authors with no licence stated; cited as Martin and
+                          : published by the authors with no license stated; cited as Martin and
                           Quinn (2002).
                         </li>
                         <li>

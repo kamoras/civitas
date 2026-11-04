@@ -350,7 +350,7 @@ describe("the Senate map's footnote", () => {
     render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
     expect(
       screen.getByText(
-        /shaded by the party leading more of its two races, grey when two parties lead equally many/
+        /shaded by the party leading more of its two races, gray when two parties lead equally many/
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/leading both/)).not.toBeInTheDocument();

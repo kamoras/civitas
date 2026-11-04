@@ -12,10 +12,12 @@ import type {
   ListedSenateRace,
   LiveRaceResult,
   LiveResults,
+  RaceCertification,
   ResultEvent,
   ResultEventPerson,
 } from "@/types/election";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
+import { formatUtcDate } from "@/lib/formatting";
 
 /* Every fill and mark below is a theme variable (globals.css, "The results
    maps' count-less fills"), so a results map draws on paper in the light
@@ -676,6 +678,18 @@ export function describeUpdate(event: ResultEvent): UpdateText {
               "Not final"
             ),
       };
+    case "certified_winner": {
+      const c = event.detail as unknown as RaceCertification;
+      const letter = partyLetter(c.winner?.party);
+      return {
+        tag: "Certified",
+        tone: "official",
+        text: sentence(
+          `Certified winner: ${c.winner?.name ?? ""}${letter ? ` (${letter})` : ""}`,
+          "No runoff or recount is pending under state law"
+        ),
+      };
+    }
     case "flip_reversed":
       // The holder's party ahead again — or nobody: an exact tie has no
       // leader to name.
@@ -1037,3 +1051,35 @@ export function stateFill(
  */
 export const MAP_LABEL_HALO =
   "[paint-order:stroke] stroke-surface-base [stroke-width:0.25em] [stroke-linejoin:round]";
+
+/** What a race's certification lets the page say, in one sentence of
+ * fixed template around the state's own figures (backend
+ * live_results/certified.py decides the status). "Certified winner" only
+ * when the backend names a winner: certified with no runoff owed and no
+ * recount still possible under the state's law. */
+export function certificationText(c: RaceCertification, stateName: string): string {
+  const on = c.certifiedOn ? formatUtcDate(c.certifiedOn) : null;
+  const certified =
+    on && c.certifiedOnStated !== false
+      ? `${stateName} certified the count on ${on}`
+      : on
+        ? `${stateName} has certified the count (first read here ${on})`
+        : `${stateName} has certified the count`;
+  const who = c.winner
+    ? `${c.winner.name}${partyLetter(c.winner.party) ? ` (${partyLetter(c.winner.party)})` : ""}`
+    : "";
+  switch (c.status) {
+    case "sworn_in":
+      return `${who} was sworn in for the seat, per the member roster.`;
+    case "certified":
+      return `Certified winner: ${who}. ${certified}, and no runoff or recount is pending under state law.`;
+    case "runoff":
+      return `${certified}. No candidate won the majority state law requires, so the race goes to a runoff.`;
+    case "recount":
+      return `${certified}. The margin is inside the state's automatic recount, so no winner is shown until the new Congress is sworn in.`;
+    default:
+      return c.recountUntil
+        ? `${certified}. A recount can be asked for until ${formatUtcDate(c.recountUntil)}, so no winner is shown before then.`
+        : `${certified}. State law sets no fixed deadline to ask for a recount, so no winner is shown until the new Congress is sworn in.`;
+  }
+}

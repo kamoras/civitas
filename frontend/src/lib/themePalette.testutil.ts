@@ -97,7 +97,7 @@ export function resolve(color: string, theme: Theme): RGBA {
     const ch = (i: number) => (A[i] * A[3] * p + B[i] * B[3] * (1 - p)) / alpha;
     return [ch(0), ch(1), ch(2), alpha];
   }
-  throw new Error(`unreadable colour ${color}`);
+  throw new Error(`unreadable color ${color}`);
 }
 
 /** `top` composited over an opaque `bottom`. */

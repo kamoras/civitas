@@ -19,7 +19,13 @@ below.
   sight, whoever or whatever wrote them.
 - **Every change is vetted by a human before it merges.** The owner reviews
   the diff, runs it, and merges it; nothing merges on a tool's say-so, and an
-  assistant never approves or merges its own work.
+  assistant never approves or merges its own work. One exception, the
+  owner's (2026-11): Dependabot's patch and minor updates, and any update
+  that fixes a Dependabot security alert, merge on their own once every
+  check `main` requires has passed (`.github/workflows/dependabot-auto-merge.yml`),
+  and production ships one only after `main`'s CI succeeds on the merge
+  commit (`check-and-deploy.sh`). CI is what vets them, so a gap in CI is
+  a gap in what reaches production: keep the required checks complete.
 - An assistant that cannot follow these rules does not commit.
 
 ## Working Agreement — finish the whole job
@@ -2338,6 +2344,29 @@ wrong number on election night is worse than none:
   bar gates only *raising* a flip: once said, a flip is undone only by the
   lead itself going back to the seat's party or tying (`lead_is_back`), never
   by the count dipping below the bar with the same challenger ahead.
+- **A winner is shown only once the state certifies, with no runoff or
+  recount left** (owner decision, 2026-11; `app/live_results/certified.py`,
+  `app/recount_rules.py`). A daily job (`scheduler._certified_results_sync`,
+  lease `CERTIFIED_SYNC`) reads each state's certified general-election
+  count from the day after the election to a month past January 3, through a
+  reader per strategy (`election_results._certified_readers`, a state's
+  `certified_results` block; Kentucky's State Board certification first),
+  into `RaceCertification`, kept apart from the frozen election-night count
+  and read beside the archive at serve time, never written into it. "Certified
+  winner" needs all of: the state's certified count; no runoff owed
+  (`election_rules.json`'s `generalRunoffs`); a margin outside the state's
+  automatic recount; and every recount a candidate may still ask for at that
+  margin past its deadline (`app/data/recount_rules.json`, cited per state
+  from NASS's summaries and the statutes). A margin inside an automatic
+  recount, or a request with no fixed deadline, waits for the new Congress.
+  Every simplification lengthens the wait, never shortens it: margins are
+  measured against every vote cast, a deadline anchored to a county canvass
+  is counted from the state's certification, and a document that states no
+  date is dated by its first read. Where no certified reader covers a state,
+  the floor is the member sworn in for the seat, recorded from January 3 once
+  the roster has been read since the Congress convened (`record_sworn_in`).
+  The wording is a fixed template (`certificationText`, `post_certified`;
+  Senate posts only).
 - "Civitas never calls a race" governs **election-night counts**: what a
   count says, and when. It is not a ban on describing an election before
   it. The pre-election map (below, `app/forecast/`) publishes a calibrated
@@ -2901,6 +2930,7 @@ the pending list).
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
 | The map's ranges against the official count, and the swing map (archive page, the hub's Archive card) | `backend/app/forecast/accountability.py`, `backend/app/api/election_archive.py` (`/{cycle}/accountability`, `/{cycle}/swing.csv`, `latest_check` for `api/sections.py`), `frontend/src/components/elections/archive/MapAccountability.tsx`, `frontend/src/lib/sectionPreviews.ts` (`elections.archive`) |
 | Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
+| Certified winners (certified readers, recount and runoff rule, sworn-in floor) | `backend/app/live_results/certified.py`, `backend/app/recount_rules.py`, `backend/app/data/recount_rules.json`, `backend/app/election_rules.py`, `frontend/src/components/elections/results/CertificationLine.tsx`, `certificationText` in `frontend/src/lib/results.ts` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
@@ -3625,7 +3655,8 @@ How to check, before asking for review:
   its route lists): every axe rule tagged WCAG 2.0, 2.1 or 2.2 A/AA, in
   Chrome, at 320px and 1280px, plus no horizontal scroll at 320px. A new
   route or page type goes into the Lighthouse configs so both gates see it.
-  The workflow is not a required GitHub check, so read its result on the PR.
+  Its job ("Accessibility & SEO") is a required check on `main`, so a
+  failure blocks the merge, Dependabot's included.
 - **By hand, on a production build**, for what axe cannot see: keyboard
   paths through anything interactive you touched (menus, tabs, disclosures,
   drawers, dialogs, maps), Shift+Tab as well as Tab; focus visible and never
@@ -3768,10 +3799,25 @@ Pushes to `main` run `.github/workflows/ci.yml` (lint/build/tests) on
 GitHub-hosted runners only. Deployment is **pull-based**, not triggered by
 GitHub Actions: a cron job on the production Pi (`*/5 * * * *
 check-and-deploy.sh`) polls `origin/main` and, when it finds a new commit,
-checks `gh run list --workflow CI` for that commit and refuses to ship a red
-build (override with `FORCE_DEPLOY=1`), then builds images and runs
+checks `gh run list --workflow CI` for that commit and ships it only once
+that run has succeeded (a failed run is refused; a run still going, or not
+started, is asked again on the next tick; override with `FORCE_DEPLOY=1`),
+then builds images and runs
 `docker stack deploy` itself — no separate `deploy.sh` to call anymore.
-GitHub Actions never executes anything on the Pi.
+GitHub Actions never executes anything on the Pi. Until 2026-11 only a
+failed run was refused, so a commit deployed before its CI finished; the
+stricter gate is what lets Dependabot updates merge on their own (see
+"Standing rules"). `check-and-deploy.test.sh` covers the gate and runs in
+CI ("Deploy script self-test").
+
+**Dependabot auto-merge needs three things set in GitHub, outside the
+repo**, and the workflow refuses to enable auto-merge without the first
+two: a ruleset on `main` requiring the CI checks (without required checks
+GitHub merges at once); a fine-grained token with Contents, Pull requests
+and Dependabot alerts access to this repository, stored as the *Dependabot*
+secret `DEPENDABOT_AUTOMERGE_TOKEN` (a merge made with the workflow's own
+token wouldn't run CI on `main`, so it would never deploy); and "Allow
+auto-merge" on in the repository's settings.
 
 **Why not a self-hosted GitHub Actions runner (removed 2026-07):** the
 deploy job used to run on a self-hosted runner registered directly on the

@@ -634,7 +634,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
       <p className="mt-1 font-mono text-small text-ink-min">
         {view === "usual"
           ? `${data.units?.lean ?? "Points more Republican (R) or Democratic (D) than the nation."} From the last two presidential elections.`
-          : `A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark${data.chamber === "senate" ? ", with bright letters" : ""}: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed).`}
+          : `A seat is colored by the end of its range nearest even, so a range that crosses even is gray. Dark${data.chamber === "senate" ? ", with bright letters" : ""}: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed).`}
       </p>
       {view === "polls" && data.units && (
         <p className="mt-1 font-mono text-small text-ink-min">{data.units.margin}</p>

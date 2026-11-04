@@ -37,6 +37,7 @@ from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
 from app.whats_new import post_whats_new
 from app.pipeline import lease
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.pipeline import bill_refresh
 from app.pipeline.fetch import nominations
 from app.pipeline.fetch import bill_display_titles
@@ -754,6 +755,49 @@ def _election_results_sync() -> None:
     _start_job(_run, name="election-results-sync")
 
 
+_certified_tracker = PipelineRunTracker()
+
+
+def _certified_results_sync() -> None:
+    """Each state's certified general-election count, once a day from the
+    day after the election until the sworn-in floor closes
+    (live_results/certified.py) -- a no-op the rest of the year."""
+    from app.election_calendar import previous_election_day
+    from app.election_phase import election_today
+    from app.live_results.certified import certification_due
+
+    today = election_today()
+    held = previous_election_day(today)
+    if held is None or not certification_due(held, today):
+        return
+
+    def _run():
+        from app.http_client import make_async_client
+        from app.live_results.certified import alert_uncovered, sync_certified
+
+        async def _sync():
+            db = SessionLocal()
+            try:
+                async with make_async_client() as client:
+                    summary = await sync_certified(db, client, held, today)
+                try:
+                    alert_uncovered(db, held)
+                except Exception:
+                    logger.exception("Certified coverage check failed")
+                return summary
+            finally:
+                db.close()
+
+        try:
+            summary = lease.run_tracked(lease.CERTIFIED_SYNC, _certified_tracker, _sync, who="Certified results sync")
+            if summary:
+                logger.info("Certified results sync: %s", summary)
+        except Exception:
+            logger.exception("Certified results sync failed")
+
+    _start_job(_run, name="certified-results-sync")
+
+
 def _election_results_readiness() -> None:
     """Once a day in the two weeks before election day, whether every
     covered state's live-results feed can still be read
@@ -1033,6 +1077,15 @@ def start_scheduler() -> None:
         _election_results_sync,
         CronTrigger(**crawler.cron("election_results_sync")),
         id="election_results_sync",
+        replace_existing=True,
+    )
+
+    # Each state's certified count — daily from the day after the election
+    # until the new Congress has been sworn in, a no-op otherwise.
+    scheduler.add_job(
+        _certified_results_sync,
+        CronTrigger(**crawler.cron("certified_results_sync")),
+        id="certified_results_sync",
         replace_existing=True,
     )
 

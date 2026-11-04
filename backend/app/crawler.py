@@ -119,6 +119,11 @@ SCHEDULE: dict[str, dict] = {
         "cron": {"hour": "14", "minute": "20"},
         "reads": "Each covered state's results feed, once a day in the two weeks before election day",
     },
+    "certified_results_sync": {
+        "name": "Certified results",
+        "cron": {"hour": "16", "minute": "35"},
+        "reads": "States' certified general-election results, once a day from election day until the new Congress is sworn in",
+    },
     "election_results_sync": {
         "name": "Election night results",
         "cron": {"minute": "*/5"},

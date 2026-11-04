@@ -208,7 +208,7 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
         </div>
       )}
       {format.length > 0 && (
-        <More label="CSV format: encoding, licence and every column" context={`of ${path}`}>
+        <More label="CSV format: encoding, license and every column" context={`of ${path}`}>
           {format.map((para) => (
             <p key={para}>
               <Prose text={para} />
@@ -375,8 +375,8 @@ export default async function DevelopersPage() {
                     October 2026, and then presidents&apos; 0 to 100 scores: a weighted average of
                     unlike measures carries a judgment its weights decide, and a rank turns a
                     measurement into a verdict. Member pages then stopped showing the 0 to 100 part
-                    scores too, in favour of the figures behind them. These fields are served for
-                    one deprecation cycle, through{" "}
+                    scores too, in favor of the figures behind them. These fields are served for one
+                    deprecation cycle, through{" "}
                     <strong className="font-semibold">January 4, 2027</strong>; from the next day
                     responses leave them out, and still match the schema below:
                   </p>

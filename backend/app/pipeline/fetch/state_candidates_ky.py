@@ -277,3 +277,128 @@ async def fetch_confirmed_candidates(
         return None
 
     return results
+
+
+# The State Board's certified general-election totals, read for the
+# certified-results sync (live_results/certified.py). The same document
+# shape as the primary's -- a candidate per column, a county per row, a
+# Total Votes row -- but the party sits over each column rather than in the
+# contest's title. The file is linked from the same year page only once the
+# Board has certified ("2024 General Election Certification as Amended on
+# December 9th 2024.pdf", verified 2026-11-04); before that the page links
+# no general certification and the read is None. The document names no
+# date it was certified on, so certified_on is left for the sync to date by
+# its first read.
+GENERAL_DISCOVERY = {
+    "mode": "landing_page",
+    "page_url": DISCOVERY["page_url"],
+    "link_regex": r"[^\"']*Documents/{year}%20General%20Election%20Certification[^\"']*\.pdf",
+}
+
+_GENERAL_TITLE_SENATE = re.compile(r"United States Senator")
+_PARTY_WORDS = ("Republican", "Democratic", "Libertarian", "Independent", "Green", "Constitution", "Socialist")
+
+
+def _general_title(text: str) -> tuple[str, int | None] | None:
+    if _GENERAL_TITLE_SENATE.search(text):
+        return "S", None
+    if _HOUSE_RE.search(text):
+        found = _DISTRICT_RE.search(text)
+        return ("H", int(found.group(1))) if found else None
+    return None
+
+
+def _general_columns(words: list[dict]) -> list[tuple[str, str | None, int]] | None:
+    """(name, party letter, certified votes) for each column of the page
+    whose Total Votes row closes a contest, or None when any column's
+    header doesn't resolve to exactly one surname (never guessed)."""
+    from app.pipeline.fetch.state_candidates_common import normalize_party
+
+    rows = _rows_by_top(words)
+    total_row = next((r for r in rows if r and r[0]["text"] == "Total" and len(r) > 1 and r[1]["text"] == "Votes"),
+                     None)
+    if not total_row:
+        return None
+    columns, votes = [], []
+    for w in total_row[2:]:
+        cleaned = w["text"].replace(",", "")
+        if cleaned.isdigit():
+            columns.append((w["x0"] + w["x1"]) / 2)
+            votes.append(int(cleaned))
+    if not columns:
+        return None
+    header_bottom = min(w["top"] for w in total_row)
+    total_ids = {id(w) for w in total_row}
+    clusters: dict[int, list[dict]] = {i: [] for i in range(len(columns))}
+    for w in words:
+        if id(w) in total_ids or w["text"] in _INSTITUTIONAL_ALL_CAPS or w["top"] >= header_bottom:
+            continue
+        center = (w["x0"] + w["x1"]) / 2
+        clusters[min(range(len(columns)), key=lambda i: abs(columns[i] - center))].append(w)
+    out = []
+    for i in range(len(columns)):
+        caps = [w for w in clusters[i] if _SURNAME_RE.match(w["text"])]
+        if len(caps) != 1:
+            logger.info("KY general: a column's header didn't resolve to one surname; contest skipped")
+            return None
+        last = caps[0]
+        # The given names sit on the row just above the surname.
+        above = [w for w in clusters[i] if w["bottom"] <= last["top"] + 1 and last["top"] - w["top"] < 25
+                 and w is not last and not w["text"].replace(",", "").isdigit()]
+        party_words = [w["text"] for w in clusters[i] if w["text"] in _PARTY_WORDS or w["text"] == "Write-In"]
+        given = [w["text"] for w in sorted(above, key=lambda w: w["x0"])
+                 if w["text"] not in _PARTY_WORDS and w["text"] not in ("Party", "Write-In")]
+        party = None
+        if party_words and party_words[0] != "Write-In":
+            party = normalize_party(f"{party_words[0]} Party", ballot_list=True)
+        mc = re.match(r"^(Mc|Mac)(.*)$", last["text"])
+        printed = mc.group(1) + mc.group(2).title() if mc else last["text"].title()
+        out.append((" ".join([*given, printed]), party, votes[i]))
+    return out
+
+
+def parse_general_pages(pages: list[tuple[str, list[dict]]]):
+    """Every federal contest in the certification, from each page's text
+    and words. A contest runs from the page naming it to the page with its
+    Total Votes row (its headers repeat on every page between)."""
+    from app.pipeline.fetch.election_results import ContestCount
+
+    contests: list[ContestCount] = []
+    current: tuple[str, int | None] | None = None
+    for text, words in pages:
+        title = _general_title(text)
+        has_total = "Total Votes" in text
+        if title and current is not None and title != current and has_total:
+            current = title  # two contests meet on one page: neither is read
+            continue
+        if title:
+            current = title
+        if not has_total or current is None:
+            continue
+        columns = _general_columns(words)
+        if columns:
+            contests.append(ContestCount(office=current[0], district=current[1], candidates=columns))
+        current = None
+    return contests
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Kentucky's certified federal count for `election_day`'s general, or
+    None while the Board has not certified it."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    year = election_day.year
+    stages = await _discover_urls(client, "KY", year, GENERAL_DISCOVERY)
+    urls = [s["url"] for s in stages if s.get("url")]
+    if not urls:
+        return None
+    resp = await fetch_with_retry(client, _rate_limiter, "GET", urls[0], timeout=60.0,
+                                  log_label=f"KY general certification {year}", headers=FETCH_HEADERS)
+    if resp is None:
+        raise FeedUnreadable(f"KY general certification {year} could not be fetched")
+    with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
+        contests = parse_general_pages([(page.extract_text() or "", page.extract_words()) for page in pdf.pages])
+    if not contests:
+        raise FeedUnreadable(f"KY general certification {year} held no federal contest this reader could read")
+    return StateCount(source_name=source.get("source_name") or "Kentucky State Board of Elections",
+                      page_url=urls[0], official=True, unit_label="counties", contests=contests)
