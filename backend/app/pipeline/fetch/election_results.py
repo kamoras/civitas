@@ -387,10 +387,11 @@ def _certified_readers() -> dict:
     (certified_on set where the document dates it), or None while the state has not certified the
     election (its document isn't published, or still says unofficial).
     Raises FeedUnreadable when the source can't be read."""
-    from app.pipeline.fetch import state_candidates_ky, state_candidates_or, state_candidates_wy
+    from app.pipeline.fetch import state_candidates_ky, state_candidates_ma, state_candidates_or, state_candidates_wy
 
     return {
         "ky_general_certification": state_candidates_ky.fetch_certified_general,
+        "ma_pd43_general": state_candidates_ma.fetch_certified_general,
         "or_general_abstract": state_candidates_or.fetch_certified_general,
         "wy_general_canvass": state_candidates_wy.fetch_certified_general,
     }

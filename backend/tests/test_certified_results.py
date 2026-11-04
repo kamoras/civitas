@@ -244,3 +244,22 @@ class TestOregonReader:
         assert first.candidates[0] == ("Suzanne Bonamici", "D", 241_556)
         assert first.total_votes == 241_556 + 98_908 + 10_840 + 687  # "Misc." write-ins count
         assert ("Lori Chavez-DeRemer", "R", 180_420) in contests[("H", 5)].candidates
+
+
+class TestMassachusettsReader:
+    def test_reads_the_2024_senate_and_a_house_race(self):
+        from app.pipeline.fetch.state_candidates_ma import general_contest
+
+        pages = _fixture("ma_2024_general_pages.json")
+        senate = general_contest(pages["senate"], 2024, "S")
+        assert senate.candidates == [("Elizabeth Ann Warren", "D", 2_041_668), ("John Deaton", "R", 1_365_440)]
+        assert senate.total_votes == 2_041_668 + 1_365_440 + 6_221  # All Others counts; blanks don't
+        house = general_contest(pages["house_8"], 2024, "H")
+        assert house.district == 8 and house.candidates[0] == ("Stephen F. Lynch", "D", 265_432)
+
+    def test_a_page_for_another_year_or_office_is_refused(self):
+        from app.pipeline.fetch.state_candidates_ma import general_contest
+
+        pages = _fixture("ma_2024_general_pages.json")
+        assert general_contest(pages["senate"], 2026, "S") is None
+        assert general_contest(pages["senate"], 2024, "H") is None
