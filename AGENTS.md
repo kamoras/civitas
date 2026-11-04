@@ -2350,7 +2350,13 @@ wrong number on election night is worse than none:
   lease `CERTIFIED_SYNC`) reads each state's certified general-election
   count from the day after the election to a month past January 3, through a
   reader per strategy (`election_results._certified_readers`, a state's
-  `certified_results` block; Kentucky's State Board certification first),
+  `certified_results` block), each reading the state's own signal that a
+  count is certified: a document published only once certified (KY, WY,
+  OR, MA, NJ, KS, CA, whose signed certificate also dates it) or a flag the
+  state sets (Indiana's `Certified`; Enhanced Voting's `isOfficialResults`
+  for GA, WA, VA, UT, ID and RI, which a state that never sets it simply
+  waits past). A flag whose meaning isn't shown (Tally's, Vermont's) is not
+  read as certification,
   into `RaceCertification`, kept apart from the frozen election-night count
   and read beside the archive at serve time, never written into it. "Certified
   winner" needs all of: the state's certified count; no runoff owed

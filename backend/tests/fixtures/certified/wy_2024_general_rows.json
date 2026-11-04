@@ -1,0 +1,73 @@
+{
+"_source": "Wyoming Secretary of State, 2024_Wyoming_General_Results.zip, '2024 General Results Summaries - OFFICIAL.xlsx', sheet 'Statewide Candidates': its title row, race row, candidate row and Total row, first 22 columns (President, Senate, House), as state_candidates_wy._find_summary_sheet_rows reads them",
+"rows": [
+[
+"",
+"Statewide Candidates Official Summary\nWyoming General Election - November 5, 2024",
+""
+],
+[
+"",
+"United States President",
+"",
+"",
+"",
+"",
+"",
+"United States Senator",
+"",
+"",
+"",
+"",
+"United States Representative",
+"",
+"",
+"",
+"",
+"",
+""
+],
+[
+"",
+"Donald J. Trump and\nJD Vance (R)",
+"Kamala D. Harris and\nTim Walz (D)",
+"Chase Oliver and \nMike ter Maat (L)",
+"Write-Ins",
+"Overvotes",
+"Undervotes",
+"John\nBarrasso (R)",
+"Scott D\nMorrow (D)",
+"Write-Ins",
+"Overvotes",
+"Undervotes",
+"Harriet\nHageman (R)",
+"Kyle G.\nCameron (D)",
+"Richard\nBrubaker (L)",
+"Jeffrey\nHaggit (C)",
+"Write-Ins",
+"Overvotes",
+"Undervotes"
+],
+[
+"Total",
+"192633",
+"69527",
+"4193",
+"2695",
+"76",
+"1999",
+"198418",
+"63727",
+"2017",
+"101",
+"6860",
+"184680",
+"60778",
+"9223",
+"5362",
+"1505",
+"1576",
+"7999"
+]
+]
+}

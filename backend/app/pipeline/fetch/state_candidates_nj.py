@@ -45,12 +45,13 @@ file is found on the election page rather than pinned.
 import io
 import logging
 import re
+from urllib.parse import urljoin
 
 import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
-from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import FETCH_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     discover_certification_link,
     federal_record,
@@ -221,3 +222,117 @@ async def fetch_confirmed_candidates(
         return None
 
     return results
+
+
+# ── The certified general ────────────────────────────────────────────
+#
+# Read for the certified-results sync (live_results/certified.py): the
+# Division of Elections' "official general results" lists for the U.S.
+# Senate and House, linked from the year's election-information page
+# (2024's: "2024-official-general-results-us-senate.pdf" and "-us-house.pdf",
+# each headed "Official List", verified 2026-11-04). The same columns as the
+# nominees list above, plus a Tally column: each candidate's own row, its
+# county rows, then a "Total" line with the candidate's statewide or
+# district figure; after a district's last candidate a second "Total" line
+# gives the district's. A party column holding a slogan ("NO SLOGAN
+# FILED", "WHY NOT WYNN") is an independent, not a party. The lists state
+# their print date, not the Board of State Canvassers' certification, so
+# the sync dates them by their first read.
+GENERAL_RESULTS_PAGE = "https://www.nj.gov/state/elections/election-information-{year}.shtml"
+_GENERAL_RESULTS_LINK_RE = r'href="([^"]*{year}-official-general-results-us-(?:senate|house)\.pdf)"'
+_TALLY_COL_MIN_X = 440.0
+
+
+def general_contests(pages: list[list[dict]]) -> list:
+    """Every federal contest in the official general results lists, from
+    each page's words in document order. A contest whose candidates' totals
+    don't sum to its own Total line is dropped, never read short."""
+    from app.pipeline.fetch.election_results import ContestCount
+
+    office: str | None = None
+    district: int | None = None
+    contests: dict[tuple[str, int | None], dict] = {}
+    pending: tuple[str, str | None] | None = None
+    for words in pages:
+        header_text = " ".join(w["text"] for w in words[:15])
+        if _SENATE_HEADER_RE.search(header_text):
+            office, district = "S", None
+        elif _HOUSE_HEADER_RE.search(header_text):
+            office = "H"
+        for row in _rows_by_top(words):
+            text = " ".join(w["text"] for w in row)
+            if office == "H" and (found := _DISTRICT_RE.match(text)):
+                district, pending = _ORDINALS[found.group(1)], None
+                continue
+            if office is None or (office == "H" and district is None):
+                continue
+            key = (office, district if office == "H" else None)
+            if row[0]["text"] == "Total" and row[0]["x0"] >= _TALLY_COL_MIN_X:
+                figure = row[-1]["text"].replace(",", "")
+                if not figure.isdigit():
+                    continue
+                contest = contests.setdefault(key, {"candidates": [], "total": None})
+                if pending is not None:
+                    contest["candidates"].append((*pending, int(figure)))
+                    pending = None
+                else:
+                    contest["total"] = int(figure)
+                continue
+            names = [w["text"] for w in row if w["x0"] < _NAME_COL_MAX_X and w["text"] not in ("(w)", "*")]
+            party = " ".join(w["text"] for w in row if _PARTY_COL_MIN_X <= w["x0"] < _PARTY_COL_MAX_X)
+            address = any(_ADDRESS_COL_MIN_X <= w["x0"] < _PARTY_COL_MIN_X for w in row)
+            if names and party and address and names[0] != "Name":
+                name = " ".join(names)
+                # A candidate whose county rows ran onto the next page is
+                # printed again at its top: their Total is already read,
+                # and the next Total is the district's.
+                done = contests.get(key, {}).get("candidates") or []
+                if done and done[-1][0] == name:
+                    continue
+                pending = (name, normalize_party(party, ballot_list=True))
+    out = []
+    for (office, district), c in contests.items():
+        summed = sum(v for _, _, v in c["candidates"])
+        if not c["candidates"] or (c["total"] is not None and c["total"] != summed):
+            logger.warning("NJ official results: %s %s totals don't add up; dropped", office, district)
+            continue
+        out.append(ContestCount(office=office, district=district, candidates=c["candidates"], total_votes=summed))
+    return out
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """New Jersey's certified federal count for `election_day`'s general, or
+    None while the year's page links no official results list."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    year = election_day.year
+    page_url = GENERAL_RESULTS_PAGE.format(year=year)
+    page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"{state} election information {year}")
+    if page is None:
+        raise FeedUnreadable(f"{state} election information page could not be read")
+    links = list(dict.fromkeys(re.findall(_GENERAL_RESULTS_LINK_RE.format(year=year), page)))
+    if not links:
+        return None
+    pages: list[list[dict]] = []
+    for link in links:
+        # The year's page links the lists before they exist (2026's page
+        # linked both, answering 404, the day after the election), so a
+        # 404 is "not certified yet"; any other failure is an outage.
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(urljoin(page_url, link), headers=FETCH_HEADERS, timeout=60.0)
+        except httpx.HTTPError as exc:
+            raise FeedUnreadable(f"{state} official results list {link} could not be fetched") from exc
+        if resp.status_code == 404:
+            return None
+        if resp.status_code != 200:
+            raise FeedUnreadable(f"{state} official results list {link} answered {resp.status_code}")
+        with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
+            if "Official List" not in (pdf.pages[0].extract_text() or ""):
+                return None
+            pages.extend(page.extract_words() for page in pdf.pages)
+    contests = general_contests(pages)
+    if not contests:
+        raise FeedUnreadable(f"{state} official results lists held no contest this reader could read")
+    return StateCount(source_name=source.get("source_name") or "New Jersey Division of Elections",
+                      page_url=page_url, official=True, unit_label="counties", contests=contests)

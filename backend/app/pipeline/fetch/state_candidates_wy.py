@@ -301,3 +301,85 @@ async def fetch_confirmed_candidates(
             if record:
                 results.append(record)
     return results
+
+
+# The certified general's workbook, read for the certified-results sync
+# (live_results/certified.py). The same zip and "Statewide Candidates"
+# sheet as the primary's, published only once the State Canvassing Board
+# has certified (verified 2026-11-04 on 2024's: "2024 General Results
+# Summaries - OFFICIAL.xlsx", its title "Statewide Candidates Official
+# Summary / Wyoming General Election - November 5, 2024"). A general has no
+# party row: each candidate's party is the letter after the name ("John
+# Barrasso (R)"), and the race name sits on the row just above the names.
+# The workbook states no certification date, so the sync dates it by its
+# first read.
+_GENERAL_ZIP_URL_PATTERN = "https://sos.wyo.gov/Elections/Docs/{year}/Results/General/{year}_Wyoming_General_Results.zip"
+_GENERAL_TITLE_RE = re.compile(r"Official.*General\s+Election\s*-\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})", re.DOTALL)
+_PARTY_SUFFIX_RE = re.compile(r"\(([A-Z]{1,3})\)\s*$")
+_WRITE_IN_RE = re.compile(r"write.?in", re.IGNORECASE)
+
+
+def general_contests(rows: list[list[str]], election_day) -> list | None:
+    """The certified general's federal contests (ContestCount), or None when
+    the sheet isn't this election's official summary or its header and
+    Total rows can't be found exactly once."""
+    from app.pipeline.fetch.election_results import ContestCount
+
+    title = rows[0][1] if rows and len(rows[0]) > 1 else ""
+    found = _GENERAL_TITLE_RE.search(title)
+    if not found:
+        return None
+    try:
+        held = datetime.strptime(" ".join(found.group(1).split()), "%B %d, %Y").date()
+    except ValueError:
+        return None
+    if held != election_day:
+        return None
+    name_idx = next((i for i, r in enumerate(rows) if "Write-Ins" in r), None)
+    totals = [r for r in rows if r and r[0].strip().lower() == _TOTAL_ROW_LABEL]
+    if name_idx is None or name_idx < 1 or len(totals) != 1:
+        logger.warning("WY general workbook's header or Total row not found exactly once")
+        return None
+    race_row, name_row, total_row = rows[name_idx - 1], rows[name_idx], totals[0]
+    groups: dict[tuple[str, int | None], dict] = {}
+    race = ""
+    for i in range(1, max(len(race_row), len(name_row))):
+        race = race_row[i] if i < len(race_row) and race_row[i] else race
+        office = parse_office(race)
+        if office is None:
+            continue
+        name = " ".join((name_row[i] if i < len(name_row) else "").split())
+        votes = (total_row[i] if i < len(total_row) else "").strip()
+        if not name or not votes.isdigit():
+            continue
+        group = groups.setdefault(office, {"candidates": [], "write_ins": 0})
+        if _WRITE_IN_RE.search(name):
+            group["write_ins"] += int(votes)
+            continue
+        if _NON_CANDIDATE_RE.search(name):  # over- and undervotes are no one's
+            continue
+        letter = _PARTY_SUFFIX_RE.search(name)
+        party = normalize_party(letter.group(1), ballot_list=True) if letter else None
+        group["candidates"].append((_PARTY_SUFFIX_RE.sub("", name).strip(), party, int(votes)))
+    return [
+        ContestCount(office=office, district=district, candidates=g["candidates"],
+                     total_votes=sum(v for _, _, v in g["candidates"]) + g["write_ins"])
+        for (office, district), g in groups.items() if g["candidates"]
+    ]
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Wyoming's certified federal count for `election_day`'s general, or
+    None while the board has not certified it (no workbook at the URL)."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    url = _GENERAL_ZIP_URL_PATTERN.format(year=election_day.year)
+    zip_bytes = await fetch_bytes_with_retry(client, _rate_limiter, url, f"WY general results {election_day.year}")
+    if zip_bytes is None:
+        return None
+    rows = _find_summary_sheet_rows(zip_bytes)
+    contests = general_contests(rows, election_day) if rows else None
+    if not contests:
+        raise FeedUnreadable(f"WY general results {election_day.year} were not the official summary this reader reads")
+    return StateCount(source_name=source.get("source_name") or "Wyoming Secretary of State", page_url=url,
+                      official=True, unit_label="counties", contests=contests)
