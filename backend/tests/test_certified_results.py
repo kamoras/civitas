@@ -348,3 +348,17 @@ class TestKansasReader:
         assert sorted(contests) == [("H", n) for n in range(1, 5)]  # the President's and Kansas Senate rows are no seat here
         assert contests[("H", 2)].candidates == [
             ("Derek Schmidt", "R", 172_847), ("Nancy Boyda", "D", 115_685), ("John Hauer", "L", 14_229)]
+
+
+class TestVermontLiveReader:
+    def test_sums_each_candidate_over_the_towns(self):
+        from app.pipeline.fetch.state_candidates_vt import general_contests
+
+        (house,) = general_contests(_fixture("vt_2026_general_report.json")["report"])
+        assert (house.office, house.district) == ("H", None)
+        votes = {name: (party, v) for name, party, v in house.candidates}
+        assert votes["BECCA BALINT"] == ("D", 398 + 731)
+        assert votes["GERALD MALLOY"] == ("R", 434 + 390)
+        # "OTHER WRITE-IN" (cid 0) is in the contest's total and is no one's.
+        assert "OTHER WRITE-IN" not in votes
+        assert house.total_votes == sum(v for _, v in votes.values()) + 1 + 2

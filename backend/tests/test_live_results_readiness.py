@@ -150,6 +150,7 @@ class TestPollClose:
         "WV": (0, 30),  # 7:30 PM Eastern
         "RI": (1, 0),  # 8 PM Eastern
         "IN": (0, 0),  # 6 PM Central (Indiana's west; the east closes 6 PM Eastern)
+        "VT": (0, 0),  # 7 PM Eastern
         "AR": (1, 30),  # 7:30 PM Central
         "IA": (2, 0), "NE": (2, 0),  # 8 PM Central (Nebraska's west: 7 PM Mountain)
         "CO": (2, 0), "NM": (2, 0), "SD": (2, 0),  # 7 PM Mountain (South Dakota's west)

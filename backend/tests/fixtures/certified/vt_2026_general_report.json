@@ -1,0 +1,158 @@
+{
+"_source": "Vermont Secretary of State, election results portal, 2026 general's federal report (elections/68d61e96-...-f-20261103211104.json) read 2026-11-04 on election night: the House contest's first two towns, kept for the report's shape",
+"report": {
+"d": [
+{
+"pid": 0,
+"pn": null,
+"o": [
+{
+"on": "REPRESENTATIVE TO CONGRESS",
+"cs": [
+{
+"tn": "ALBURGH",
+"rc": [
+{
+"cid": 213272,
+"cn": "PHOENIX K. ALTAIR",
+"vc": 5,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 225757,
+"cn": "BECCA BALINT",
+"vc": 398,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "DEMOCRATIC",
+"pco": "007ABC"
+},
+{
+"cid": 225758,
+"cn": "GERALD MALLOY",
+"vc": 434,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "REPUBLICAN",
+"pco": "ff2c2c"
+},
+{
+"cid": 210400,
+"cn": "ADAM ORTIZ",
+"vc": 6,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 213017,
+"cn": "SUZANNE \"SUZ\" SEYMOUR",
+"vc": 35,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 213140,
+"cn": "RYAN P. WALTON",
+"vc": 6,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+}
+],
+"wc": [
+{
+"cid": 0,
+"cn": "OTHER WRITE-IN",
+"vc": 1,
+"isWriteIn": false,
+"isWinner": false,
+"pn": null,
+"pco": null
+}
+]
+},
+{
+"tn": "ARLINGTON",
+"rc": [
+{
+"cid": 213272,
+"cn": "PHOENIX K. ALTAIR",
+"vc": 7,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 225757,
+"cn": "BECCA BALINT",
+"vc": 731,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "DEMOCRATIC",
+"pco": "007ABC"
+},
+{
+"cid": 225758,
+"cn": "GERALD MALLOY",
+"vc": 390,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "REPUBLICAN",
+"pco": "ff2c2c"
+},
+{
+"cid": 210400,
+"cn": "ADAM ORTIZ",
+"vc": 11,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 213017,
+"cn": "SUZANNE \"SUZ\" SEYMOUR",
+"vc": 17,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+},
+{
+"cid": 213140,
+"cn": "RYAN P. WALTON",
+"vc": 17,
+"isWriteIn": false,
+"isWinner": false,
+"pn": "INDEPENDENT",
+"pco": "ccc1d9"
+}
+],
+"wc": [
+{
+"cid": 0,
+"cn": "OTHER WRITE-IN",
+"vc": 2,
+"isWriteIn": false,
+"isWinner": false,
+"pn": null,
+"pco": null
+}
+]
+}
+]
+}
+]
+}
+]
+}
+}

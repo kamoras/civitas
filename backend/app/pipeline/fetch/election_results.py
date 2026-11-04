@@ -283,6 +283,7 @@ def _readers() -> dict:
         state_candidates_in,
         state_candidates_tally_enr,
         state_candidates_totalvote,
+        state_candidates_vt,
     )
 
     return {
@@ -291,6 +292,7 @@ def _readers() -> dict:
         "tally_enr": state_candidates_tally_enr.fetch_general_results,
         "totalvote_enr": state_candidates_totalvote.fetch_general_results,
         "enhanced_voting": state_candidates_enhanced_voting.fetch_general_results,
+        "vt_enr": state_candidates_vt.fetch_general_results,
     }
 
 
