@@ -7,6 +7,7 @@
     {"publisher": "Clerk of the House", "takes": "House roll call votes, the member list and party leadership", "hosts": ["clerk.house.gov"]},
     {"publisher": "Clerk of the House, financial disclosures", "takes": "House members' stock trade reports and annual financial disclosures", "hosts": ["disclosures-clerk.house.gov"]},
     {"publisher": "GovInfo (Government Publishing Office)", "takes": "Bill text and the Congressional Record", "hosts": ["api.govinfo.gov", "www.govinfo.gov"]},
+    {"publisher": "North Carolina State Board of Elections", "takes": "The list of each election's certified results, linking the certified results by contest", "hosts": ["www.ncsbe.gov"]},
     {"publisher": "California Secretary of State", "takes": "The certified Statement of Vote for each general election, and the Secretary's certificate dating it", "hosts": ["www.sos.ca.gov"]},
     {"publisher": "Federal Election Commission", "takes": "Campaign finance filings, candidates and the federal election calendar", "hosts": ["api.open.fec.gov", "www.fec.gov"]},
     {"publisher": "Federal Register", "takes": "Rules, notices, executive orders and the list of agencies", "hosts": ["www.federalregister.gov"]},
