@@ -151,7 +151,7 @@ class TestPollClose:
         "RI": (1, 0),  # 8 PM Eastern
         "AR": (1, 30),  # 7:30 PM Central
         "IA": (2, 0), "NE": (2, 0),  # 8 PM Central (Nebraska's west: 7 PM Mountain)
-        "CO": (2, 0), "NM": (2, 0),  # 7 PM Mountain
+        "CO": (2, 0), "NM": (2, 0), "SD": (2, 0),  # 7 PM Mountain (South Dakota's west)
         "MT": (3, 0), "UT": (3, 0),  # 8 PM Mountain
         "ND": (4, 0),  # latest statutory close, 9 PM Mountain
         "ID": (4, 0), "WA": (4, 0),  # 8 PM Pacific (northern Idaho)

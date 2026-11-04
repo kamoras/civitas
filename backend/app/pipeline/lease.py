@@ -55,6 +55,8 @@ COVERAGE_REFRESH = "coverage-refresh-lock"
 CONGRESS_SYNC = "congress-sync-lock"
 NOMINATIONS_SYNC = "nominations-sync-lock"
 RESULTS_SYNC = "results-sync-lock"
+# The daily read of each state's certified count (live_results/certified.py).
+CERTIFIED_SYNC = "certified-sync-lock"
 # The weekly agency list and budget sync (fetch/agencies.py).
 AGENCY_SYNC = "agency-sync-lock"
 # /data/district_pvi.json's writers, and every House run: a House run holds
@@ -81,6 +83,7 @@ TIERS = {
     CONGRESS_SYNC: "Congress record sync",
     NOMINATIONS_SYNC: "Nominations sync",
     RESULTS_SYNC: "Live results sync",
+    CERTIFIED_SYNC: "Certified results sync",
     AGENCY_SYNC: "Agency sync",
     DISTRICT_LINES: "House run or district PVI refresh",
     DATA_REFRESH: "Data file refresh",
@@ -148,6 +151,8 @@ HUNG_AFTER = {
     # A pass is a few requests per covered state; one still going after
     # half an hour has hung, and the next five-minute tick should proceed.
     RESULTS_SYNC: timedelta(minutes=30),
+    # One read per state with a certified reader, a few minutes at most.
+    CERTIFIED_SYNC: timedelta(hours=1),
     # About 115 requests, a few minutes; an hour means it has hung.
     AGENCY_SYNC: timedelta(hours=1),
     # Held for a whole House run, whose run lock goes stale at this too.

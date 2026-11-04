@@ -11,6 +11,7 @@ nothing here is written by a model, and no race is called.
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
@@ -20,7 +21,8 @@ from app.api.election_map import csv_text, leans_max, state_marks
 from app.api.elections import phase_cache_s
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
-from app.election_phase import active_election
+from app.election_phase import active_election, election_today
+from app.live_results.certified import certifications_for
 from app.forecast import accountability
 from app.models import ElectionArchive
 
@@ -42,6 +44,17 @@ def _iso(dt) -> str | None:
     return dt.isoformat(timespec="seconds") + "Z" if dt else None
 
 
+def _with_certifications(db: Session, row: ElectionArchive) -> dict:
+    """The frozen record with each race's certification beside it.
+    Certification comes after the count the record froze, often after the
+    results window closed, so it is read here, never written into it."""
+    record = json.loads(row.record_json)
+    certified = certifications_for(db, date.fromisoformat(row.election_day), election_today())
+    for race in record["races"]:
+        race["certification"] = certified.get(race["id"])
+    return record
+
+
 def _counts(record: dict) -> dict:
     results = [r["result"] for r in record["races"] if r["result"]]
     return {
@@ -57,6 +70,9 @@ def _counts(record: dict) -> dict:
             for c in (s.get("stateContests") for s in record["states"]) if c
         ),
         "states": len(record["states"]),
+        # Shown as won: certified with no runoff or recount left, or the
+        # member sworn in (_with_certifications).
+        "certifiedWinners": sum(1 for r in record["races"] if (r.get("certification") or {}).get("winner")),
     }
 
 
@@ -80,7 +96,7 @@ def archive_index(db: Session = Depends(get_db)):
                 json.loads(row.map_json), json.loads(row.record_json))) if row.map_json else None),
             # Still being copied: the site is on this election's count.
             "stillCounting": election.cycle == row.cycle and election.shows_results,
-            **_counts(json.loads(row.record_json)),
+            **_counts(_with_certifications(db, row)),
         })
     return cached_json({
         "cycles": cycles,
@@ -97,7 +113,7 @@ def archive_record(cycle: int = CYCLE, db: Session = Depends(get_db)):
     measures, verbatim with their drafters."""
     row = _row(db, cycle)
     election = active_election(db)
-    record = json.loads(row.record_json)
+    record = _with_certifications(db, row)
     return cached_json(dict(
         record,
         recordAsOf=_iso(row.record_as_of), mapAsOf=_iso(row.map_as_of), hasMap=row.map_json is not None,
