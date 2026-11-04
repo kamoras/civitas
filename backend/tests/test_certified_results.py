@@ -296,3 +296,17 @@ class TestNewJerseyReader:
         twelfth = contests[12]
         assert [n for n, _, _ in twelfth.candidates].count("VIC KAPLAN") == 1
         assert twelfth.total_votes == 321_660
+
+
+class TestCaliforniaReader:
+    def test_reads_the_2024_statement_of_vote_and_its_certificate(self):
+        from app.pipeline.fetch.state_candidates_ca_sov import certified_on, page_slug, workbook_contests
+
+        sov = _fixture("ca_2024_general_sov.json")
+        house = workbook_contests(sov["house"], "H", False)
+        assert [c.district for c in house] == [1, 2]
+        assert house[0].candidates == [("Rose Penelope Yee", "D", 110_636), ("Doug LaMalfa", "R", 208_592)]
+        senate = workbook_contests(sov["senate_full_term"], "S", False)
+        assert senate[0].candidates[0] == ("Adam B. Schiff", "D", 9_036_252) and not senate[0].is_special
+        assert certified_on(sov["certificate"]) == date(2024, 12, 13)
+        assert page_slug(date(2026, 11, 3)) == "general-election-nov-3-2026"
