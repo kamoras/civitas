@@ -1,0 +1,338 @@
+"""Certified results: each state's certified general-election count, read
+once a day from election day until the new Congress is sworn in, and what
+the page may say from it (app/recount_rules.outcome).
+
+Election night's count is only ever "leading" (sync.py). A race is shown as
+won only from here, and only once the state has certified it with no runoff
+owed and no recount still possible under the state's law. Nothing here is a
+call: the certified figures are the state's, copied, and the wording is a
+fixed template around them.
+
+Where no certified reader covers a state, the floor is the new Congress: on
+and after January 3 the member sworn in for the seat (record_sworn_in) is
+recorded with basis "sworn_in", once the roster has been read since the
+Congress convened, so a seat is never shown as taken by whoever held it
+before.
+"""
+
+import json
+import logging
+from datetime import date, datetime, timedelta
+
+import httpx
+from sqlalchemy.orm import Session
+
+from app.election_calendar import new_congress_day
+from app.models import (
+    ElectionResultEvent, HousePipelineRun, PipelineRun, PipelineStatus, Race, RaceCertification,
+    Representative, Senator,
+)
+from app.ops_alerts import send_ops_alert
+from app.pipeline.fetch.election_results import (
+    FeedUnreadable, UntrustedCount, certified_states, fetch_certified_count,
+)
+from app.recount_rules import CERTIFIED, Outcome, outcome
+from app.time_utils import utcnow
+
+logger = logging.getLogger(__name__)
+
+CERTIFIED_EVENT = "certified_winner"
+SWORN_IN = "sworn_in"
+
+# How long after January 3 the sworn-in floor keeps looking: the roster of
+# a Congress that convenes late (a House still electing its Speaker swears
+# no one in) is read again each day until then.
+SWORN_IN_WINDOW = timedelta(days=30)
+
+
+def certification_due(election_day: date, today: date) -> bool:
+    """From the day after the election until the sworn-in floor closes."""
+    return election_day < today <= new_congress_day(election_day) + SWORN_IN_WINDOW
+
+
+def outcome_for(cert: RaceCertification, today: date) -> Outcome | None:
+    """What the stored certification allows the page to say; None for a
+    sworn-in record (the seat is filled: there is nothing left to wait for)."""
+    if cert.basis != "certified" or not cert.certified_on:
+        return None
+    tallies = json.loads(cert.tallies or "[]")
+    return outcome(cert.state, cert.office, cert.district, [t["votes"] for t in tallies], cert.votes_counted or 0,
+                   date.fromisoformat(cert.election_date), date.fromisoformat(cert.certified_on), today)
+
+
+def certification_json(cert: RaceCertification | None, today: date) -> dict | None:
+    """The page's view of a race's certification (api/elections.py, the
+    archive). `winner` is set only when the race may be shown as won."""
+    if cert is None:
+        return None
+    tallies = json.loads(cert.tallies or "[]")
+    found = outcome_for(cert, today)
+    status = SWORN_IN if cert.basis == SWORN_IN else found.status
+    total = cert.votes_counted or 0
+    top = tallies[0] if tallies else None
+    return {
+        "basis": cert.basis,
+        "status": status,
+        "certifiedOn": cert.certified_on,
+        # False: the document states no date, and certifiedOn is the day
+        # Civitas first read it as certified.
+        "certifiedOnStated": bool(cert.certified_on_stated),
+        "recountUntil": found.until.isoformat() if found and found.until else None,
+        "statute": found.statute if found else None,
+        "sourceName": cert.source_name,
+        "sourceUrl": cert.source_url,
+        "votesCounted": cert.votes_counted,
+        "winner": ({"name": top["name"], "party": top.get("party"), "candidateId": top.get("candidateId")}
+                   if top and status in (CERTIFIED, SWORN_IN) else None),
+        "candidates": [
+            {"name": t["name"], "party": t.get("party"), "votes": t.get("votes"),
+             "pct": round(100 * t["votes"] / total, 1) if total and t.get("votes") is not None else None,
+             "candidateId": t.get("candidateId")}
+            for t in tallies
+        ],
+    }
+
+
+def _store(db: Session, race: Race, election_day: date, basis: str, certified_on: str | None,
+           source_name: str, source_url: str | None, tallies: list[dict], counted: int | None,
+           stated: bool = True) -> RaceCertification:
+    now = utcnow()
+    row = db.get(RaceCertification, race.id)
+    if not stated and row is not None and row.basis == "certified" and not row.certified_on_stated and row.certified_on:
+        certified_on = row.certified_on  # first read stays the date
+    if row is None:
+        row = RaceCertification(race_id=race.id, cycle=race.cycle_year, election_date=election_day.isoformat(),
+                                state=race.state, office=race.office, district=race.district, basis=basis,
+                                source_name=source_name, tallies="[]", changed_at=now)
+        db.add(row)
+        db.flush()  # found by the next db.get before a commit
+    figures = json.dumps(tallies)
+    if row.tallies != figures or row.votes_counted != counted or row.certified_on != certified_on:
+        row.changed_at = now
+    row.basis, row.certified_on, row.source_name, row.source_url = basis, certified_on, source_name, source_url
+    row.tallies, row.votes_counted, row.read_at = figures, counted, now
+    row.certified_on_stated = stated
+    return row
+
+
+def _announce(db: Session, row: RaceCertification, today: date) -> ElectionResultEvent | None:
+    """One event the first time a race may be shown as won (the live
+    updates feed words it from a template around these fields)."""
+    view = certification_json(row, today)
+    if not view or not view["winner"]:
+        return None
+    said = db.query(ElectionResultEvent.id).filter(
+        ElectionResultEvent.race_id == row.race_id, ElectionResultEvent.election_date == row.election_date,
+        ElectionResultEvent.kind == CERTIFIED_EVENT,
+    ).first()
+    if said:
+        return None
+    event = ElectionResultEvent(race_id=row.race_id, election_date=row.election_date, kind=CERTIFIED_EVENT,
+                                detail=json.dumps(view), created_at=utcnow())
+    db.add(event)
+    db.flush()
+    return event
+
+
+def post_certified(db: Session, events: list[ElectionResultEvent]) -> int:
+    """One post per Senate race the first time it may be shown as won: a
+    fixed template around the certified figures, never model text. House
+    winners stay on the site (435 of them would bury everything else)."""
+    from app import broadcast
+    from app.live_results.signals import party_letter, race_label
+    from app.state_names import STATE_NAMES
+
+    posted = 0
+    for event in events:
+        race = db.get(Race, event.race_id)
+        if race is None or race.office != "S":
+            continue
+        d = json.loads(event.detail or "{}")
+        winner = d.get("winner") or {}
+        if not winner.get("name") or not d.get("certifiedOn"):
+            continue
+        letter = party_letter(winner.get("party"))
+        on = date.fromisoformat(d["certifiedOn"])
+        when = f" on {on.strftime('%B')} {on.day}" if d.get("certifiedOnStated") else ""
+        text = (f"{race_label(race)}: {winner['name']}{f' ({letter})' if letter else ''} is the certified winner. "
+                f"{STATE_NAMES.get(race.state, race.state)} certified the count{when}, "
+                "and no runoff or recount is pending under state law.")
+        broadcast.publish(
+            db, kind="result", subject=f"result:{event.election_date}:{race.id}:{CERTIFIED_EVENT}",
+            title=f"{race_label(race)}: certified", text=text, url=f"{broadcast.SITE_URL}/elections/{race.id}",
+            state=race.state, source_url=d.get("sourceUrl"),
+        )
+        posted += 1
+    return posted
+
+
+def apply_certified(db: Session, state: str, election_day: date, count, today: date) -> dict:
+    """Store one state's certified count, race by race."""
+    from app.live_results.sync import _contest_race, _tallies, contest_is_sane
+
+    stored, events = 0, []
+    seen: dict[str, int] = {}
+    pairs = []
+    for contest in count.contests:
+        if not contest_is_sane(contest):
+            continue
+        race = _contest_race(db, election_day.year, state, contest)
+        if race is None:
+            continue
+        seen[race.id] = seen.get(race.id, 0) + 1
+        pairs.append((race, contest))
+    for race, contest in pairs:
+        if seen[race.id] > 1:
+            logger.warning("%s: %d certified contests map to %s; skipped", state, seen[race.id], race.id)
+            continue
+        tallies = [{k: t[k] for k in ("name", "party", "votes", "candidateId") if k in t}
+                   for t in _tallies(race, contest)]
+        stated = count.certified_on is not None
+        row = _store(db, race, election_day, "certified", (count.certified_on or today).isoformat(),
+                     count.source_name, count.page_url, tallies, contest.votes_counted, stated=stated)
+        stored += 1
+        if (event := _announce(db, row, today)) is not None:
+            events.append(event)
+    return {"status": "ok", "races": stored, "events": events,
+            "certifiedOn": count.certified_on.isoformat() if count.certified_on else None}
+
+
+def _alert_unread(state: str, election_day: date, today: date, reason: str) -> None:
+    send_ops_alert(
+        f"Certified results: {state} could not be read",
+        f"{reason}. Nothing was stored from it today; the certified count already on file (if any) stands, "
+        "and the sync reads the state's certified results again tomorrow.",
+        dedupe_key=f"certified-read-{state}-{today.isoformat()}", condition=f"certified-read-{state}",
+    )
+
+
+async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: date, today: date) -> dict:
+    """One pass over every state with a certified reader, then the
+    re-check of stored certifications whose recount window has since
+    closed, then the sworn-in floor."""
+    summary: dict[str, dict] = {}
+    announced: list[ElectionResultEvent] = []
+    for state in sorted(certified_states()):
+        try:
+            count = await fetch_certified_count(client, state, election_day)
+        except (FeedUnreadable, UntrustedCount) as exc:
+            summary[state] = {"status": "unavailable", "reason": str(exc)}
+            _alert_unread(state, election_day, today, str(exc))
+            continue
+        except Exception as exc:
+            logger.exception("Certified results read failed for %s", state)
+            summary[state] = {"status": "failed"}
+            _alert_unread(state, election_day, today, type(exc).__name__)
+            continue
+        if count is None:
+            summary[state] = {"status": "not_certified"}
+            continue
+        try:
+            outcome_ = apply_certified(db, state, election_day, count, today)
+            db.commit()
+            new = outcome_.pop("events")
+            outcome_["events"] = len(new)
+            summary[state] = outcome_
+            announced.extend(new)
+        except Exception:
+            db.rollback()
+            logger.exception("Storing certified results failed for %s", state)
+            summary[state] = {"status": "failed"}
+    # A race stored while a recount could still be asked for is announced
+    # the first pass after its window closes, whether or not its state's
+    # document was read again today.
+    rows = db.query(RaceCertification).filter(RaceCertification.election_date == election_day.isoformat(),
+                                              RaceCertification.basis == "certified").all()
+    late = [event for row in rows if (event := _announce(db, row, today)) is not None]
+    db.commit()
+    summary["_announced_after_recount_window"] = len(late)
+    try:
+        summary["_posts"] = post_certified(db, announced + late)
+    except Exception:
+        db.rollback()
+        logger.exception("Certified-winner posting failed")
+    if today >= new_congress_day(election_day):
+        summary["_sworn_in"] = record_sworn_in(db, election_day)
+        db.commit()
+    return summary
+
+
+def _roster_read_since(db: Session, model, since: datetime) -> bool:
+    return db.query(model.id).filter(
+        model.completed_at.isnot(None), model.completed_at >= since,
+        model.status.in_((PipelineStatus.COMPLETED, PipelineStatus.PARTIAL)),
+    ).first() is not None
+
+
+def _convened_at(election_day: date) -> datetime:
+    """Noon Eastern on January 3 (U.S. Const. amend. XX), as naive UTC:
+    17:00 UTC, Eastern being on standard time in January."""
+    day = new_congress_day(election_day)
+    return datetime(day.year, day.month, day.day, 17, 0)
+
+
+def record_sworn_in(db: Session, election_day: date) -> int:
+    """For each of the election's races with no certified winner on file,
+    the member now serving in the seat, where the roster has been read
+    since the new Congress convened and exactly one of the race's
+    candidates is that member. Returns how many were recorded."""
+    from app.live_results.sync import _filed_surnames, _surnames
+
+    convened = _convened_at(election_day)
+    house_read = _roster_read_since(db, HousePipelineRun, convened)
+    senate_read = _roster_read_since(db, PipelineRun, convened)
+    today = utcnow().date()
+    races = db.query(Race).filter(Race.cycle_year == election_day.year, Race.office.in_(("S", "H"))).all()
+    done = 0
+    for race in races:
+        existing = db.get(RaceCertification, race.id)
+        if existing is not None and (existing.basis == SWORN_IN or certification_json(existing, today)["winner"]):
+            continue
+        names = _filed_surnames(c.name for c in race.candidates if c.confirmed_general)
+        if not names:
+            continue
+        if race.office == "H":
+            if not house_read:
+                continue
+            members = db.query(Representative).filter(
+                Representative.state == race.state, Representative.district == (race.district or 0),
+                Representative.is_current.is_(True), Representative.sworn_date >= new_congress_day(election_day).isoformat(),
+            ).all()
+        else:
+            if not senate_read:
+                continue
+            members = db.query(Senator).filter(Senator.state == race.state, Senator.is_current.is_(True)).all()
+        hits = [m for m in members if _surnames([m.name]) & names]
+        if len(hits) != 1:
+            continue
+        member = hits[0]
+        party = {"D": "DEM", "R": "REP", "I": "IND"}.get(member.party, member.party)
+        _store(db, race, election_day, SWORN_IN, None, "Congress.gov member roster",
+               f"https://www.congress.gov/member/{member.bioguide_id}" if member.bioguide_id else None,
+               [{"name": member.name, "party": party, "votes": None, "candidateId": None}], None)
+        done += 1
+    return done
+
+
+def alert_uncovered(db: Session, election_day: date) -> list[str]:
+    """States with races but no certified reader: their winners are shown
+    only once the new Congress is sworn in. A fact, alerted once a cycle."""
+    with_races = {s for (s,) in db.query(Race.state).filter(Race.cycle_year == election_day.year,
+                                                           Race.office.in_(("S", "H"))).distinct()}
+    missing = sorted(with_races - certified_states())
+    if missing:
+        send_ops_alert(
+            f"Certified results: {len(missing)} states have no certified reader",
+            f"{', '.join(missing)}: their {election_day.year} winners are shown once the new Congress is sworn "
+            "in, from the member roster, and not at certification.",
+            dedupe_key=f"certified-uncovered-{election_day.isoformat()}-{','.join(missing)}",
+            condition="certified-uncovered",
+        )
+    return missing
+
+
+def certifications_for(db: Session, election_day: date, today: date) -> dict[str, dict]:
+    """{race id: certification_json} for every race of the election with a
+    certification on file."""
+    rows = db.query(RaceCertification).filter(RaceCertification.election_date == election_day.isoformat()).all()
+    return {row.race_id: certification_json(row, today) for row in rows}

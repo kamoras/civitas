@@ -1164,6 +1164,10 @@ RESET_KEEPS = frozenset({
     # specials.py): the calendar is re-read nightly, but a special's count
     # is read only inside its window, so wiped, it would be gone for good.
     "federal_election_dates",
+    # Each race's certified count (live_results/certified.py): read from
+    # the states after the results window may have closed, and never read
+    # again once the new Congress sits.
+    "race_certifications",
 })
 
 

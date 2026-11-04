@@ -19,6 +19,7 @@ import type { StatewideNominee } from "@/types/election";
 import type { ElectionMapResponse } from "@/types/electionMap";
 import type { MapAccountability as Accountability } from "@/types/mapAccountability";
 import { TYPE } from "@/lib/typeStyles";
+import CertificationLine from "@/components/elections/results/CertificationLine";
 
 /** Whose list a race's candidates are, in words (candidateSource, decided
  * by the backend when the record was copied). */
@@ -132,7 +133,17 @@ function StateContests({ contests }: { contests: ArchivedStateContests }) {
 
 function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord }) {
   const r = race.result;
-  const tag = r ? statusTag(r) : null;
+  const won = race.certification?.winner ? race.certification : null;
+  // A winner the state certified (or the member sworn in) outranks the
+  // count's own tag, which only ever says "leads".
+  const tag = won
+    ? {
+        text: won.status === "sworn_in" ? "Sworn in" : "Certified winner",
+        className: "border-white/40 text-ink-hi",
+      }
+    : r
+      ? statusTag(r)
+      : null;
   const source = r ? safeHref(r.sourceUrl) : undefined;
   return (
     <li
@@ -200,6 +211,7 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
       ) : (
         <p className="mt-2 text-small text-ink-min">{noCountText(race, record)}</p>
       )}
+      <CertificationLine certification={race.certification} state={race.state} />
       {race.candidates.length > 0 ? (
         <p className="mt-2 text-small text-ink-lo">
           <span className="font-mono text-small text-ink-min">On the ballot</span>{" "}

@@ -2344,6 +2344,29 @@ wrong number on election night is worse than none:
   bar gates only *raising* a flip: once said, a flip is undone only by the
   lead itself going back to the seat's party or tying (`lead_is_back`), never
   by the count dipping below the bar with the same challenger ahead.
+- **A winner is shown only once the state certifies, with no runoff or
+  recount left** (owner decision, 2026-11; `app/live_results/certified.py`,
+  `app/recount_rules.py`). A daily job (`scheduler._certified_results_sync`,
+  lease `CERTIFIED_SYNC`) reads each state's certified general-election
+  count from the day after the election to a month past January 3, through a
+  reader per strategy (`election_results._certified_readers`, a state's
+  `certified_results` block; Kentucky's State Board certification first),
+  into `RaceCertification`, kept apart from the frozen election-night count
+  and read beside the archive at serve time, never written into it. "Certified
+  winner" needs all of: the state's certified count; no runoff owed
+  (`election_rules.json`'s `generalRunoffs`); a margin outside the state's
+  automatic recount; and every recount a candidate may still ask for at that
+  margin past its deadline (`app/data/recount_rules.json`, cited per state
+  from NASS's summaries and the statutes). A margin inside an automatic
+  recount, or a request with no fixed deadline, waits for the new Congress.
+  Every simplification lengthens the wait, never shortens it: margins are
+  measured against every vote cast, a deadline anchored to a county canvass
+  is counted from the state's certification, and a document that states no
+  date is dated by its first read. Where no certified reader covers a state,
+  the floor is the member sworn in for the seat, recorded from January 3 once
+  the roster has been read since the Congress convened (`record_sworn_in`).
+  The wording is a fixed template (`certificationText`, `post_certified`;
+  Senate posts only).
 - "Civitas never calls a race" governs **election-night counts**: what a
   count says, and when. It is not a ban on describing an election before
   it. The pre-election map (below, `app/forecast/`) publishes a calibrated
@@ -2907,6 +2930,7 @@ the pending list).
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
 | The map's ranges against the official count, and the swing map (archive page, the hub's Archive card) | `backend/app/forecast/accountability.py`, `backend/app/api/election_archive.py` (`/{cycle}/accountability`, `/{cycle}/swing.csv`, `latest_check` for `api/sections.py`), `frontend/src/components/elections/archive/MapAccountability.tsx`, `frontend/src/lib/sectionPreviews.ts` (`elections.archive`) |
 | Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
+| Certified winners (certified readers, recount and runoff rule, sworn-in floor) | `backend/app/live_results/certified.py`, `backend/app/recount_rules.py`, `backend/app/data/recount_rules.json`, `backend/app/election_rules.py`, `frontend/src/components/elections/results/CertificationLine.tsx`, `certificationText` in `frontend/src/lib/results.ts` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
