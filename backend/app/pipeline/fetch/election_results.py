@@ -392,7 +392,9 @@ def _certified_readers() -> dict:
     election (its document isn't published, or still says unofficial).
     Raises FeedUnreadable when the source can't be read."""
     from app.pipeline.fetch import (
-        state_candidates_ca_sov, state_candidates_in, state_candidates_ks, state_candidates_ky, state_candidates_ma, state_candidates_nj, state_candidates_or, state_candidates_wy,
+        state_candidates_ca_sov, state_candidates_in, state_candidates_ks, state_candidates_ky,
+        state_candidates_ma, state_candidates_nc_certified, state_candidates_nj, state_candidates_or,
+        state_candidates_wy,
     )
 
     return {
@@ -402,6 +404,7 @@ def _certified_readers() -> dict:
         "ks_official_general": state_candidates_ks.fetch_certified_general,
         "ky_general_certification": state_candidates_ky.fetch_certified_general,
         "ma_pd43_general": state_candidates_ma.fetch_certified_general,
+        "nc_certified_general": state_candidates_nc_certified.fetch_certified_general,
         "nj_official_general": state_candidates_nj.fetch_certified_general,
         "or_general_abstract": state_candidates_or.fetch_certified_general,
         "wy_general_canvass": state_candidates_wy.fetch_certified_general,

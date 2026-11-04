@@ -510,3 +510,29 @@ class TestFetchPaths:
             assert (house.reporting_units, house.total_units) == (141, 247)
             assert count.source_version == f"{guid}:20261103211104" and not count.units_complete
             assert await vt.fetch_general_results(c, date(2024, 11, 5), "VT", {}) is None
+
+
+class TestNorthCarolinaReader:
+    def test_reads_the_2024_certified_results_and_dates_them_by_the_canvass(self):
+        from app.pipeline.fetch.state_candidates_nc_certified import certified_link, general_contests
+
+        fixture = _fixture("nc_2024_general_page.json")
+        contests = {c.district: c for c in general_contests([fixture["words"]])}
+        assert set(contests) >= set(range(1, 11))
+        first = contests[1]
+        assert ("Don Davis", "D", 186_341) in first.candidates
+        assert first.total_votes == 186_341 + 9_949 + 180_034
+        url, on = certified_link(fixture["link"], date(2024, 11, 5))
+        assert on == date(2024, 11, 26) and url.endswith(".pdf")
+        assert certified_link(fixture["link"], date(2026, 11, 3)) is None
+
+    async def test_fetch_path(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_nc_certified as nc
+
+        fixture = _fixture("nc_2024_general_page.json")
+        _fake_pdf(monkeypatch, nc, [_Page("", []), _Page("", fixture["words"])])
+        async with _client({"historical-election-results-data": (200, fixture["link"]),
+                            "State_Board_Meeting_Docs": (200, b"%PDF")}) as c:
+            count = await nc.fetch_certified_general(c, date(2024, 11, 5), "NC", {})
+            assert count.certified_on == date(2024, 11, 26) and count.contests
+            assert await nc.fetch_certified_general(c, date(2026, 11, 3), "NC", {}) is None
