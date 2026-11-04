@@ -310,3 +310,31 @@ class TestCaliforniaReader:
         assert senate[0].candidates[0] == ("Adam B. Schiff", "D", 9_036_252) and not senate[0].is_special
         assert certified_on(sov["certificate"]) == date(2024, 12, 13)
         assert page_slug(date(2026, 11, 3)) == "general-election-nov-3-2026"
+
+
+class TestIndianaReader:
+    async def test_the_count_is_read_live_and_certified_only_once_flagged(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_in as ind
+
+        races = _fixture("in_2026_general_races.json")["races"]
+        settings = {"CurrentElection": "11/03/2026", "ElectionType": "G", "Certified": "F",
+                    "VersionType": "A", "VersionCode": "20261103_210451"}
+        files = {
+            "settings.json": settings,
+            "statewideElectionsC_A.json": {"List": [{"Heading": "Federal", "Items": {"Item": [{"OFFICECATEGORYID": "1005"}]}}]},
+            "OffCatC_1005_A.json": {"StatewideSummary": {"Race": races}},
+        }
+
+        async def get(client, url, label):
+            return files[url.rsplit("/", 1)[-1]]
+
+        monkeypatch.setattr(ind, "_get_json", get)
+        live = await ind.fetch_general_results(None, DAY, "IN", {})
+        assert [(c.office, c.district) for c in live.contests] == [("H", 1), ("H", 2)]
+        assert live.contests[0].candidates[0] == ("Frank J. Mrvan", "D", 47_443)
+        assert live.official is False and live.source_version == "11/03/2026:20261103210451"
+        assert await ind.fetch_certified_general(None, DAY, "IN", {}) is None
+        settings["Certified"] = "T"
+        assert (await ind.fetch_certified_general(None, DAY, "IN", {})).official is True
+        # Another election on the site is not this one.
+        assert await ind.fetch_general_results(None, date(2024, 11, 5), "IN", {}) is None

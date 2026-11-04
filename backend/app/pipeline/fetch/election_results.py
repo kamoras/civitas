@@ -280,12 +280,14 @@ def _readers() -> dict:
     from app.pipeline.fetch import (
         state_candidates_clarity,
         state_candidates_enhanced_voting,
+        state_candidates_in,
         state_candidates_tally_enr,
         state_candidates_totalvote,
     )
 
     return {
         "clarity": state_candidates_clarity.fetch_general_results,
+        "in_enr": state_candidates_in.fetch_general_results,
         "tally_enr": state_candidates_tally_enr.fetch_general_results,
         "totalvote_enr": state_candidates_totalvote.fetch_general_results,
         "enhanced_voting": state_candidates_enhanced_voting.fetch_general_results,
@@ -388,12 +390,13 @@ def _certified_readers() -> dict:
     election (its document isn't published, or still says unofficial).
     Raises FeedUnreadable when the source can't be read."""
     from app.pipeline.fetch import (
-        state_candidates_ca_sov, state_candidates_ky, state_candidates_ma, state_candidates_nj, state_candidates_or, state_candidates_wy,
+        state_candidates_ca_sov, state_candidates_in, state_candidates_ky, state_candidates_ma, state_candidates_nj, state_candidates_or, state_candidates_wy,
     )
 
     return {
         "ca_statement_of_vote": state_candidates_ca_sov.fetch_certified_general,
         "enhanced_voting_official": _enhanced_voting_official,
+        "in_enr_certified": state_candidates_in.fetch_certified_general,
         "ky_general_certification": state_candidates_ky.fetch_certified_general,
         "ma_pd43_general": state_candidates_ma.fetch_certified_general,
         "nj_official_general": state_candidates_nj.fetch_certified_general,

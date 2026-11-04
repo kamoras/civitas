@@ -189,3 +189,74 @@ async def fetch_confirmed_candidates(
         return None
 
     return results
+
+
+# ── The general's count, live and certified ──────────────────────────
+#
+# The same three files serve the general on election night (verified
+# 2026-11-03: settings.json read CurrentElection "11/03/2026", ElectionType
+# "G", Certified "F", with House counts already in). One read gives both:
+# the live sync (live_results/sync.py) takes the count as it stands, and
+# the certified-results sync takes it only once Certified is "T", the
+# state's own flag. The races carry no reporting figure, so the live page
+# words them that way and a change of party waits for the flag. A count
+# for any other election, or one that isn't a general, is not this one.
+def _general_contests(races: list[dict], office: str | None = None) -> list:
+    from app.pipeline.fetch.election_results import ContestCount
+
+    contests = []
+    for race in races:
+        found = _office_and_district(race.get("OFFICE_TITLE", ""), race.get("SubSortOrder", ""))
+        if found is None or (office and found[0] != office):
+            continue
+        candidates = [
+            (" ".join((c.get("NAME_ON_BALLOT") or c.get("CandidateName") or "").split()),
+             normalize_party(c.get("PARTY", ""), ballot_list=True), c["TOTAL"])
+            for c in _candidates(race) if isinstance(c.get("TOTAL"), int)
+        ]
+        if candidates:
+            contests.append(ContestCount(office=found[0], district=found[1], candidates=candidates,
+                                         total_votes=sum(v for _, _, v in candidates)))
+    return contests
+
+
+async def fetch_general_results(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Indiana's count for `election_day`'s general (StateCount), or None
+    when the site's current election is another one."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    settings = await _get_json(client, f"{BASE}/data/settings.json", "IN settings")
+    if settings is None:
+        raise FeedUnreadable("IN settings could not be read")
+    if settings.get("CurrentElection") != election_day.strftime("%m/%d/%Y") or settings.get("ElectionType") != "G":
+        return None
+    version = settings.get("VersionType")
+    manifest = await _get_json(client, f"{BASE}/data/statewideElectionsC_{version}.json", "IN office manifest") \
+        if version else None
+    if manifest is None:
+        raise FeedUnreadable("IN office manifest could not be read")
+    contests = []
+    for heading in manifest.get("List", []):
+        if heading.get("Heading") != "Federal":
+            continue
+        items = (heading.get("Items") or {}).get("Item", [])
+        for item in items if isinstance(items, list) else [items]:
+            data = await _get_json(client, f"{BASE}/data/OffCatC_{item.get('OFFICECATEGORYID')}_{version}.json",
+                                   "IN federal races")
+            if data is None:
+                raise FeedUnreadable("IN federal races could not be read")
+            races = (data.get("StatewideSummary") or {}).get("Race", [])
+            contests.extend(_general_contests(races if isinstance(races, list) else [races]))
+    code = re.sub(r"\D", "", str(settings.get("VersionCode") or ""))
+    return StateCount(
+        source_name=source.get("source_name") or "Indiana Election Night Reporting",
+        page_url="https://enr.indianavoters.in.gov/", official=settings.get("Certified") == "T",
+        unit_label="counties", contests=contests,
+        source_version=f"{settings['CurrentElection']}:{code}" if code else None,
+    )
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """The general's count once Indiana has certified it (Certified "T")."""
+    count = await fetch_general_results(client, election_day, state, source)
+    return count if count is not None and count.official else None
