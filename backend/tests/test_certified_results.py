@@ -362,3 +362,151 @@ class TestVermontLiveReader:
         # "OTHER WRITE-IN" (cid 0) is in the contest's total and is no one's.
         assert "OTHER WRITE-IN" not in votes
         assert house.total_votes == sum(v for _, v in votes.values()) + 1 + 2
+
+
+# Each reader's fetch path, end to end against a mocked transport: what it
+# asks for, "not published yet" as None, and the fixture's document read.
+import httpx  # noqa: E402
+
+
+def _client(routes: dict):
+    """An httpx client answering each URL substring in `routes` with
+    (status, body); anything else is a 404."""
+    def handler(request):
+        for needle, (status, body) in routes.items():
+            if needle in str(request.url):
+                content = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body))
+                return httpx.Response(status, content=content)
+        return httpx.Response(404, content=b"")
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+class _Page:
+    def __init__(self, text="", words=None):
+        self._text, self._words = text, words or []
+
+    def extract_text(self):
+        return self._text
+
+    def extract_words(self):
+        return self._words
+
+
+class _Pdf:
+    def __init__(self, pages):
+        self.pages = pages
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _fake_pdf(monkeypatch, module, pages):
+    monkeypatch.setattr(module.pdfplumber, "open", lambda *_a, **_k: _Pdf(pages))
+
+
+class TestFetchPaths:
+    async def test_wyoming(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_wy as wy
+
+        rows = _fixture("wy_2024_general_rows.json")["rows"]
+        monkeypatch.setattr(wy, "_find_summary_sheet_rows", lambda _b: rows)
+        async with _client({"2024_Wyoming_General_Results.zip": (200, b"zip")}) as c:
+            count = await wy.fetch_certified_general(c, date(2024, 11, 5), "WY", {})
+            assert [x.office for x in count.contests] == ["S", "H"] and count.official
+        async with _client({}) as c:  # not published yet
+            assert await wy.fetch_certified_general(c, date(2024, 11, 5), "WY", {}) is None
+
+    async def test_kansas(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_ks as ks
+
+        listing = ('<a href="24elec/2024-General-Election-Official-Vote-Totals.pdf" '
+                   'title="Click to open the 2024 General Election Official results in a new window">')
+        _fake_pdf(monkeypatch, ks, [_Page("\n".join(_fixture("ks_2024_general_lines.json")["lines"]))])
+        async with _client({"election-results.html": (200, listing), ".pdf": (200, b"%PDF")}) as c:
+            count = await ks.fetch_certified_general(c, date(2024, 11, 5), "KS", {})
+            assert len(count.contests) == 4
+            assert await ks.fetch_certified_general(c, date(2026, 11, 3), "KS", {}) is None
+
+    async def test_massachusetts(self):
+        from app.pipeline.fetch import state_candidates_ma as ma
+
+        pages = _fixture("ma_2024_general_pages.json")
+        routes = {
+            "office_id:6": (200, '<a href="/elections/view/1/">'),
+            "office_id:5": (200, '<a href="/elections/view/2/">'),
+            "/elections/view/1/": (200, pages["senate"]),
+            "/elections/view/2/": (200, pages["house_8"]),
+        }
+        async with _client(routes) as c:
+            count = await ma.fetch_certified_general(c, date(2024, 11, 5), "MA", {})
+            assert sorted((x.office, x.district) for x in count.contests) == [("H", 8), ("S", None)]
+        async with _client({"office_id": (200, "no races yet")}) as c:
+            assert await ma.fetch_certified_general(c, date(2026, 11, 3), "MA", {}) is None
+
+    async def test_new_jersey(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_nj as nj
+
+        words = _fixture("nj_2024_general_house_pages.json")["pages"]
+        _fake_pdf(monkeypatch, nj, [_Page("Official List", w) for w in words])
+        page = 'href="assets/pdf/election-results/2024/2024-official-general-results-us-house.pdf"'
+        async with _client({"election-information-2024": (200, page), ".pdf": (200, b"%PDF")}) as c:
+            count = await nj.fetch_certified_general(c, date(2024, 11, 5), "NJ", {})
+            assert {x.district for x in count.contests} >= {1, 12}
+        # 2026's page links the lists before they exist: a 404 is "not yet".
+        page26 = page.replace("2024", "2026")
+        async with _client({"election-information-2026": (200, page26)}) as c:
+            assert await nj.fetch_certified_general(c, date(2026, 11, 3), "NJ", {}) is None
+
+    async def test_oregon(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_or as orr
+
+        fixture = _fixture("or_2024_general_pages.json")["pages"]
+        _fake_pdf(monkeypatch, orr, [_Page(p["text"], [w for line in p["lines"] for w in line]) for p in fixture])
+        row = {"value": [{"Election_x0020_Date": "2024-11-05T06:00:00Z",
+                          "Results": '<a href="https&#58;//x/RecordViewer.aspx?uri=13735458">Official Results of November General</a>'}]}
+        async with _client({"_api/web/lists": (200, row), "DocumentStream": (200, b"%PDF")}) as c:
+            count = await orr.fetch_certified_general(c, date(2024, 11, 5), "OR", {})
+            assert len(count.contests) == 6
+            assert await orr.fetch_certified_general(c, date(2026, 11, 3), "OR", {}) is None
+
+    async def test_california(self, monkeypatch):
+        from app.pipeline.fetch import state_candidates_ca_sov as ca
+
+        sov = _fixture("ca_2024_general_sov.json")
+        books = {"25-us-rep-congress.xlsx": sov["house"], "19-uss-ft.xlsx": sov["senate_full_term"]}
+        _fake_pdf(monkeypatch, ca, [_Page(sov["certificate"])])
+        monkeypatch.setattr(ca, "xlsx_sheet_rows", lambda content: books[content.decode()])
+        page = ('<a href="https://e/sov/2024-general/sov/15-sov-certificate.pdf">'
+                '<a href="https://e/sov/2024-general/sov/25-us-rep-congress.xlsx">'
+                '<a href="https://e/sov/2024-general/sov/19-uss-ft.xlsx">')
+        routes = {"general-election-nov-5-2024": (200, page), "certificate.pdf": (200, b"%PDF"),
+                  "25-us-rep-congress.xlsx": (200, b"25-us-rep-congress.xlsx"),
+                  "19-uss-ft.xlsx": (200, b"19-uss-ft.xlsx")}
+        async with _client(routes) as c:
+            count = await ca.fetch_certified_general(c, date(2024, 11, 5), "CA", {})
+            assert count.certified_on == date(2024, 12, 13) and len(count.contests) == 3
+            assert await ca.fetch_certified_general(c, date(2026, 11, 3), "CA", {}) is None  # no page yet
+
+    async def test_vermont(self):
+        from app.pipeline.fetch import state_candidates_vt as vt
+
+        guid = "g-1"
+        routes = {
+            "elections/elections.json": (200, [{"isStateWideElection": True, "electionTypeCode": "G",
+                                               "electionYear": 2026, "electionGuid": guid}]),
+            f"elections/{guid}.json": (200, {
+                "electionDetails": {"electionDate": "2026-11-03T00:00:00", "electionTypeCode": "G",
+                                    "isOfficial": False},
+                "federal": {"isEnable": True, "path": f"elections\\{guid}-f-20261103211104.json"},
+                "townsReporting": "141/247"}),
+            f"{guid}-f-": (200, _fixture("vt_2026_general_report.json")["report"]),
+        }
+        async with _client(routes) as c:
+            count = await vt.fetch_general_results(c, DAY, "VT", {})
+            (house,) = count.contests
+            assert (house.reporting_units, house.total_units) == (141, 247)
+            assert count.source_version == f"{guid}:20261103211104" and not count.units_complete
+            assert await vt.fetch_general_results(c, date(2024, 11, 5), "VT", {}) is None
