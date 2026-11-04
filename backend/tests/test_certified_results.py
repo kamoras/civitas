@@ -282,3 +282,17 @@ class TestEnhancedVotingOfficial:
         assert await er._enhanced_voting_official(None, DAY, "RI", {}) is None
         counts.append(StateCount(source_name="RI", page_url=None, official=True))
         assert (await er._enhanced_voting_official(None, DAY, "RI", {})).official is True
+
+
+class TestNewJerseyReader:
+    def test_reads_the_2024_official_list_across_a_page_break(self):
+        from app.pipeline.fetch.state_candidates_nj import general_contests
+
+        contests = {c.district: c for c in general_contests(_fixture("nj_2024_general_house_pages.json")["pages"])}
+        assert contests[1].candidates[0] == ("DONALD NORCROSS", "D", 208_808)
+        assert contests[1].total_votes == 361_060  # the district's own Total line
+        # The 12th's last candidate is printed again on the next page; the
+        # Total after that is the district's, not a second one for him.
+        twelfth = contests[12]
+        assert [n for n, _, _ in twelfth.candidates].count("VIC KAPLAN") == 1
+        assert twelfth.total_votes == 321_660
