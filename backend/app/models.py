@@ -1211,6 +1211,14 @@ class RaceResult(Base):
     # clock (COUNTY_FLIP_SETTLE) before the sync has said anything. NULL
     # (never announced) reads as False.
     flip_announced: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Whether a projection is announced for this count as it stands: set by
+    # apply_count when it raises PROJECTED, cleared when it raises
+    # PROJECTION_WITHDRAWN (sync.projection_holds). NULL reads as False.
+    projected: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # When the race became settled: projected, or a certified winner, with
+    # no runoff or recount pending (certified.refresh_settled). NULL while
+    # it is not. What ends the results window early (election_phase).
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # The source's own update time and version for the count stored here;
     # a later read claiming an OLDER one is a rolled-back feed and refused.
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

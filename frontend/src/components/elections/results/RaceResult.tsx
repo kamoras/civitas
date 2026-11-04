@@ -58,6 +58,13 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
       text: r.official ? "Tied · Official count" : `Tied · ${NOT_FINAL}`,
       className: "border-white/40 text-ink-hi",
     };
+  // Projected (backend sync.projection_holds): never "won"; the state's
+  // certification, shown under the count, is what says that.
+  if (r.projected && !r.certification?.winner)
+    return {
+      text: flipShown(r) ? "Flip · Projected · Not certified" : "Projected · Not certified",
+      className: flipShown(r) ? "border-signal-amber/60 text-signal-amber" : "border-phos/60 text-phos",
+    };
   if (flipShown(r))
     return {
       text: r.official ? "Flip · Official count" : `Flip · Leading · ${NOT_FINAL}`,
@@ -174,9 +181,11 @@ export function RaceResultCard({
               ? result.official
                 ? "Tied in the count the state lists as official; not called."
                 : "Tied, not called. The count is not final."
-              : result.official
-                ? "Leads in the count the state lists as official; not called."
-                : "Leading, not called. The count is not final.",
+              : result.projected
+                ? "Projected to be elected: every reporting unit is in and the lead is wide. Not certified."
+                : result.official
+                  ? "Leads in the count the state lists as official; not called."
+                  : "Leading, not called. The count is not final.",
           // Who held the seat, whether or not the count is official: an
           // official count's change of party is still one.
           result.votesCounted && flipShown(result)

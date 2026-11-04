@@ -151,3 +151,29 @@ def outcome(state: str, office: str, district: int | None, votes: list[int], tot
     if last is not None and today <= last:
         return Outcome(RECOUNT_POSSIBLE, until=last, statute=statute)
     return Outcome(CERTIFIED, statute=statute)
+
+
+def close_enough_to_contest(state: str, office: str, district: int | None, votes: list[int], total: int,
+                            cycle: int) -> bool:
+    """Whether a count's margin is one the state's law treats as close:
+    a runoff owed, an automatic recount, or a recount a candidate may ask
+    for only at a margin this narrow. A recount any candidate may ask for
+    at any margin (no `within`) says nothing about this count. A state with
+    no rule on file counts as close, so nothing is projected there.
+    Read by the projection rule (live_results/sync.py); never a call."""
+    votes = sorted(votes, reverse=True)
+    if not votes or total <= 0 or votes[0] <= 0:
+        return True
+    if _runoff_owed(state, cycle, office, district, 100.0 * votes[0] / total):
+        return True
+    rule = rule_for(state)
+    if rule is None:
+        return True
+    margin_votes = votes[0] - (votes[1] if len(votes) > 1 else 0)
+    if margin_votes <= 0:
+        return True
+    margin_pct = 100.0 * margin_votes / total
+    if rule.get("automatic") and _within(rule["automatic"], margin_pct, margin_votes):
+        return True
+    return any(spec.get("within") and _within(spec, margin_pct, margin_votes)
+               for spec in rule.get("requested") or [])

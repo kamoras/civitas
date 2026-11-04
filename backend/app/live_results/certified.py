@@ -31,7 +31,7 @@ from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
     FeedUnreadable, UntrustedCount, certified_states, fetch_certified_count,
 )
-from app.recount_rules import CERTIFIED, Outcome, outcome
+from app.recount_rules import CERTIFIED, RECOUNT, RUNOFF, Outcome, close_enough_to_contest, outcome
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -269,6 +269,8 @@ async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: d
     if today >= new_congress_day(election_day):
         summary["_sworn_in"] = record_sworn_in(db, election_day)
         db.commit()
+    summary["_unsettled"] = refresh_settled(db, election_day, today)
+    db.commit()
     return summary
 
 
@@ -403,3 +405,51 @@ def certifications_for(db: Session, election_day: date, today: date) -> dict[str
     certification on file."""
     rows = db.query(RaceCertification).filter(RaceCertification.election_date == election_day.isoformat()).all()
     return {row.race_id: certification_json(row, today) for row in rows}
+
+
+def race_is_settled(result: RaceResult, cert: RaceCertification | None, today: date) -> bool:
+    """Nothing left to decide: a certified winner (or the member sworn in),
+    or a projection (sync.projection_holds) the certified count, where
+    read, hasn't sent to a runoff, a recount or the margin a recount request
+    is tied to. A projected race whose state lets any candidate ask for a
+    recount at any margin is settled: a margin past every runoff and
+    margin-tied recount is not what such a recount reverses."""
+    if cert is not None:
+        status = SWORN_IN if cert.basis == SWORN_IN else outcome_for(cert, today).status
+        if status in (CERTIFIED, SWORN_IN):
+            return True
+        if status in (RUNOFF, RECOUNT):
+            return False
+        # A recount that may still be asked for: settled only where the
+        # certified count still clears the projection's margin, and the
+        # margin is not one the law ties a recount to.
+        from app.live_results.sync import PROJECTION_MIN_MARGIN
+
+        tallies = json.loads(cert.tallies or "[]")
+        votes = sorted((t["votes"] for t in tallies), reverse=True)
+        counted = cert.votes_counted or 0
+        lead = (votes[0] - (votes[1] if len(votes) > 1 else 0)) / counted if votes and counted else 0.0
+        if lead < PROJECTION_MIN_MARGIN or close_enough_to_contest(cert.state, cert.office, cert.district, [t["votes"] for t in tallies],
+                                   cert.votes_counted or 0, int(cert.election_date[:4])):
+            return False
+    return bool(result.projected)
+
+
+def refresh_settled(db: Session, election_day: date, today: date) -> int:
+    """Stamp each race's settled_at (RaceResult): when it first became
+    settled, cleared when it no longer is (a withdrawn projection, a
+    certified count inside a recount). Run after every live and certified
+    pass; election_phase ends the results window from it. Returns how many
+    races are unsettled."""
+    day = election_day.isoformat()
+    certs = {c.race_id: c for c in db.query(RaceCertification).filter(RaceCertification.election_date == day)}
+    open_races = 0
+    now = utcnow()
+    for result in db.query(RaceResult).filter(RaceResult.election_date == day):
+        if race_is_settled(result, certs.get(result.race_id), today):
+            if result.settled_at is None:
+                result.settled_at = now
+        else:
+            result.settled_at = None
+            open_races += 1
+    return open_races

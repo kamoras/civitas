@@ -546,6 +546,20 @@ describe("labels", () => {
 });
 
 describe("describeUpdate", () => {
+  it("words a projection as projected, never won, and its withdrawal as not final", () => {
+    const projected = describeUpdate(event("projected", { marginFloor: 10 }));
+    expect(projected.tag).toBe("Projected");
+    expect(projected.text).toMatch(/^Ray Jones \(R\) is projected to be elected\./);
+    expect(projected.text).toContain("the lead is at least 10 points");
+    expect(projected.text).toMatch(/Not certified\.$/);
+    expect(projected.text).not.toMatch(/win/i);
+    const withdrawn = describeUpdate(
+      event("projection_withdrawn", { previouslyProjected: { name: "Ray Jones", party: "REP" } })
+    );
+    expect(withdrawn.text).toMatch(/^The projection for Ray Jones \(R\) is withdrawn\./);
+    expect(withdrawn.text).toMatch(/Not final\.$/);
+  });
+
   it("words a flip as a lead until the state calls it", () => {
     expect(describeUpdate(event("flip"))).toEqual({
       tag: "Flip",

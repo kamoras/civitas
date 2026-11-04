@@ -14,7 +14,8 @@ source's own numbers — first votes counted, a different candidate on top,
 every reporting unit in, the source marking its count official. None of
 them is a call: the page words each one from a template around the
 source's figures (the same "the page may only say what the count says"
-rule as RaceResult).
+rule as RaceResult). "Projected" (projection_holds) is the one step past
+a lead: a fixed rule on the same figures, worded as not certified.
 """
 
 import asyncio
@@ -70,6 +71,25 @@ ALL_REPORTING = "all_reporting"
 OFFICIAL = "official"
 FLIP = "flip"
 FLIP_REVERSED = "flip_reversed"
+PROJECTED = "projected"
+PROJECTION_WITHDRAWN = "projection_withdrawn"
+
+# A race is marked "projected" (owner decision, 2026-11) only once its
+# count is as complete as the source can say and the leader is far ahead
+# (projection_holds): every reporting unit the source counts FULLY in
+# (units_complete; a source counting a unit on its first batch, or giving
+# no unit figure, projects only on its official flag), PROJECTION_SETTLE
+# since the first votes, a lead of at least PROJECTION_MIN_MARGIN of every
+# vote counted, and no runoff or recount the state's law ties to a margin
+# that narrow (recount_rules.close_enough_to_contest). Editorial floors,
+# not calibrated values, and set to say less than a network's desk does:
+# no exit poll, no model of the ballots left, only the count. What follows
+# a fully reported count (mail ballots arriving by a state's deadline,
+# provisionals, cures) has not moved a ten-point margin to the other
+# candidate in any general this system has read; a projection is still
+# worded as one, never "wins", and the certified result supersedes it.
+PROJECTION_MIN_MARGIN = 0.10
+PROJECTION_SETTLE = timedelta(hours=6)
 
 # A seat is reported as changing party only once at least this share of
 # its reporting units is in (or the source calls its count official): the
@@ -335,6 +355,49 @@ def count_is_mostly_in(reporting: int | None, total: int | None, unit_label: str
     return reporting >= FLIP_MIN_REPORTING_SHARE * total
 
 
+def _margin_share(tallies: list[dict], counted: int) -> float:
+    """The leader's lead over the runner-up, as a share of every vote
+    counted (write-ins included)."""
+    if not tallies or counted <= 0:
+        return 0.0
+    second = tallies[1]["votes"] if len(tallies) > 1 else 0
+    return (tallies[0]["votes"] - second) / counted
+
+
+def count_is_complete(result: RaceResult, now: datetime) -> bool:
+    """Every unit in, as fully as the source can say: units counted fully
+    reported, all of them, PROJECTION_SETTLE since the first votes; or the
+    source's official flag with no unit still out."""
+    units_out = bool(result.total_units) and result.reporting_units != result.total_units
+    if result.official and not units_out:
+        return True
+    if not result.total_units or units_out or result.units_complete is not True:
+        return False
+    return result.first_reported_at is not None and now - result.first_reported_at >= PROJECTION_SETTLE
+
+
+def lead_is_decisive(result: RaceResult, race: Race) -> bool:
+    """The leader is PROJECTION_MIN_MARGIN ahead, and the margin is outside
+    every runoff and margin-tied recount in the state's law."""
+    from app.recount_rules import close_enough_to_contest
+
+    tallies = json.loads(result.tallies or "[]")
+    counted = result.votes_counted or 0
+    if _leader(tallies) is None or _margin_share(tallies, counted) < PROJECTION_MIN_MARGIN:
+        return False
+    return not close_enough_to_contest(race.state, race.office, race.district, [t["votes"] for t in tallies],
+                                       counted, race.cycle_year)
+
+
+def projection_holds(result: RaceResult, race: Race, now: datetime | None = None) -> bool:
+    """What RAISES a projection. Once raised it is withdrawn only when the
+    lead itself stops being decisive (lead_is_decisive) or the leader
+    changes, never because a reporting figure lapsed (the flip lesson,
+    lead_is_back)."""
+    return (result.votes_counted or 0) > 0 and count_is_complete(result, now or utcnow()) \
+        and lead_is_decisive(result, race)
+
+
 def challenger_leads(result: RaceResult) -> bool:
     """The leader is from a known party other than the seat's holder —
     whether or not enough of the count is in to say so (is_flip)."""
@@ -437,7 +500,7 @@ def announced_state(db: Session, race_id: str, election_date: str) -> dict:
         .all()
     )
     state = {"any": bool(rows), "leader": None, "official": False, "all_in": False, "flip": False,
-             "counted": False}
+             "counted": False, "projected": None}
     for kind, detail in rows:
         d = json.loads(detail or "{}") or {}
         leader = d.get("leader")
@@ -453,6 +516,12 @@ def announced_state(db: Session, race_id: str, election_date: str) -> dict:
             state["flip"] = True
         elif kind == FLIP_REVERSED:
             state["flip"] = False
+        elif kind == PROJECTED:
+            state["projected"] = leader  # who was projected
+            if d.get("totalUnits") and d.get("reportingUnits") == d["totalUnits"]:
+                state["all_in"] = True  # the projection told it (apply_count)
+        elif kind == PROJECTION_WITHDRAWN:
+            state["projected"] = None
     return state
 
 
@@ -546,6 +615,7 @@ def apply_count(
     # the events on every poll, so a row from before the column existed
     # picks it up at its next read.
     result.flip_announced = said["flip"]
+    result.projected = said["projected"] is not None
     if before and counted < old_counted:
         logger.warning("%s: votes counted fell %d -> %d; stored, nothing announced this poll",
                        race.id, old_counted, counted)
@@ -569,19 +639,36 @@ def apply_count(
         kinds.append((FLIP, {}))
     elif said["flip"] and lead_is_back(result):
         kinds.append((FLIP_REVERSED, {}))
+    projected = said["projected"]
+    if projected is None and projection_holds(result, race, now):
+        kinds.append((PROJECTED, {"marginFloor": round(100 * PROJECTION_MIN_MARGIN)}))
+    elif projected is not None and (
+        new_leader is None or _key(new_leader) != _key(projected) or not lead_is_decisive(result, race)
+    ):
+        kinds.append((PROJECTION_WITHDRAWN, {"previouslyProjected": {
+            "name": projected["name"], "party": projected.get("party"),
+        }}))
     # One poll, one story per race: a flip already says who leads, and a
     # race whose first returns arrive complete is simply "all in" — without
     # this the feed told each of those twice, side by side.
     present = {k for k, _ in kinds}
     if FLIP in present or FLIP_REVERSED in present:
         kinds = [(k, x) for k, x in kinds if k != LEAD_CHANGE]
-    if ALL_REPORTING in present or FLIP in present:
+    if ALL_REPORTING in present or FLIP in present or PROJECTED in present:
         kinds = [(k, x) for k, x in kinds if k != FIRST_RETURNS]
+    if PROJECTED in present:
+        # The projection names the count as complete; "all in" beside it
+        # would tell it twice.
+        kinds = [(k, x) for k, x in kinds if k != ALL_REPORTING]
     events = [_event(db, result, kind, **extra) for kind, extra in kinds]
     if FLIP in present:
         result.flip_announced = True
     elif FLIP_REVERSED in present:
         result.flip_announced = False
+    if PROJECTED in present:
+        result.projected = True
+    elif PROJECTION_WITHDRAWN in present:
+        result.projected = False
     return Applied(result, events)
 
 
@@ -909,6 +996,15 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
             except Exception:
                 db.rollback()
         summary[state] = outcome
+    from app.election_phase import election_today
+    from app.live_results.certified import refresh_settled
+
+    try:
+        refresh_settled(db, election_day, election_today())
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Settled-race stamp failed")
     try:
         check_stalled_feeds(db, election_day)
     except Exception:

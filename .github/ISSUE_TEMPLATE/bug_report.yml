@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing — check that the issue isn't a stale pipeline run. Data refreshes nightly; a senator's score or an action center issue may lag by up to 24 hours.
+        Before filing — check that the issue isn't a stale pipeline run. Data refreshes nightly; a member's record or an Action Center issue may lag by up to 24 hours.
 
   - type: textarea
     id: what-happened

@@ -690,6 +690,30 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         ),
       };
     }
+    case "projected":
+      return {
+        tag: "Projected",
+        tone: "official",
+        text: sentence(
+          `${withParty(d.leader)} is projected to be elected`,
+          shares,
+          d.marginFloor != null
+            ? `Every reporting unit is in and the lead is at least ${d.marginFloor} points`
+            : "Every reporting unit is in and the lead is wide",
+          "Not certified"
+        ),
+      };
+    case "projection_withdrawn":
+      return {
+        tag: "Update",
+        tone: "lead",
+        text: sentence(
+          `The projection for ${withParty(d.previouslyProjected)} is withdrawn`,
+          shares,
+          reporting,
+          notFinal
+        ),
+      };
     case "flip_reversed":
       // The holder's party ahead again — or nobody: an exact tie has no
       // leader to name.

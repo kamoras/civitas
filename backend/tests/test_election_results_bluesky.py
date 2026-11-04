@@ -594,3 +594,43 @@ class TestAHeldPostSaysOnlyWhatIsStillSo:
                        age=timedelta(hours=rb.MAX_EVENT_AGE_HOURS, minutes=1))
         assert _run(db_session) == []
         assert event.bsky_posted_at is not None and not event.bsky_posted
+
+
+class TestProjectionPosts:
+    def test_a_senate_projection_says_projected_and_not_certified(self, db_session):
+        import json
+
+        race = Race(id="2026-SEN-GA", office="S", state="GA", cycle_year=2026)
+        text = rb.compose(er.PROJECTED, race, json.loads(_detail(reporting=100)))
+        assert text.startswith("Georgia's U.S. Senate: Ray Jones (R) is projected to be elected.")
+        assert text.endswith("Not certified.") and "win" not in text
+        assert rb._title(er.PROJECTED, race, {}).endswith("projected, not certified")
+
+    def test_a_house_projection_stays_on_the_site(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-2", office="H", district=2)
+        db_session.flush()
+        db_session.get(RaceResult, "2026-HOUSE-GA-2").projected = True
+        _event(db_session, "2026-HOUSE-GA-2", er.PROJECTED)
+        assert _run(db_session) == []
+
+    def test_a_withdrawal_is_posted_only_after_a_projection_was(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        _event(db_session, "2026-SEN-GA", er.PROJECTION_WITHDRAWN,
+               detail=_detail(previouslyProjected={"name": "Ray Jones", "party": "REP"}))
+        assert _run(db_session) == []  # nothing to take back
+
+        _race(db_session, "2026-SEN-AZ", state="AZ")
+        _said(db_session, "2026-SEN-AZ", er.PROJECTED)
+        _event(db_session, "2026-SEN-AZ", er.PROJECTION_WITHDRAWN,
+               detail=_detail(previouslyProjected={"name": "Ray Jones", "party": "REP"}))
+        [(text, _)] = _run(db_session)
+        assert "the projection for Ray Jones (R) is withdrawn" in text and text.endswith("Not final.")
+
+    def test_a_projection_posts_once(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        db_session.get(RaceResult, "2026-SEN-GA").projected = True
+        _event(db_session, "2026-SEN-GA", er.PROJECTED, detail=_detail(reporting=100))
+        assert len(_run(db_session)) == 1
+        _event(db_session, "2026-SEN-GA", er.PROJECTED, detail=_detail(reporting=100))
+        assert _run(db_session) == []

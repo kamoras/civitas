@@ -1854,6 +1854,11 @@ def _result_json(result: RaceResult, race: Race, state_last_ok: datetime | None 
         # those figures is shown as a lead, never as the flip's cause (the
         # frontend's leaderIsChallenger).
         "flip": bool(result.flip_announced),
+        # The projection the sync has announced (sync.projection_holds: every
+        # unit fully in, a lead of PROJECTION_MIN_MARGIN outside any runoff
+        # or margin-tied recount), until withdrawn. Never a certified
+        # winner: that is `certification`, which supersedes it.
+        "projected": bool(result.projected),
         "candidates": [
             {
                 "name": t["name"], "party": t.get("party"), "votes": t["votes"],

@@ -980,6 +980,12 @@ export interface LiveRaceResult {
    * the count is tied. Say "changing party" through flipShown
    * (lib/results.ts), never from this alone. */
   flip: boolean;
+  /** A projection is announced (and not withdrawn): every reporting unit
+   * fully in and the leader at least 10 points ahead, outside any runoff or
+   * margin-tied recount (backend sync.projection_holds). Worded
+   * "projected", never "won"; a certified winner supersedes it. Optional for
+   * an older backend. */
+  projected?: boolean;
   candidates: LiveCandidateResult[];
   /** The state's certification, once it has certified (null before). */
   certification?: RaceCertification | null;
@@ -992,6 +998,10 @@ export type ResultEventKind =
   | "official"
   | "flip"
   | "flip_reversed"
+  /** The count's leader is projected (sync.projection_holds). */
+  | "projected"
+  /** A projection the count no longer supports; detail.previouslyProjected. */
+  | "projection_withdrawn"
   /** The race may be shown as won: certified, no runoff or recount left
    * (backend live_results/certified.py). Its detail is a RaceCertification. */
   | "certified_winner";
@@ -1016,6 +1026,9 @@ export interface ResultEvent {
     leader?: ResultEventPerson | null;
     runnerUp?: ResultEventPerson | null;
     previousLeader?: { name: string; party: string | null } | null;
+    previouslyProjected?: { name: string; party: string | null } | null;
+    /** On a projection: the margin floor it cleared, in points. */
+    marginFloor?: number;
     votesCounted?: number;
     reportingUnits?: number | null;
     totalUnits?: number | null;

@@ -6,7 +6,7 @@
 
 - [ ] Bug fix
 - [ ] New feature / data source
-- [ ] Score / pipeline change
+- [ ] Pipeline / data change
 - [ ] Refactor (no behavior change)
 - [ ] Docs / config only
 
@@ -21,6 +21,5 @@
 - [ ] `pytest tests/ -m "not slow"` passes (backend changes)
 - [ ] No secrets, API keys, or `.db` files committed
 - [ ] I read, understood and ran every line of this change; none of it is unreviewed AI output, and nothing in it credits an AI tool or model
-- [ ] Score changes: ran the audit skill and reviewed output
 - [ ] Pipeline changes: tested against a real API response, not just mocks
 - [ ] New page or feature: entry added to `backend/app/data/whats_new.json` (it is the changelog line, the feed entry and the Bluesky post)

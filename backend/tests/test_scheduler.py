@@ -695,8 +695,9 @@ def test_the_bill_pass_fetches_display_titles_after_the_statuses():
 
 
 class TestElectionResultsSync:
-    """The five-minute live-results job: only inside the results window,
-    and hourly once no race's totals have moved for a day."""
+    """The five-minute live-results job: only while the count is read
+    (election_phase.counting_election), and hourly once no race's totals
+    have moved for a day."""
 
     @staticmethod
     def _election(phase, last_change=None):
@@ -719,7 +720,8 @@ class TestElectionResultsSync:
 
         now = utcnow().replace(minute=minute)
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.election_phase.active_election", return_value=election), \
+             patch("app.election_phase.counting_election",
+                   return_value=None if election.phase == "campaign" else election), \
              patch("app.scheduler.utcnow", return_value=now), \
              patch("app.live_results.sync.sync_live_results", fake_sync), \
              patch("app.election_archive.freeze", side_effect=lambda db, day: self.archived.append(day)), \

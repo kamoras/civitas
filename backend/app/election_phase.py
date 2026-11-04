@@ -10,7 +10,10 @@ after that:
   campaign      before election day — ballot research, lean maps.
   election_day  the day itself (Eastern date, which is where polls close
                 first and where the networks' "election night" is dated).
-  results       after it, until results_window_end.
+  results       after it, until results_window_end, or SETTLED_GRACE_DAYS
+                after every counted race settles, if sooner. The count is
+                read for longer (counting_election): to each live state's
+                certification deadline.
 
 `season` (below) refines that into the six stretches /elections and its hub
 lay themselves out by, from the same rule: election night and the results
@@ -47,6 +50,15 @@ from app.time_utils import eastern_date
 # hidden behind a result everyone already knows. An editorial choice, not
 # a measured value.
 RESULTS_GRACE_DAYS = 14
+# Once every race the count covers is settled (projected or a certified
+# winner, with no runoff or recount pending: certified.refresh_settled),
+# the results stay the page's subject this many days more, then the site
+# moves on without waiting out RESULTS_GRACE_DAYS: most generals settle on
+# election night, and a reader after that wants the outcome, which the
+# archive keeps, not a live page. A race still open (a recount, a runoff,
+# a count too close to project) keeps the window to its usual length.
+# Editorial, like the grace above.
+SETTLED_GRACE_DAYS = 3
 
 ELECTION_TZ = ZoneInfo("America/New_York")
 
@@ -64,6 +76,12 @@ class ActiveElection:
     results_until: date | None
     # When any race's vote totals last moved; None before the first count.
     last_result_change: datetime | None
+    # The last day the held election's count is still read and archived
+    # (counting_window_end), which can run past results_until: a state's
+    # certification deadline is read from its live count
+    # (certified.apply_deadlines), so the count is read to the deadline
+    # whether or not the page still leads with it. None during a campaign.
+    counting_until: date | None = None
 
     @property
     def cycle(self) -> int:
@@ -84,21 +102,43 @@ def results_window_end(election_day: date, last_change: date | None) -> date:
     return min(new_congress_day(election_day), settled_from + timedelta(days=RESULTS_GRACE_DAYS))
 
 
+def counting_window_end(election_day: date, last_change: date | None) -> date:
+    """The last day an election's count is read: the results window's rule,
+    and at least to the day after every live state's certification
+    deadline (certification_deadlines.json), so a count taken as certified
+    at its deadline is the state's count as it stood then."""
+    from app import certification_deadlines
+
+    end = results_window_end(election_day, last_change)
+    for state in certification_deadlines.states():
+        last_day = certification_deadlines.deadline(state, election_day)
+        if last_day is not None:
+            end = max(end, last_day + timedelta(days=1))
+    return min(new_congress_day(election_day), end)
+
+
 def resolve_active_election(
     today: date, last_change_for: Callable[[date], datetime | None],
+    settled_for: Callable[[date], datetime | None] | None = None,
 ) -> ActiveElection:
-    """The pure rule, with the count's last change supplied by the caller
-    (and asked for only inside a results window's outer bound)."""
+    """The pure rule, with the count's last change, and when its last race
+    settled (None while any is open), supplied by the caller (and asked for
+    only inside a results window's outer bound)."""
     held = previous_election_day(today)
     if held is not None and today <= new_congress_day(held):
         last_change = last_change_for(held)
-        until = results_window_end(held, eastern_date(last_change) if last_change else None)
+        changed_on = eastern_date(last_change) if last_change else None
+        until = results_window_end(held, changed_on)
+        settled = settled_for(held) if settled_for is not None and today > held else None
+        if settled is not None:
+            until = max(held, min(until, eastern_date(settled) + timedelta(days=SETTLED_GRACE_DAYS)))
         if today <= until:
             return ActiveElection(
                 election_day=held,
                 phase=ELECTION_DAY if today == held else RESULTS,
                 results_until=until,
                 last_result_change=last_change,
+                counting_until=counting_window_end(held, changed_on),
             )
     return ActiveElection(
         election_day=next_election_day(today), phase=CAMPAIGN,
@@ -114,23 +154,58 @@ def last_result_change(db: Session, election_day: date) -> datetime | None:
     ).scalar()
 
 
-def active_election(db: Session | None = None, today: date | None = None) -> ActiveElection:
-    """The site's election as of `today` (Eastern). Opens its own session
-    when given none, and only when the calendar says it needs one."""
-    today = today or election_today()
+def all_settled_at(db: Session, election_day: date) -> datetime | None:
+    """When the last of the election's counted races settled
+    (RaceResult.settled_at), or None while any is open or none is counted."""
+    from app.models import RaceResult
 
+    races, settled, last = db.query(
+        func.count(RaceResult.race_id), func.count(RaceResult.settled_at), func.max(RaceResult.settled_at),
+    ).filter(RaceResult.election_date == election_day.isoformat()).one()
+    return last if races and settled == races else None
+
+
+def _with_session(db: Session | None, ask: Callable[[Session, date], datetime | None]):
     def lookup(election_day: date) -> datetime | None:
         if db is not None:
-            return last_result_change(db, election_day)
+            return ask(db, election_day)
         from app.database import SessionLocal
 
         session = SessionLocal()
         try:
-            return last_result_change(session, election_day)
+            return ask(session, election_day)
         finally:
             session.close()
 
-    return resolve_active_election(today, lookup)
+    return lookup
+
+
+def active_election(db: Session | None = None, today: date | None = None) -> ActiveElection:
+    """The site's election as of `today` (Eastern). Opens its own session
+    when given none, and only when the calendar says it needs one."""
+    today = today or election_today()
+    return resolve_active_election(today, _with_session(db, last_result_change), _with_session(db, all_settled_at))
+
+
+def counting_election(db: Session | None = None, today: date | None = None) -> ActiveElection | None:
+    """The held election whose count is still read (counting_until), whether
+    or not the page still leads with it; None outside that window. What the
+    live sync, the archive copy and a reset's keep-list follow, never
+    shows_results."""
+    today = today or election_today()
+    held = previous_election_day(today)
+    if held is None or today > new_congress_day(held):
+        return None
+    last_change = _with_session(db, last_result_change)(held)
+    changed_on = eastern_date(last_change) if last_change else None
+    until = counting_window_end(held, changed_on)
+    if today > until:
+        return None
+    shown = resolve_active_election(today, lambda _: last_change, _with_session(db, all_settled_at))
+    if shown.election_day == held:
+        return shown
+    return ActiveElection(election_day=held, phase=RESULTS, results_until=None,
+                          last_result_change=last_change, counting_until=until)
 
 
 def election_is_held(election: ActiveElection, today: date | None = None) -> bool:

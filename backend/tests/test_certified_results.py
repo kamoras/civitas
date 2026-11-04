@@ -614,3 +614,49 @@ class TestCertificationDeadlines:
         db_session.flush()
         assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 5))["stored"] == 0
         assert db_session.get(RaceCertification, race.id).basis == "certified"
+
+
+class TestSettled:
+    """certified.refresh_settled: what election_phase ends the results
+    window from."""
+
+    def _result(self, db, race, projected):
+        from app.models import RaceResult
+
+        db.add(RaceResult(race_id=race.id, election_date=DAY.isoformat(), source_name="Maryland State Board",
+                          tallies="[]", votes_counted=100_000, projected=projected,
+                          first_reported_at=datetime(2026, 11, 4), last_change_at=datetime(2026, 11, 4)))
+        db.flush()
+        return db.get(RaceResult, race.id)
+
+    def test_a_projection_settles_and_a_withdrawal_reopens(self, db_session, freeze_utcnow):
+        result = self._result(db_session, _race(db_session), projected=True)
+        freeze_utcnow(datetime(2026, 11, 4, 6))
+        assert cr.refresh_settled(db_session, DAY, date(2026, 11, 4)) == 0
+        assert result.settled_at == datetime(2026, 11, 4, 6)
+        freeze_utcnow(datetime(2026, 11, 4, 8))
+        cr.refresh_settled(db_session, DAY, date(2026, 11, 4))
+        assert result.settled_at == datetime(2026, 11, 4, 6)  # first settled, kept
+        result.projected = False
+        assert cr.refresh_settled(db_session, DAY, date(2026, 11, 4)) == 1
+        assert result.settled_at is None
+
+    def test_a_certified_winner_settles_without_a_projection(self, db_session):
+        race = _race(db_session)
+        result = self._result(db_session, race, projected=False)
+        cr.apply_certified(db_session, "MD", DAY, _certified(date(2026, 12, 4)), date(2026, 12, 4))
+        # Maryland's recount can still be asked for until Dec 7.
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 4)) == 1
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 8)) == 0
+        assert result.settled_at is not None
+
+    def test_a_certified_count_inside_a_recount_reopens_a_projection(self, db_session):
+        race = _race(db_session)
+        result = self._result(db_session, race, projected=True)
+        cr.apply_certified(db_session, "MD", DAY, _certified(date(2026, 12, 4), d=50_010, r=50_000),
+                           date(2026, 12, 4))
+        # Inside the margin Maryland lets a candidate ask a recount at.
+        assert cr.outcome_for(db_session.get(RaceCertification, race.id), date(2026, 12, 4)).status \
+            == rr.RECOUNT_POSSIBLE
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 4)) == 1
+        assert result.settled_at is None

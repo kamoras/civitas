@@ -2228,7 +2228,16 @@ is listed), the voter calendar (150 days out), the poll closing times
 The site's election is not simply the *next* one: from election day (Eastern
 date) it stays on the election just held while any race's vote totals are
 still moving and for `RESULTS_GRACE_DAYS` (14) after the last change, capped at
-January 3 (20th Amendment), and only then rolls to the next cycle.
+January 3 (20th Amendment), and only then rolls to the next cycle. Once every
+counted race is settled (projected or a certified winner, with no runoff or
+recount pending: `certified.refresh_settled`, `RaceResult.settled_at`) it
+rolls `SETTLED_GRACE_DAYS` (3) after the last one settles instead (owner
+decision, 2026-11): sitting members serve to January 3, but a reader stops
+following a decided election long before. The count is still *read* past
+that, to the later of the old window and the day after every live state's
+certification deadline (`election_phase.counting_election`, what the live
+sync, the archive copy and a reset's keep-list follow): the deadline rule
+reads the live count as it stood at the deadline.
 `active_election()` is the one answer for the pipeline's cycle, the API's
 `electionDate`/`phase` and the season jobs — never `next_election_day()`
 directly, which flips to the next cycle the night polls close.
@@ -2324,10 +2333,21 @@ wrong number on election night is worse than none:
   of the result. Its page says so (`rankedChoiceStates`), and before
   election day the ballot page says the voter can rank (the state ballot's
   `rankedChoice`, read from the same citation — never a second copy of it).
-- Civitas never calls a race. A count is "leading" — "not final" until the
-  source itself says official, and still "leading", never "wins", after (an
-  official count's leader can face a runoff: Georgia's general needs a
-  majority) — and every sentence about it — the live-updates feed, the
+- Civitas never calls a race on a partial count. A count is "leading" — "not
+  final" until the source itself says official, and still "leading", never
+  "wins", after (an official count's leader can face a runoff: Georgia's
+  general needs a majority). One step past it, "projected" (owner decision,
+  2026-11; `sync.projection_holds`), more conservative than a network desk:
+  no exit poll and no model of the ballots left, only the count, with every
+  unit the source counts *fully* in (`units_complete`; a source that counts a
+  unit on its first batch, or gives no unit figure, projects only on its
+  official flag), `PROJECTION_SETTLE` (6h) since the first votes, a lead of
+  `PROJECTION_MIN_MARGIN` (10 points of every vote counted), and no runoff
+  or margin-tied recount in reach (`recount_rules.close_enough_to_contest`).
+  It is withdrawn (`projection_withdrawn`) only when the leader changes or
+  the lead stops being decisive, never because a reporting figure lapsed;
+  the certified winner supersedes it; and it is worded "projected to be
+  elected", never "wins". Every sentence about a count — the live-updates feed, the
   DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
   the election-night posts (`live_results/bluesky.py`, published through
   `broadcast.publish` to the Elections feed and Bluesky) — is
