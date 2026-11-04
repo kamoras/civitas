@@ -214,7 +214,7 @@ def resolve_ops_alert(condition: str) -> int:
 # no code raises any more.
 CONDITIONS = (
     "agency-sync-*", "ballot-measure-ingest-*", "ballot-measure-late-*", "calibration-drift-*",
-    "chain-cut-again", "contact-email-unset", "data-check-*", "data-refresh-*", "data-stale-*",
+    "certified-read-*", "certified-uncovered", "chain-cut-again", "contact-email-unset", "data-check-*", "data-refresh-*", "data-stale-*",
     "district-pvi-no-source", "district-pvi-unadopted", "election-archive-map", "election-date-calendar",
     "election-filing-dates", "election-filings-raised", "election-map-house-lines", "election-map-refresh",
     "election-map-training-stale", "election-ready-calendar", "election-ready-district-lean",

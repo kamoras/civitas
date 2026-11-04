@@ -357,7 +357,7 @@ export default function DistrictMap({
           <p className="font-mono text-small text-ink-min">
             {newLines ? `the new ${cycleYear ? `${cycleYear} ` : ""}districts · ` : ""}
             redder = safer R · bluer = safer D · fainter = closer
-            {stateLevel > 0 && " · grey = no district lean yet"}
+            {stateLevel > 0 && " · gray = no district lean yet"}
             {unknownShown && " · dark = no lean on file"}
           </p>
         )}

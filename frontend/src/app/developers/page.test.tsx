@@ -44,7 +44,7 @@ it("keeps a CSV download's format behind its More, and a JSON endpoint's text as
   expect(block).toHaveTextContent("The Senate leaderboard.");
   const more = block.querySelector("details")!;
   expect(more.querySelector("summary")).toHaveTextContent(
-    "CSV format: encoding, licence and every column"
+    "CSV format: encoding, license and every column"
   );
   expect(more).toHaveTextContent("UTF-8, one header row.");
   expect(more.open).toBe(false);

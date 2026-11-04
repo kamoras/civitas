@@ -262,3 +262,77 @@ async def fetch_confirmed_candidates(
         logger.warning("KS official totals PDF for %d parsed no candidate rows", year)
         return None
     return results
+
+
+# ── The certified general ────────────────────────────────────────────
+#
+# Read for the certified-results sync (live_results/certified.py): the
+# same listing's "{year} General Election Official results" link (2024's:
+# 24elec/2024-General-Election-Official-Vote-Totals.pdf, verified
+# 2026-11-04; the 2026 general's was not listed the day after it). The
+# same section shape as the primary's, a candidate's party as the letter
+# before the name, an independent's in lower case ("i-Robert F. Kennedy
+# Jr."). The module docstring's caveat holds here too: the document calls
+# itself the official totals, and nothing on the page shows whether it is
+# posted before or after the State Board of Canvassers certifies. The PDF
+# states no certification date, so the sync dates it by its first read.
+_GENERAL_LINK_RE = re.compile(
+    r'<a\s+href="([^"]+\.pdf)"[^>]*title="[^"]*?(\d{4})\s+General\s+Election\s+Official',
+    re.IGNORECASE,
+)
+_GENERAL_CANDIDATE_RE = re.compile(r"^\s*([A-Za-z])-(.+?)\s+([\d,]+)\s+[\d.]+%\s*$")
+
+
+def general_contests(lines: list[str]) -> list:
+    """Every federal contest in the general's Official Vote Totals."""
+    from app.pipeline.fetch.election_results import ContestCount
+
+    contests: dict[tuple[str, int | None], list] = {}
+    current: tuple[str, int | None] | None = None
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or _BANNER_RE.match(stripped):
+            continue
+        found = _GENERAL_CANDIDATE_RE.match(raw)
+        if found:
+            if current is not None:
+                letter = found.group(1)
+                party = "I" if letter == "i" else normalize_party(letter, ballot_list=True)
+                contests[current].append((found.group(2).strip(), party, int(found.group(3).replace(",", ""))))
+            continue
+        if _RACE_SENATE_RE.match(stripped):
+            current = ("S", None)
+        elif house := _RACE_HOUSE_RE.match(stripped):
+            current = ("H", int(house.group(1)))
+        else:
+            current = None  # a state contest's rows belong to no federal seat
+            continue
+        contests.setdefault(current, [])
+    return [ContestCount(office=o, district=d, candidates=c, total_votes=sum(v for _, _, v in c))
+            for (o, d), c in contests.items() if c]
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Kansas's official federal count for `election_day`'s general, or None
+    while the listing links no official totals for it."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    resp = await fetch_with_retry(client, _rate_limiter, "GET", LISTING_URL, timeout=30.0,
+                                  log_label="KS results listing (general)", headers=_HEADERS)
+    if resp is None:
+        raise FeedUnreadable("KS results listing could not be read")
+    href = next((h for h, y in _GENERAL_LINK_RE.findall(resp.text) if y == str(election_day.year)), None)
+    if href is None:
+        return None
+    url = urljoin(LISTING_URL, href)
+    pdf = await fetch_with_retry(client, _rate_limiter, "GET", url, timeout=60.0,
+                                 log_label="KS general official totals", headers=_HEADERS)
+    if pdf is None:
+        raise FeedUnreadable("KS general official totals could not be fetched")
+    with pdfplumber.open(io.BytesIO(pdf.content)) as doc:
+        lines = [ln for page in doc.pages for ln in (page.extract_text() or "").split("\n")]
+    contests = general_contests(lines)
+    if not contests:
+        raise FeedUnreadable("KS general official totals held no federal contest this reader could read")
+    return StateCount(source_name=source.get("source_name") or "Kansas Secretary of State", page_url=url,
+                      official=True, unit_label="counties", contests=contests)

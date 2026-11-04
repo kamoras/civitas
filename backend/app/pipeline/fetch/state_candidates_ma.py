@@ -434,3 +434,84 @@ async def fetch_confirmed_candidates(
             return None
         results.extend(statewide)
     return results
+
+
+# ── The certified general ────────────────────────────────────────────
+#
+# Read for the certified-results sync (live_results/certified.py). PD43+
+# is the Secretary of the Commonwealth's compilation of the cities' and
+# towns' certified returns, and the site files it under "Certified Election
+# Results" (its own navigation, read 2026-11-04). The general is searched by
+# stage, and each race's page prints its candidates in the header (the
+# party as the column's class, "democratic_party") and a Totals row of each
+# candidate's votes, then All Others (write-ins), Blanks and Total Votes
+# Cast (verified on 2024's nine House races and the Senate race). Blanks
+# are no one's vote. No page for a year's general exists before it is
+# filed (2026's had none on 2026-11-04, the day after the election), and
+# the page states no certification date, so the sync dates it by its
+# first read.
+_GENERAL_TITLE_RE = re.compile(
+    r"<title>PD43\+ &raquo; (\d{4}) U\.S\. (House|Senate) General Election"
+    r"(?:\s+(\d+)\w{2} Congressional District)?</title>",
+)
+_GENERAL_HEADER_RE = re.compile(
+    r'<th[^>]*class="candidate_key_reference ([a-z_]*?)_party candidate-id-(\d+)"[^>]*>.*?title="([^"]+)"', re.DOTALL,
+)
+_CELL_TEXT_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
+
+
+def general_contest(html: str, year: int, office: str):
+    """One general race's certified count (ContestCount), or None when the
+    page isn't this year's general for the office or its header and Totals
+    row don't line up."""
+    from app.pipeline.fetch.election_results import ContestCount
+
+    title = _GENERAL_TITLE_RE.search(html)
+    if title is None or int(title.group(1)) != year or title.group(2) != _OFFICE_CHAMBER_WORD[office]:
+        return None
+    thead = _THEAD_RE.search(html)
+    totals = _TOTALS_ROW_RE.search(html)
+    if thead is None or totals is None:
+        return None
+    header = _GENERAL_HEADER_RE.findall(thead.group(1))
+    cells = [re.sub(r"<[^>]+>|\s|,", "", c) for c in _CELL_TEXT_RE.findall(totals.group(1))][1:]
+    # Each candidate, then All Others, Blanks and Total Votes Cast.
+    if not header or len(cells) != len(header) + 3 or not all(c.isdigit() for c in cells):
+        logger.warning("MA general %s: header and Totals row don't line up", title.group(0))
+        return None
+    candidates = [
+        (html_lib.unescape(name), normalize_party(party.replace("_", " "), ballot_list=True), int(votes))
+        for (party, _cid, name), votes in zip(header, cells)
+    ]
+    write_ins = int(cells[len(header)])
+    return ContestCount(office=office, district=int(title.group(3)) if title.group(3) else None,
+                        candidates=candidates, total_votes=sum(v for _, _, v in candidates) + write_ins)
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Massachusetts's certified federal count for `election_day`'s general,
+    or None while PD43+ has filed no race for it."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    year = election_day.year
+    contests = []
+    for office, office_id in _OFFICE_IDS.items():
+        url = f"{_BASE_URL}/elections/search/office_id:{office_id}/year_from:{year}/year_to:{year}/stage:General"
+        page = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} general search")
+        if page is None:
+            raise FeedUnreadable(f"{state} PD43+ general search could not be read")
+        for election_id in dict.fromkeys(_VIEW_LINK_RE.findall(page)):
+            html = await fetch_text_with_retry(client, _rate_limiter, f"{_BASE_URL}/elections/view/{election_id}/",
+                                               f"{state} general {election_id}")
+            if html is None:
+                raise FeedUnreadable(f"{state} PD43+ race {election_id} could not be read")
+            contest = general_contest(html, year, office)
+            if contest is None and _GENERAL_TITLE_RE.search(html):
+                raise FeedUnreadable(f"{state} PD43+ race {election_id} could not be read whole")
+            if contest is not None:
+                contests.append(contest)
+    if not contests:
+        return None
+    return StateCount(source_name=source.get("source_name") or "Massachusetts Secretary of the Commonwealth",
+                      page_url=f"{_BASE_URL}/elections/search/year_from:{year}/year_to:{year}/stage:General",
+                      official=True, unit_label="cities and towns", contests=contests)

@@ -298,7 +298,7 @@ export function ActorConcentrationPanel({ token }: { token: string }) {
           ]}
           formatValue={(v) => v.toFixed(2)}
           emptyMessage={
-            data ? "No labelled issues yet." : failed ? "Couldn't load concentration." : "Loading…"
+            data ? "No labeled issues yet." : failed ? "Couldn't load concentration." : "Loading…"
           }
         />
         <div className="text-small font-mono">

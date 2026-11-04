@@ -185,7 +185,7 @@ export default async function LimitationsChapter() {
             </More>
           </Box>
           <Box
-            title="Some bills are labelled by content"
+            title="Some bills are labeled by content"
             dek="Where no roll call shows how each party voted, a bill's lean comes from its content. Bipartisan bills can be misread. It never decides a party break."
             more="where content labels are used"
           >

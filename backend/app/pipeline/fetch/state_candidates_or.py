@@ -563,3 +563,108 @@ async def fetch_confirmed_candidates(
             logger.warning("OR results: statewide contests unreadable, failing the fetch: %s", exc)
             return None
     return results
+
+
+# ── The certified general ────────────────────────────────────────────
+#
+# The certified-results sync (live_results/certified.py) reads the
+# general's Abstract of Votes, found the same way as the primary's: the
+# results list's newest "General" row, whose Results link is titled
+# "Official Results of November General" (verified 2026-11-04 on 2024's,
+# uri=13735458). A general's page differs from a primary's: no party
+# heading (each candidate's party is printed after the given name,
+# "Suzanne (D)"), and a page can hold two House districts, each under its
+# own "1st District" line in the label column. The same word positions
+# the statewide reader uses place each word in its Total row's column.
+# The Abstract states no certification date, so the sync dates it by its
+# first read.
+_GENERAL_LIST_ITEMS_URL = _LIST_ITEMS_URL.replace("'Primary'", "'General'")
+_DISTRICT_LINE_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)\s+District$")
+_GIVEN_PARTY_RE = re.compile(r"\(([A-Z]{1,4})\)\s*$")
+
+
+def _general_page_contests(lines: list[list[dict]], office: str, page_district: int | None) -> list | None:
+    from app.pipeline.fetch.election_results import ContestCount
+
+    contests = []
+    district = page_district
+    # The label column's words are right-aligned to it, and how far left
+    # they start varies by page (x0 41 on one page, 83 on another), so
+    # lines are told by their words, not their position.
+    for idx, line in enumerate(lines):
+        text = _line_text(line)
+        found = _DISTRICT_LINE_RE.match(text)
+        if found:
+            district = int(found.group(1))
+            continue
+        if line[0]["text"] != "County":
+            continue
+        if idx == 0:
+            return None
+        total = next((ln for ln in lines[idx + 1:] if ln[0]["text"] in ("Total", "County")), None)
+        if total is not None and total[0]["text"] != "Total":
+            return None
+        if total is None:
+            return None
+        block = _read_block(lines[idx - 1], [line[1:]], total)
+        if block is None:
+            return None
+        candidates, misc = [], 0
+        for printed, given, votes in block:
+            if _NON_CANDIDATE_RE.search(printed):
+                misc += votes
+                continue
+            party = _GIVEN_PARTY_RE.search(given)
+            name = f"{_GIVEN_PARTY_RE.sub('', given).strip()} {printed.lstrip('*')}".strip()
+            candidates.append((name, normalize_party(party.group(1), ballot_list=True) if party else None, votes))
+        if office == "H" and district is None:
+            return None
+        contests.append(ContestCount(office=office, district=district if office == "H" else None,
+                                     candidates=candidates,
+                                     total_votes=sum(v for _, _, v in candidates) + misc))
+    return contests
+
+
+def general_contests(pages: list[tuple[str, list[list[dict]]]]) -> list:
+    """Every federal contest in a general's Abstract, from each page's text
+    and word lines. A page any block of which can't be read is skipped
+    whole, so a contest is never read short of a column."""
+    contests = []
+    for text, lines in pages:
+        office = _page_office(text)
+        if office is None:
+            continue
+        found = _general_page_contests(lines, office[0], office[1])
+        if found is None:
+            logger.warning("OR general Abstract: a %s page could not be read whole; skipped", office[0])
+            continue
+        contests.extend(found)
+    return contests
+
+
+async def fetch_certified_general(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Oregon's certified federal count for `election_day`'s general, or
+    None while its Abstract of Votes is not listed."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    item = await fetch_json_with_retry(client, _rate_limiter, _GENERAL_LIST_ITEMS_URL, f"{state} results list")
+    if not item:
+        raise FeedUnreadable(f"{state} results list could not be read")
+    row = (item.get("value") or [None])[0]
+    if not row or str(row.get("Election_x0020_Date") or "")[:10] != election_day.isoformat()[:10]:
+        return None
+    if "Official Results" not in (row.get("Results") or ""):
+        return None
+    found = _URI_RE.search(row.get("Results") or "")
+    if not found:
+        raise FeedUnreadable(f"{state} results list row has no Results link")
+    url = _PDF_URL_PATTERN.format(uri=found.group(1))
+    pdf_bytes = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} general Abstract of Votes")
+    if pdf_bytes is None:
+        raise FeedUnreadable(f"{state} general Abstract of Votes could not be fetched")
+    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+        contests = general_contests([(page.extract_text() or "", _page_lines(page)) for page in pdf.pages])
+    if not contests:
+        raise FeedUnreadable(f"{state} general Abstract of Votes held no federal contest this reader could read")
+    return StateCount(source_name=source.get("source_name") or "Oregon Secretary of State", page_url=url,
+                      official=True, unit_label="counties", contests=contests)

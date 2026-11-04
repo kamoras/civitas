@@ -30,13 +30,13 @@ from app.electoral_votes import electoral_votes, is_presidential
 from app.election_calendar import (
     class_up,
     federal_states,
-    next_election_day,
     previous_election_day,
     next_senate_election_year,
     seats_up_for_year,
     senator_class,
 )
 from app.http_client import make_async_client
+from app.election_rules import election_rules
 from app.models import (
     ApiCache,
     BallotMeasure,
@@ -181,46 +181,8 @@ def _statewide_district_towns() -> dict[str, list[str]]:
     return _statewide_towns_cache
 
 
-_ELECTION_RULES_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "election_rules.json"
-_election_rules_cache: dict | None = None
-
-
 def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
-    """`key` for `state` in `cycle` from data/election_rules.json: a cited
-    legal fact per state. "generalRunoffs" -- where November is not
-    decided by a plurality (Georgia's majority rule; Louisiana's House
-    contests held as an all-party open primary), with the runoff's date.
-    "otherPrimaries" -- contests whose primary was not the state's one
-    primary date (Alabama's postponed House districts). "topPrimary" --
-    an all-party primary that sent its top two (four) to November whatever
-    their party (California, Washington; Alaska).
-
-    The file's `standing` rules are the law in force every cycle (a runoff
-    date as the statute counts it, `runoffDaysAfter` the general, computed
-    here from the cycle's own election day); `cycles` holds one cycle's
-    one-off facts. A standing rule therefore holds in a cycle nobody has
-    written up, and a one-off never leaks into the next. [] when the file
-    is missing: the page then says nothing rather than guessing."""
-    global _election_rules_cache
-    if _election_rules_cache is None:
-        try:
-            data = json.loads(_ELECTION_RULES_PATH.read_text())
-            _election_rules_cache = {"standing": data.get("standing") or {}, "cycles": data.get("cycles") or {}}
-        except Exception:
-            logger.exception("election_rules.json unavailable")
-            _election_rules_cache = {"standing": {}, "cycles": {}}
-    entries = [
-        *((_election_rules_cache["standing"].get(state) or {}).get(key) or []),
-        *(((_election_rules_cache["cycles"].get(str(cycle)) or {}).get(state) or {}).get(key) or []),
-    ]
-    out = []
-    for entry in entries:
-        entry = dict(entry)
-        if "runoffDaysAfter" in entry:
-            general = next_election_day(date(cycle, 1, 1))
-            entry["runoffDate"] = (general + timedelta(days=entry.pop("runoffDaysAfter"))).isoformat()
-        out.append(entry)
-    return out
+    return election_rules(state, cycle, key)
 
 
 def _seat_places(state: str, code: str, district: str | None, spec: dict, cycle: int) -> list[str]:
@@ -1926,11 +1888,12 @@ def live_results(
     covered race's numbers, the newest updates, and which states are read
     live at all — so a state with no feed reads as uncovered, not as a
     state where nothing has happened. Empty outside the results window."""
-    from app.pipeline.fetch.election_results import live_results_states, ranked_choice_states
+    from app.pipeline.fetch.election_results import certified_states, live_results_states, ranked_choice_states
 
     election = active_election(db)
     st = state.upper() if state else None
     races: list[dict] = []
+    certified_only: list[dict] = []
     updates: list[dict] = []
     if election.shows_results:
         day = election.election_day.isoformat()
@@ -1942,6 +1905,22 @@ def live_results(
         )
         races = [_result_json(r, race, last_ok.get(race.state)) for r, race in q.all()]
         races.sort(key=lambda r: (r["state"], r["office"] != "S", r["district"] or 0))
+        # Each race's certification where the state has certified it
+        # (live_results/certified.py): beside the live count, and on its own
+        # for a race no live feed counted.
+        from app.live_results.certified import certifications_for
+
+        certs = certifications_for(db, election.election_day, election_today())
+        for r in races:
+            r["certification"] = certs.pop(r["raceId"], None)
+        if st:
+            certs = {rid: c for rid, c in certs.items() if rid.split("-")[2:3] == [st]}
+        certified_only = [
+            {"raceId": race.id, "state": race.state, "office": race.office, "district": race.district,
+             "isSpecial": race.is_special, "certification": certs[race.id]}
+            for race in db.query(Race).filter(Race.id.in_(list(certs)))
+        ]
+        certified_only.sort(key=lambda r: (r["state"], r["office"] != "S", r["district"] or 0))
         eq = (
             db.query(ElectionResultEvent, Race).join(Race, Race.id == ElectionResultEvent.race_id)
             .filter(ElectionResultEvent.election_date == day)
@@ -2006,6 +1985,11 @@ def live_results(
         # read (LiveResultRead).
         "feeds": feeds,
         "races": races,
+        # States whose certified count is read once they certify, and the
+        # certified races no live feed counted (each race's `certification`
+        # carries the same for the counted ones).
+        "certifiedStates": sorted(certified_states()),
+        "certifiedRaces": certified_only,
         "updates": updates,
     }, max_age=CACHE_TTL_RESULTS_S)
 

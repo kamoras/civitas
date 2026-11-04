@@ -352,7 +352,7 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
                       "licenseUrl": wiki.POLL_LICENSE_URL,
                       "notice": "Poll figures, averages and the ranges built on them are derived from "
                                 "Wikipedia's race articles (Wikipedia contributors) and shared under "
-                                "CC BY-SA 4.0: reuse them under the same licence, with attribution."},
+                                "CC BY-SA 4.0: reuse them under the same license, with attribution."},
         },
         "chambers": chambers,
     }

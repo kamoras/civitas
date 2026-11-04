@@ -67,6 +67,19 @@ jobs:
       - name: Build
         run: npm run build
 
+  deploy-script:
+    name: Deploy script self-test
+    runs-on: ubuntu-latest
+    # check-and-deploy.sh decides what reaches production (only a commit
+    # whose CI on main succeeded ships, which is what lets Dependabot
+    # updates merge on their own). Its self-test sandboxes the script with
+    # stub docker/curl/gh; it wasn't run here before 2026-11 and had been
+    # failing unseen since the trust-store check was added. Runs in seconds.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash check-and-deploy.test.sh
+
   backend-fast:
     name: Backend — Fast Tests
     runs-on: ubuntu-latest

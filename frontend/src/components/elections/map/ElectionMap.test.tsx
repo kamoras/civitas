@@ -457,7 +457,7 @@ describe("election map", () => {
     expect(details).toBeDefined();
     expect(details!.open).toBe(false);
     expect(details!.textContent).toContain("Held-out checks");
-    expect(details!.textContent).toContain("Inputs, sources and licences");
+    expect(details!.textContent).toContain("Inputs, sources and licenses");
   });
 
   it("keeps a range that crosses even neutral, and parses only known views", () => {

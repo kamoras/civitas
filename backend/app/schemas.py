@@ -581,12 +581,12 @@ class PartisanDepthSchema(CamelModel):
     def lean_marker_percent(self) -> float:
         return round(50 + max(-1.0, min(1.0, self.overall_lean)) * 50, 2)
 
-    @computed_field(description="The bar from the centre to the marker: its left edge, percent")
+    @computed_field(description="The bar from the center to the marker: its left edge, percent")
     @property
     def lean_bar_left(self) -> float:
         return min(50.0, self.lean_marker_percent)
 
-    @computed_field(description="The bar from the centre to the marker: its width, percent")
+    @computed_field(description="The bar from the center to the marker: its width, percent")
     @property
     def lean_bar_width(self) -> float:
         return round(abs(self.lean_marker_percent - 50), 2)

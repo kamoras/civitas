@@ -233,15 +233,25 @@ git reset --hard origin/main
 
 # The enforcement point whatever GitHub's branch settings say (this was
 # written when the repo was private on a free plan, where branch protection
-# wasn't available): refuse to ship a commit whose CI failed.
+# wasn't available): ship only a commit whose CI run on main succeeded.
+# Until 2026-11 this refused only a failed run, so a commit whose CI was
+# still running, or had no run at all, deployed within five minutes; with
+# Dependabot updates merging on their own (dependabot-auto-merge.yml) that
+# would ship a bump before main's CI had a say. A run still going, or not
+# started, waits: the marker isn't moved, so the next tick asks again.
 # Override with FORCE_DEPLOY=1.
 if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   ci_conclusion=$(gh run list --commit "$REMOTE" --workflow CI \
     --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
   case "$ci_conclusion" in
-    failure|cancelled|timed_out)
+    success) ;;
+    failure|cancelled|timed_out|startup_failure)
       log "CI $ci_conclusion for $REMOTE — not deploying (FORCE_DEPLOY=1 to override)"
       exit 1
+      ;;
+    *)
+      log "CI not finished for $REMOTE (${ci_conclusion:-no run yet}) — deploying once it succeeds"
+      exit 0
       ;;
   esac
 fi

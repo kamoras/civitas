@@ -1,0 +1,63 @@
+{
+"_source": "Indiana Election Night Reporting, data/OffCatC_1005_A.json read 2026-11-04 01:10 UTC (election night, an incomplete count, kept only for its shape): the first two House races",
+"races": [
+{
+"OFFICE_TITLE": "United States Representative, First District",
+"SubSortOrder": "United States Representative, (1) District",
+"Candidates": {
+"Candidate": [
+{
+"NAME_ON_BALLOT": "Frank J. Mrvan",
+"PARTY": "D",
+"TOTAL": 47443,
+"CandidateName": "Mrvan, Frank Frank"
+},
+{
+"NAME_ON_BALLOT": "Barb Regnitz",
+"PARTY": "R",
+"TOTAL": 21959,
+"CandidateName": "Regnitz, Barbara Barbara"
+},
+{
+"NAME_ON_BALLOT": "Alexander R (Alex) Degman (W/I)",
+"PARTY": "I",
+"TOTAL": 0,
+"CandidateName": "Degman, Alexander Alexander"
+},
+{
+"NAME_ON_BALLOT": "Prescription Dope Deaths Johnson, Jr (W/I)",
+"PARTY": "O",
+"TOTAL": 0,
+"CandidateName": "Johnson, Prescription James"
+}
+]
+}
+},
+{
+"OFFICE_TITLE": "United States Representative, Second District",
+"SubSortOrder": "United States Representative, (2) District",
+"Candidates": {
+"Candidate": [
+{
+"NAME_ON_BALLOT": "Rudy Yakym",
+"PARTY": "R",
+"TOTAL": 26672,
+"CandidateName": "Yakym, Rudy Rudy"
+},
+{
+"NAME_ON_BALLOT": "Jamee Decio",
+"PARTY": "D",
+"TOTAL": 17284,
+"CandidateName": "Decio, Jamee Jamee"
+},
+{
+"NAME_ON_BALLOT": "William Eric Henry",
+"PARTY": "L",
+"TOTAL": 1089,
+"CandidateName": "Henry, William William"
+}
+]
+}
+}
+]
+}

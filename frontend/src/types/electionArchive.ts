@@ -2,6 +2,7 @@
  * app/api/election_archive.py): each held general election as Civitas
  * recorded it. Every field is copied from the live pages' own shapes. */
 import type {
+  RaceCertification,
   BallotMeasure,
   JudicialCourt,
   LiveRaceResult,
@@ -68,6 +69,9 @@ export interface ArchivedRace {
   candidates: ArchivedCandidate[];
   /** The count as the state last reported it; null where none was read. */
   result: LiveRaceResult | null;
+  /** The state's certification, read beside the frozen record; null
+   * until the state certifies (or the member is sworn in). */
+  certification?: RaceCertification | null;
 }
 
 /** The state's own contests as its ballot page showed them, without the

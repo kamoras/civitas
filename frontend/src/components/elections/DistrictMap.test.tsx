@@ -438,13 +438,13 @@ describe("DistrictMap", () => {
     expect(screen.queryByText("D+3")).not.toBeInTheDocument();
   });
 
-  it("keys a lone statewide-only district as grey among shaded ones", async () => {
+  it("keys a lone statewide-only district as gray among shaded ones", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     const mixed = RACES.map((r) => (r.district === 3 ? { ...r, pviLevel: "state" as const } : r));
     render(<DistrictMap state="CT" races={mixed} picked={null} onPick={vi.fn()} />);
 
     const three = await screen.findByRole("button", { name: "CT-3" });
-    expect(screen.getByText(/redder = safer R .* grey = no district lean yet/)).toBeInTheDocument();
+    expect(screen.getByText(/redder = safer R .* gray = no district lean yet/)).toBeInTheDocument();
     expect(three.getAttribute("style")).not.toBe(
       screen.getByRole("button", { name: "CT-4" }).getAttribute("style")
     );

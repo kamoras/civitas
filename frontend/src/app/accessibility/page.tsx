@@ -140,13 +140,13 @@ export default function AccessibilityPage() {
                   <P>
                     The site is dark text on a warm paper by default, and a warm dark theme follows
                     your device&apos;s dark setting, or the &ldquo;Dark theme&rdquo; button in the
-                    footer (kept for this tab only). Text colours come from a fixed palette in each
+                    footer (kept for this tab only). Text colors come from a fixed palette in each
                     theme with no dimmer shades to reach for. The faintest text clears 4.5:1 against
                     every background any text sits on, in both themes, and stays at or above APCA Lc
-                    58. Links inside a sentence are underlined, not only coloured. Charts and maps
+                    58. Links inside a sentence are underlined, not only colored. Charts and maps
                     follow the theme you are viewing: their marks clear 3:1 against the page in both
                     themes, text on a filled cell clears 4.5:1, and letters on map tiles sit on an
-                    outline in the page&apos;s colour, so they read on any tile colour. A shared
+                    outline in the page&apos;s color, so they read on any tile color. A shared
                     picture of a section is drawn in the theme you are viewing.
                   </P>
                 </Box>
@@ -201,7 +201,7 @@ export default function AccessibilityPage() {
                   title="Windows High Contrast"
                   dek={
                     <>
-                      In forced-colours mode, decorative colour effects that would smear text are
+                      In forced-colors mode, decorative color effects that would smear text are
                       removed.
                     </>
                   }
@@ -296,7 +296,7 @@ export default function AccessibilityPage() {
                     of numbers line up. Page and section titles are in Source Serif 4. DM Mono is
                     kept for record identifiers (issue, roll-call and bill numbers), where telling 0
                     from O and 1 from l matters. The Civitas wordmark is Archivo. All four are
-                    open-licence fonts served from this site.
+                    open-license fonts served from this site.
                   </P>
                   <P>
                     Labels, buttons, menus and table headings are in sentence case, not capitals.
@@ -333,7 +333,7 @@ export default function AccessibilityPage() {
                   <P>
                     The same routes, on the same production build, are loaded in Chrome at 320 and
                     1280 pixels wide and checked against every axe-core rule for WCAG 2.0, 2.1 and
-                    2.2 at levels A and AA, including colour contrast and target size. A page wider
+                    2.2 at levels A and AA, including color contrast and target size. A page wider
                     than a 320-pixel screen fails too, and so does a text box or menu under 16
                     pixels or 44 pixels tall at that width.
                   </P>
@@ -364,8 +364,8 @@ export default function AccessibilityPage() {
                   more="what the tests hold"
                 >
                   <P>
-                    Tests fail if code uses a stock Tailwind colour or a semi-transparent colour
-                    outside the palette. They hold each text colour to its APCA floor on every
+                    Tests fail if code uses a stock Tailwind color or a semi-transparent color
+                    outside the palette. They hold each text color to its APCA floor on every
                     background in both themes, and compute the WCAG ratio of every text and
                     background pair written in the code, failing below 4.5:1 (3:1 for large text).
                   </P>
@@ -379,8 +379,8 @@ export default function AccessibilityPage() {
                     Automated tools find some kinds of failure and not others. They can confirm that
                     a button has a name, not that the name makes sense. Contrast is measured in the
                     browser checks, not in the component tests, which run without a real renderer;
-                    axe-core does not measure text drawn inside a chart or map, so those colours are
-                    checked by the palette tests and by hand. Keyboard behaviour is covered by
+                    axe-core does not measure text drawn inside a chart or map, so those colors are
+                    checked by the palette tests and by hand. Keyboard behavior is covered by
                     component tests where it has regressed before (the tab bars and dialog focus are
                     two). Otherwise it is checked by hand on a production build when it changes, not
                     on a schedule.

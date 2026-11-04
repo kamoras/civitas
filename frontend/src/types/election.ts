@@ -912,6 +912,34 @@ export interface LiveCandidateResult {
   candidateId: string | null;
 }
 
+/** A race's count as its state certified it, or the member sworn in for
+ * the seat (backend live_results/certified.py). `winner` is set only when
+ * the race may be shown as won: certified with no runoff owed and no recount
+ * still possible under state law, or sworn in. Word it through
+ * certificationText (lib/results.ts). */
+export interface RaceCertification {
+  basis: "certified" | "sworn_in";
+  status: "certified" | "recount_possible" | "recount" | "runoff" | "sworn_in";
+  certifiedOn: string | null;
+  /** False: the document states no date, and certifiedOn is the day
+   * Civitas first read it as certified. */
+  certifiedOnStated?: boolean;
+  /** The last day a recount may be asked for, where the law sets one. */
+  recountUntil: string | null;
+  statute: string | null;
+  sourceName: string;
+  sourceUrl: string | null;
+  votesCounted: number | null;
+  winner: { name: string; party: string | null; candidateId: string | null } | null;
+  candidates: {
+    name: string;
+    party: string | null;
+    votes: number | null;
+    pct: number | null;
+    candidateId: string | null;
+  }[];
+}
+
 export interface LiveRaceResult {
   raceId: string;
   state: string;
@@ -950,10 +978,20 @@ export interface LiveRaceResult {
    * (lib/results.ts), never from this alone. */
   flip: boolean;
   candidates: LiveCandidateResult[];
+  /** The state's certification, once it has certified (null before). */
+  certification?: RaceCertification | null;
 }
 
 export type ResultEventKind =
-  "first_returns" | "lead_change" | "all_reporting" | "official" | "flip" | "flip_reversed";
+  | "first_returns"
+  | "lead_change"
+  | "all_reporting"
+  | "official"
+  | "flip"
+  | "flip_reversed"
+  /** The race may be shown as won: certified, no runoff or recount left
+   * (backend live_results/certified.py). Its detail is a RaceCertification. */
+  | "certified_winner";
 
 export interface ResultEventPerson {
   name: string;

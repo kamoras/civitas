@@ -100,6 +100,10 @@ class StateCount:
     # renamed mid-count (a new label format) is the same contest, with the
     # same candidates, and dropping it left the seat's count frozen.
     unplaced: list[ContestCount] = field(default_factory=list)
+    # A certified reader's count only (fetch_certified_count): the date the
+    # state certified it where its document states one (None where it
+    # doesn't: the sync then dates it by the day it was first read).
+    certified_on: date | None = None
 
 
 class UntrustedCount(ExpectedSourceFailure, Exception):
@@ -276,15 +280,19 @@ def _readers() -> dict:
     from app.pipeline.fetch import (
         state_candidates_clarity,
         state_candidates_enhanced_voting,
+        state_candidates_in,
         state_candidates_tally_enr,
         state_candidates_totalvote,
+        state_candidates_vt,
     )
 
     return {
         "clarity": state_candidates_clarity.fetch_general_results,
+        "in_enr": state_candidates_in.fetch_general_results,
         "tally_enr": state_candidates_tally_enr.fetch_general_results,
         "totalvote_enr": state_candidates_totalvote.fetch_general_results,
         "enhanced_voting": state_candidates_enhanced_voting.fetch_general_results,
+        "vt_enr": state_candidates_vt.fetch_general_results,
     }
 
 
@@ -375,3 +383,92 @@ def _without_unnumbered_house_collisions(state: str, contests: list[ContestCount
         "(add the state's label format as house_label_regex)", state, sum(groups[s] for s in clashing),
     )
     return [c for c in contests if not (c.office == "H" and c.district is None and c.is_special in clashing)]
+
+
+def _certified_readers() -> dict:
+    """Readers of a state's CERTIFIED general-election count, by strategy:
+    each takes (client, election_day, state, source) and returns a StateCount
+    (certified_on set where the document dates it), or None while the state has not certified the
+    election (its document isn't published, or still says unofficial).
+    Raises FeedUnreadable when the source can't be read."""
+    from app.pipeline.fetch import (
+        state_candidates_ca_sov, state_candidates_in, state_candidates_ks, state_candidates_ky,
+        state_candidates_ma, state_candidates_nc_certified, state_candidates_nj, state_candidates_or,
+        state_candidates_wy,
+    )
+
+    return {
+        "ca_statement_of_vote": state_candidates_ca_sov.fetch_certified_general,
+        "enhanced_voting_official": _enhanced_voting_official,
+        "in_enr_certified": state_candidates_in.fetch_certified_general,
+        "ks_official_general": state_candidates_ks.fetch_certified_general,
+        "ky_general_certification": state_candidates_ky.fetch_certified_general,
+        "ma_pd43_general": state_candidates_ma.fetch_certified_general,
+        "nc_certified_general": state_candidates_nc_certified.fetch_certified_general,
+        "nj_official_general": state_candidates_nj.fetch_certified_general,
+        "or_general_abstract": state_candidates_or.fetch_certified_general,
+        "wy_general_canvass": state_candidates_wy.fetch_certified_general,
+    }
+
+
+async def _enhanced_voting_official(client: httpx.AsyncClient, election_day: date, state: str, source: dict):
+    """The state's live Enhanced Voting count, taken as certified only once
+    the portal marks it official (`isOfficialResults`). Rhode Island's flag
+    flipped when the state certified its 2026 primary, six days after it;
+    Utah's stayed false a month past its certification
+    (state_candidates_enhanced_voting's docstring). So the flag is read as
+    certification only when it is set: a state that never sets it waits
+    for the new Congress, and no count is read as certified before the
+    state marks it so."""
+    full = source_for_state(state)
+    reader = _reader_for(full) if full else None
+    if reader is None or (live_source(full).get("strategy") != "enhanced_voting"
+                          and _readers().get("enhanced_voting") is not reader):
+        return None
+    count = await reader(client, election_day, state, live_source(full))
+    if count is None or not count.official:
+        return None
+    count.source_name = source.get("source_name") or count.source_name
+    return count
+
+
+def certified_source(source: dict) -> dict | None:
+    """The state's `certified_results` block: the document its certified
+    count is read from, a source entry of its own (as `live_results` is)."""
+    block = source.get("certified_results")
+    if isinstance(block, dict):
+        return {"source_name": source.get("source_name"), **block}
+    return None
+
+
+def certified_states() -> set[str]:
+    """Every state with a reader for its certified general-election count."""
+    readers = _certified_readers()
+    return {
+        s for s in configured_states()
+        if (src := source_for_state(s)) and (block := certified_source(src)) and block.get("strategy") in readers
+    }
+
+
+async def fetch_certified_count(
+    client: httpx.AsyncClient, state: str, election_day: date,
+) -> StateCount | None:
+    """The state's certified federal count for `election_day`, or None while
+    it has not certified. Raises FeedUnreadable when it couldn't be read."""
+    source = source_for_state(state)
+    block = certified_source(source) if source else None
+    reader = _certified_readers().get((block or {}).get("strategy"))
+    if reader is None:
+        return None
+    try:
+        count = await reader(client, election_day, state.upper(), block)
+    except (UntrustedCount, FeedUnreadable):
+        raise
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        logger.exception("%s certified results read failed", state)
+        raise FeedUnreadable(f"{state} certified results read failed ({type(exc).__name__})") from exc
+    if count is None:
+        return None
+    count.contests = _without_unnumbered_house_collisions(state, count.contests)
+    return count
+

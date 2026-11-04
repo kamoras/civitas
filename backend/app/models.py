@@ -1226,6 +1226,47 @@ class RaceResult(Base):
     race: Mapped["Race"] = relationship(back_populates="result")
 
 
+class RaceCertification(Base):
+    """A race's count as its state certified it, read from the state's own
+    certified results (live_results/certified.py), or, where no certified
+    reader covers the state, the member the new Congress swore in for the
+    seat (basis "sworn_in"). Kept apart from RaceResult: that row is the
+    election-night count, frozen into the archive with the results window;
+    certification comes later, often after the window has closed. What the
+    page may say from it is app/recount_rules.outcome's, never this row's
+    alone: a certified count can still be recounted. No foreign key to
+    races: a reset after the window would cascade it away, and nothing
+    reads a past cycle's certification again."""
+    __tablename__ = "race_certifications"
+
+    race_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cycle: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False)
+    office: Mapped[str] = mapped_column(String(1), nullable=False)
+    district: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "certified": the state's certified count; "sworn_in": the seat's
+    # member as sworn in, with no count.
+    basis: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The date the state certified, as its document states it; where the
+    # document states none, the day Civitas first read it as certified
+    # (certified_on_stated False), which is never earlier than the state's
+    # own date, so a recount deadline counted from it is never too early.
+    certified_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    certified_on_stated: Mapped[bool] = mapped_column(Boolean, default=True)
+    source_name: Mapped[str] = mapped_column(String, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # JSON list, most votes first: {name, party, votes, candidateId}; for
+    # "sworn_in", the one member, with votes null.
+    tallies: Mapped[str] = mapped_column(Text, default="[]")
+    # Every vote cast for the office as certified (write-ins included where
+    # the state counts them); null for "sworn_in".
+    votes_counted: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    read_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # When the certified figures last changed (a recount's recertification).
+    changed_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class ElectionResultEvent(Base):
     """One thing that happened in a race's count — first returns, a change
     of leader, every unit reporting, the source calling its count official.

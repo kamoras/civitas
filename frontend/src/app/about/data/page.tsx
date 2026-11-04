@@ -51,7 +51,7 @@ export default function DataChapter() {
         </Point>
         <Point>
           AI sorts records into categories, finds claims in news articles and writes a few short,
-          labelled summaries. It never produces a score, and never writes anything about a ballot.
+          labeled summaries. It never produces a score, and never writes anything about a ballot.
         </Point>
         <Point>
           Every model runs on the same small computer as the site. No data is sent to an AI company.
@@ -219,7 +219,7 @@ export default function DataChapter() {
                 Posner&apos;s coding through 2014); nomination dates; each justice&apos;s position
                 per term with its 95% credible interval. The Database is shared under Creative
                 Commons Attribution-NonCommercial 3.0 United States; Martin and Quinn publish their
-                scores with no licence stated, and they are cited as Martin and Quinn (2002). A
+                scores with no license stated, and they are cited as Martin and Quinn (2002). A
                 confirmed federal judge&apos;s nomination page links the Federal Judicial
                 Center&apos;s biography where its directory has exactly one judge with the same
                 court, nomination date and surname.
@@ -506,7 +506,7 @@ export default function DataChapter() {
               Classification avoids hand-written keyword lists, with four narrow, documented
               exceptions: a check for a bill&apos;s leading verb, a hotel-brand tier for industries,
               a PAC-suffix and payment-processor tier for donors, and a rule that accepts a quoted
-              claim&apos;s actor when the actor is a capitalised name. Each exists because of a
+              claim&apos;s actor when the actor is a capitalized name. Each exists because of a
               specific, measured failure of the embedding model, and runs only ahead of the
               embedding classifier, never in place of it. The project&apos;s classification notes
               (docs/methodology/classification.md) list each with its measurement.
@@ -988,7 +988,7 @@ export default function DataChapter() {
                 /.well-known/http-message-signatures-directory
               </a>
               , where bot-management services such as Cloudflare and Akamai check it. That lets a
-              site recognise Civitas and choose to let it in. A site that still says no is
+              site recognize Civitas and choose to let it in. A site that still says no is
               respected: the signature identifies us, it is not a way around anyone&apos;s rules.
             </P>
           </Box>

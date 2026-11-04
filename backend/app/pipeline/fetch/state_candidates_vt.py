@@ -132,6 +132,7 @@ the party line and a plurality winner of a three-way field.
 """
 
 import logging
+import re
 
 import httpx
 
@@ -427,3 +428,91 @@ async def fetch_confirmed_candidates(
         # the page says whether their names are the whole ballot.
         return SourceRecords(records + statewide, ballot_list=statewide.ballot_list)
     return records
+
+
+# ── The general's live count ──────────────────────────────────────────
+#
+# Read by the live-results sync (live_results/sync.py). The general's
+# federal report (verified 2026-11-04 on election night: "2026 GENERAL
+# ELECTION", 141 of 247 towns in) has one block with no party, each office
+# with one entry per town ("cs"), each listing its candidates ("rc", each
+# with its own party, "pn") and write-ins ("wc"; "OTHER WRITE-IN" carries
+# cid 0). A candidate's votes are summed over the towns by cid; a write-in
+# with no cid counts in the contest's total and is no one's. The reporting
+# figure is the election's own "141/247" towns: Vermont's House seat and
+# both Senate seats are statewide, and a town reports once, so it counts
+# units with any results (units_complete False), and the page says "results
+# from N of M towns". `isOfficial` is Vermont's own label for the count.
+_SOURCE_STAMP_RE = re.compile(r"-(\d{14})\.json$")
+
+
+def general_contests(report: dict) -> list:
+    from app.pipeline.fetch.election_results import ContestCount
+
+    contests = []
+    for block in report.get("d") or []:
+        for office in block.get("o") or []:
+            found = parse_office(office.get("on") or "")
+            if found is None:
+                continue
+            totals: dict[int, list] = {}
+            other = 0
+            for town in office.get("cs") or []:
+                for c in [*(town.get("rc") or []), *(town.get("wc") or [])]:
+                    votes = c.get("vc")
+                    if not isinstance(votes, int):
+                        continue
+                    cid, name = c.get("cid"), " ".join((c.get("cn") or "").split())
+                    if cid in (None, 0) or not name or name.upper() in _NON_CANDIDATE_NAMES:
+                        other += votes
+                        continue
+                    entry = totals.setdefault(cid, [name, c.get("pn"), 0])
+                    entry[2] += votes
+            candidates = [
+                # A fusion line ("DEM/PROG") is its first party's.
+                (name, normalize_party(str(pn).split("/")[0], ballot_list=True) if pn else None, votes)
+                for name, pn, votes in totals.values()
+            ]
+            if candidates:
+                contests.append(ContestCount(office=found[0], district=found[1], candidates=candidates,
+                                             total_votes=sum(v for _, _, v in candidates) + other))
+    return contests
+
+
+async def fetch_general_results(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Vermont's count for `election_day`'s general, or None when the
+    portal lists no statewide general on that date."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount
+
+    try:
+        guid = await _current_election_guid(client, state, election_day.year, "G")
+    except DiscoveryFailed as exc:
+        raise FeedUnreadable(str(exc)) from exc
+    if guid is None:
+        return None
+    detail = await fetch_json_with_retry(client, _rate_limiter, f"{_BASE_URL}/elections/{guid}.json",
+                                         f"{state} election detail")
+    if not isinstance(detail, dict):
+        raise FeedUnreadable(f"{state} election detail could not be read")
+    meta = detail.get("electionDetails") or {}
+    if str(meta.get("electionDate") or "")[:10] != election_day.isoformat() or meta.get("electionTypeCode") != "G":
+        return None
+    path = (detail.get("federal") or {}).get("path")
+    if not path or not (detail.get("federal") or {}).get("isEnable"):
+        return None
+    report = await fetch_json_with_retry(client, _rate_limiter, f"{_BASE_URL}/{path.replace(chr(92), '/')}",
+                                         f"{state} federal report")
+    if not isinstance(report, dict):
+        raise FeedUnreadable(f"{state} federal report could not be read")
+    reported, _, total = str(detail.get("townsReporting") or "").partition("/")
+    stamp = _SOURCE_STAMP_RE.search(path)
+    contests = general_contests(report)
+    for contest in contests:
+        if reported.isdigit() and total.isdigit():
+            contest.reporting_units, contest.total_units = int(reported), int(total)
+    return StateCount(
+        source_name=source.get("source_name") or "Vermont Secretary of State (election results)",
+        page_url="https://electionresults.vermont.gov/", official=bool(meta.get("isOfficial")),
+        unit_label="towns", units_complete=False, contests=contests,
+        source_version=f"{guid}:{stamp.group(1)}" if stamp else None,
+    )

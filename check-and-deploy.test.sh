@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# The scratch repo's commits need an identity, and a CI runner has none.
+export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@localhost
+export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@localhost
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -31,6 +35,12 @@ git -C "$REPO" checkout -q "$BASE_SHA" -b main
 git -C "$REPO" reset -q --hard "$BASE_SHA"
 
 cp "$SCRIPT_DIR/check-and-deploy.sh" "$REPO/check-and-deploy.sh"
+# The deploy runs ./check-trust-stores.sh on the built images; with no
+# images here it stands in as a pass. Without it every deploy scenario
+# failed as "an image trusts a distrusted root" from the day the check
+# was added, unnoticed because this test wasn't run in CI until 2026-11.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$REPO/check-trust-stores.sh"
+chmod +x "$REPO/check-trust-stores.sh"
 cat > "$REPO/.env" <<'EOF'
 ADMIN_TOKEN=test-token
 EOF
@@ -44,7 +54,7 @@ STUBS="$WORK/stubs"
 mkdir -p "$STUBS"
 
 run_scenario() {
-  local desc="$1" busy="$2" build_seconds_marker="$3"
+  local desc="$1" busy="$2" build_seconds_marker="$3" ci="${4-success}"
   echo "--- $desc ---"
 
   # Advance the bare remote to NEW_SHA so the script sees "new commit".
@@ -96,10 +106,9 @@ if [[ "\$1" == "image" || "\$1" == "builder" ]]; then
 fi
 exit 0
 EOF
-  cat > "$STUBS/gh" <<'EOF'
-#!/usr/bin/env bash
-echo "success"
-EOF
+  # What gh run list --jq '.[0].conclusion' prints: "success", "failure",
+  # empty while a run is in progress, and "null" for a commit with no run.
+  printf '#!/usr/bin/env bash\necho %q\n' "$ci" > "$STUBS/gh"
   chmod +x "$STUBS"/*
   rm -f "$REPO/.build-ran" "$REPO/.stack-deployed"
 
@@ -118,6 +127,20 @@ run_scenario "idle throughout: must build, deploy, record marker" 0 0
 [[ -f "$REPO/.build-ran" ]] || fail "did not build when pipeline was idle"
 [[ -f "$REPO/.stack-deployed" ]] || fail "did not stack-deploy when pipeline was idle"
 [[ "$(cat "$REPO/.last-deployed-sha")" == "$NEW_SHA" ]] || fail "marker not set to deployed sha"
+
+# Scenarios 2b-2d: the CI gate. Only a successful CI run on main ships. A
+# run still going, or none yet, defers to the next tick with the marker
+# untouched; a failed run refuses.
+for ci in "" null; do
+  run_scenario "CI not finished (${ci:-in progress}): must defer, not build" 0 0 "$ci"
+  [[ -f "$REPO/.build-ran" ]] && fail "built before CI finished (${ci:-in progress})"
+  [[ -f "$REPO/.last-deployed-sha" ]] && fail "marker written before CI finished (${ci:-in progress})"
+done
+if run_scenario "CI failed: must refuse" 0 0 failure; then fail "exited 0 on a failed CI run"; fi
+[[ -f "$REPO/.build-ran" ]] && fail "built despite failed CI"
+[[ -f "$REPO/.last-deployed-sha" ]] && fail "marker written despite failed CI"
+# The scenarios below write their own curl stub but keep this gh: a green run.
+printf '#!/usr/bin/env bash\necho success\n' > "$STUBS/gh"
 
 # Scenario 3: the regression this fix targets. Pipeline idle at the first
 # check (so the build runs) but busy by the time of the second check
