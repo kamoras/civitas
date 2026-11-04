@@ -101,7 +101,7 @@ function moreFor(id: string, e: Environmental): { label: string; children: React
             <Item label={llm.name}>
               {llm.parameters.toLocaleString("en-US")} parameters
               {llm.type ? `, ${llm.type}` : ""}. Finds claims in news articles and writes a few
-              short, labelled summaries. Read from the llama.cpp server&apos;s own model metadata (
+              short, labeled summaries. Read from the llama.cpp server&apos;s own model metadata (
               <code>/v1/models</code>), {day(llm.readAt)}.
             </Item>
             {embedding.map(([name, m]) => (

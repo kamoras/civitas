@@ -218,7 +218,7 @@ def csv_text(data: dict) -> str:
               f"House: app/data/district_lean.json, {ordinal(data['sources']['lean']['house']['congress'])} "
               "Congress lines).\n")
     out.write(f"# Polls: {POLL_ATTRIBUTION}, {POLL_LICENSE} ({POLL_LICENSE_URL}). The poll-derived columns are "
-              f"shared under the same licence; reuse them with attribution and under {POLL_LICENSE}.\n")
+              f"shared under the same license; reuse them with attribution and under {POLL_LICENSE}.\n")
     w = csv.writer(out)
     w.writerow(CSV_COLUMNS)
     for chamber, c in data["chambers"].items():

@@ -371,25 +371,25 @@ export default function ResultsOverview({
             />
           </div>
           <p className="border-t border-white/[0.07] px-4 py-3 text-body text-ink-min">
-            Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
+            Color is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state lists its count as
             official, and a race there still only leads: Civitas calls no race.{" "}
             {chamber === "H"
-              ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
-              : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in; with only one of its two races counted, it is shaded by that one, and the other is named as having no count."}{" "}
-            Hatched grey means Civitas shows a count for the state&apos;s other chamber&apos;s races
+              ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and gray when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
+              : "A state electing both its senators is shaded by the party leading more of its two races, gray when two parties lead equally many, and fainter while either race has under half in; with only one of its two races counted, it is shaded by that one, and the other is named as having no count."}{" "}
+            Hatched gray means Civitas shows a count for the state&apos;s other chamber&apos;s races
             but none for this one&apos;s, not that no votes are in.{" "}
             {refreshFailed ? (
               <>
                 This page couldn&apos;t refresh the count, so none of it is live: stripes over a
-                party&apos;s colour mark the count as this page last read it. That says nothing
-                about the states&apos; own feeds.
+                party&apos;s color mark the count as this page last read it. That says nothing about
+                the states&apos; own feeds.
               </>
             ) : (
               <>
                 Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, or hasn&apos;t
                 lately: on a dark state, that says nothing about whether counting has started; over
-                a party&apos;s colour, the count is the last one read and is not live.
+                a party&apos;s color, the count is the last one read and is not live.
               </>
             )}
           </p>

@@ -159,7 +159,7 @@ export const VIEW_EXPLAINER: Record<MapView, string> = {
   usual:
     "From official results of the last two presidential elections, compared with the country as a whole.",
   polls:
-    "The usual vote, nudged by this year's polls where a seat has any. Each seat shows a range of the margin, and close ranges stay grey.",
+    "The usual vote, nudged by this year's polls where a seat has any. Each seat shows a range of the margin, and close ranges stay gray.",
   diff: "Seats where polls point a different way from how the seat usually votes, by more than the range allows.",
 };
 

@@ -209,12 +209,12 @@ export default function StateResults({
               {stateName} decides its U.S. Senate and House races by ranked-choice voting: when no
               candidate has a majority of first choices, the winner comes from rounds the state
               tabulates after election night. An election-night count is first choices only, so it
-              isn&apos;t shown or coloured here.{" "}
+              isn&apos;t shown or colored here.{" "}
             </>
           ) : (
             <>
               {stateName}&apos;s election office doesn&apos;t publish a results feed this page can
-              read, so its count isn&apos;t shown or coloured here.{" "}
+              read, so its count isn&apos;t shown or colored here.{" "}
             </>
           )}
           <OfficeLink

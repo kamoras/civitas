@@ -142,7 +142,7 @@ export default async function ElectionsChapter() {
               against the nation, from the most Democratic-leaning at the left, through even, to the
               most Republican: every U.S. House district on the lines this election is fought on, or
               the 50 states for a Senate race. Each seat is one mark, stacked with the seats of the
-              same lean, coloured by the side its own lean falls on, and this seat&apos;s column is
+              same lean, colored by the side its own lean falls on, and this seat&apos;s column is
               outlined; the same counts are in a table beside it. The count of seats leaning further
               each way, and every seat&apos;s lean on the axis, are worked out on the server from
               the same table the lean comes from. A district that only has its state&apos;s figure
@@ -150,7 +150,7 @@ export default async function ElectionsChapter() {
               that it can&apos;t be read as a call on the count. A House district&apos;s figure is
               computed from precinct returns and used in no member comparison (
               <A href="/about/data#computed-lean">how it is computed</A>); where Civitas has none,
-              the page shows Cook&apos;s, labelled as Cook&apos;s.
+              the page shows Cook&apos;s, labeled as Cook&apos;s.
             </P>
           </Box>
           <Box
@@ -202,7 +202,7 @@ export default async function ElectionsChapter() {
               polls where it has any; each range says whether it comes from polls or has no poll
               behind it. A lean and a margin are both written like D+8, but a margin counts the gap
               between two candidates, so it runs twice a lean: a seat that leans D+8 has a margin of
-              D+16 when the country splits evenly. A range that crosses even is grey and says too
+              D+16 when the country splits evenly. A range that crosses even is gray and says too
               close to tell. <strong>Difference</strong> marks the seats whose polls pull the range
               clear of where the lean, incumbency and the national swing alone would put it.
             </P>
@@ -227,7 +227,7 @@ export default async function ElectionsChapter() {
               treats both parties the same way (when a range leaned one way by this much, how often
               that side carried the seat), and why there is no seat total. The archive&apos;s polls
               reach only the final weeks before election day, so further out the map shows each
-              seat&apos;s structural range alone, labelled fundamentals only, with its polls listed
+              seat&apos;s structural range alone, labeled fundamentals only, with its polls listed
               beside it. It has nothing to do with a member&apos;s record on their page, which
               describes what the member did, not an election. Only Democrat-versus-Republican races
               whose November ballot Civitas has confirmed get a range. The House fit covers every
@@ -239,12 +239,12 @@ export default async function ElectionsChapter() {
           <Box
             title="Polls from Wikipedia"
             dek="This year's polls come from Wikipedia's race articles, shared under CC BY-SA 4.0. From election day the map is withdrawn."
-            more="the licence, and the archive"
+            more="the license, and the archive"
           >
             <P>
               This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and
-              the ranges built on them are shared under Wikipedia&apos;s licence, CC BY-SA 4.0, with
-              attribution to Wikipedia contributors: reuse them under the same licence. Each seat
+              the ranges built on them are shared under Wikipedia&apos;s license, CC BY-SA 4.0, with
+              attribution to Wikipedia contributors: reuse them under the same license. Each seat
               links the article revision its polls were read from. From election day the map is
               withdrawn and the results map takes its place. The map as it stood before election day
               is kept in that election&apos;s archive.
@@ -515,7 +515,7 @@ export default async function ElectionsChapter() {
               lean, and in the redrawn states that is the lean of the new district on the ballot
               (Cook&apos;s figures for the new lines), not of the old seat with the same number. A
               district with no lean of its own on file is left unshaded rather than given its
-              state&apos;s colour. A text filter works too: type your city, town or county, a
+              state&apos;s color. A text filter works too: type your city, town or county, a
               candidate&apos;s name or a district number. Each district lists the cities, towns and
               communities in it, from the same Census block files as the state legislative lists
               below (a place with fewer than 50 residents inside a district is left off it), and a
@@ -892,20 +892,20 @@ export default async function ElectionsChapter() {
                 each state page put results first.
               </Item>
               <Item label="The national map">
-                Each state is shaded by who is leading, not by how it usually votes. The colour is
+                Each state is shaded by who is leading, not by how it usually votes. The color is
                 fainter while fewer than half of its reporting areas (usually precincts) are in. It
                 turns solid once the state lists its count as official.
               </Item>
               <Item label="A state with several races">
                 Where a state has more than one race on the map (its House seats, or both Senate
-                seats), it takes the colour of the party leading the most of them. It is grey when
+                seats), it takes the color of the party leading the most of them. It is gray when
                 two parties lead equally many. It stays fainter until every race has half its areas
                 in, and turns solid only when every count is official.
               </Item>
-              <Item label="Patterns as well as colours">
+              <Item label="Patterns as well as colors">
                 A state still voting, a state with no votes yet, and a state whose feed
-                couldn&apos;t be read each get a pattern as well as a colour. Each state&apos;s
-                name, read aloud, says where its count stands.
+                couldn&apos;t be read each get a pattern as well as a color. Each state&apos;s name,
+                read aloud, says where its count stands.
               </Item>
               <Item label="Each state page">
                 It says when its count was last read. Above the ballot research it shows the Senate
@@ -1011,7 +1011,7 @@ export default async function ElectionsChapter() {
                 while counts move, 70 once they are read hourly), or there is no record of a check
                 at all since its polls closed, the state is marked <strong>stale</strong>. Its row
                 says when its feed was last checked and when the count shown was read. The map keeps
-                the last leader&apos;s colour under amber stripes.
+                the last leader&apos;s color under amber stripes.
               </Item>
               <Item label="Whose clock">
                 All of this is judged by the server&apos;s clock, from the time on the page&apos;s

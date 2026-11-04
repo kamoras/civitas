@@ -274,7 +274,7 @@ def csv_text(graded: dict) -> str:
     out.write("# Counts: each state's own results system, as the archive copied it. Usual vote: Civitas's "
               "computed lean from official returns (app/data/state_pvi.json, app/data/district_lean.json).\n")
     out.write(f"# Ranges: built on polls from {POLL_ATTRIBUTION}, {POLL_LICENSE} ({POLL_LICENSE_URL}); the range "
-              f"columns are shared under the same licence, with attribution.\n")
+              f"columns are shared under the same license, with attribution.\n")
     w = csv.writer(out)
     w.writerow(CSV_COLUMNS)
 

@@ -41,7 +41,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         </p>
         <p className="text-small">
           Polls: {data.sources.polls.attribution}, {data.sources.polls.license}
-          {tp ? `. Past polls: ${tp.attribution}` : ""}. Sources and licences are listed in the full
+          {tp ? `. Past polls: ${tp.attribution}` : ""}. Sources and licenses are listed in the full
           method.
         </p>
       </div>
@@ -69,13 +69,13 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             <li>
               <strong className="text-ink">Polls</strong> is an 80% range for the margin: the usual
               vote, plus incumbency and the national generic-ballot average, combined with the
-              seat&apos;s own polls. A seat is coloured by the end of its range nearest even, so a
-              range that crosses even is grey and labelled too close to tell. The margin is how far
+              seat&apos;s own polls. A seat is colored by the end of its range nearest even, so a
+              range that crosses even is gray and labeled too close to tell. The margin is how far
               one party&apos;s share of the two-party vote runs ahead of the other&apos;s, also
               written D+N or R+N but on twice the lean&apos;s scale: a gap between two shares, where
               a lean is one share against the nation&apos;s. A seat leaning D+8 has a margin of D+16
               when the nation splits evenly, so a margin printed beside a lean is not a swing. Each
-              range is labelled by what it rests on: <em>from polls</em> when the seat&apos;s own
+              range is labeled by what it rests on: <em>from polls</em> when the seat&apos;s own
               polls are in the average, <em>no poll of this seat</em> when none is (the structural
               line alone), and <em>before polls count</em> further out than the poll window.
             </li>
@@ -107,7 +107,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
               lean of polls the source marks as party-sponsored. Sponsored polls are flagged, not
               hidden. The {data.pollWindowDays} days are not chosen: they are how far before
               election day the past polls the method is fitted on reach, so it is never checked on
-              older polls. Further out than that the map shows the structural line alone, labelled
+              older polls. Further out than that the map shows the structural line alone, labeled
               fundamentals only, with each seat&apos;s polls listed beside it
               {data.pollsInRange ? "" : " (as now)"}.
             </li>
@@ -251,11 +251,11 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             Adding up races only works if their errors are independent, and they are not: when polls
             miss, they tend to miss the same way everywhere. In {c.seatTotalsOutside90} of the{" "}
             {c.seatTotals.length} held-out cycles each party&apos;s seat count fell outside the 90%
-            band that independent races would give. Until a shared national error is modelled and
+            band that independent races would give. Until a shared national error is modeled and
             checked the same way, the map shows each seat&apos;s own range and no tally by party.
           </p>
 
-          <h3 className={TYPE.boxTitle}>Inputs, sources and licences</h3>
+          <h3 className={TYPE.boxTitle}>Inputs, sources and licenses</h3>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               Usual vote: {data.sources.lean.source} (
@@ -304,7 +304,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
               averages, not polls.
             </li>
             <li>
-              Licence: {data.sources.polls.notice} (
+              License: {data.sources.polls.notice} (
               <a
                 href={data.sources.polls.licenseUrl}
                 className="underline decoration-white/30 hover:text-ink-hi"
