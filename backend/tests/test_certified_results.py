@@ -338,3 +338,13 @@ class TestIndianaReader:
         assert (await ind.fetch_certified_general(None, DAY, "IN", {})).official is True
         # Another election on the site is not this one.
         assert await ind.fetch_general_results(None, date(2024, 11, 5), "IN", {}) is None
+
+
+class TestKansasReader:
+    def test_reads_the_2024_official_totals_and_skips_state_contests(self):
+        from app.pipeline.fetch.state_candidates_ks import general_contests
+
+        contests = {(c.office, c.district): c for c in general_contests(_fixture("ks_2024_general_lines.json")["lines"])}
+        assert sorted(contests) == [("H", n) for n in range(1, 5)]  # the President's and Kansas Senate rows are no seat here
+        assert contests[("H", 2)].candidates == [
+            ("Derek Schmidt", "R", 172_847), ("Nancy Boyda", "D", 115_685), ("John Hauer", "L", 14_229)]
