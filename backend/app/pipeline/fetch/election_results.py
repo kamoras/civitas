@@ -390,11 +390,33 @@ def _certified_readers() -> dict:
     from app.pipeline.fetch import state_candidates_ky, state_candidates_ma, state_candidates_or, state_candidates_wy
 
     return {
+        "enhanced_voting_official": _enhanced_voting_official,
         "ky_general_certification": state_candidates_ky.fetch_certified_general,
         "ma_pd43_general": state_candidates_ma.fetch_certified_general,
         "or_general_abstract": state_candidates_or.fetch_certified_general,
         "wy_general_canvass": state_candidates_wy.fetch_certified_general,
     }
+
+
+async def _enhanced_voting_official(client: httpx.AsyncClient, election_day: date, state: str, source: dict):
+    """The state's live Enhanced Voting count, taken as certified only once
+    the portal marks it official (`isOfficialResults`). Rhode Island's flag
+    flipped when the state certified its 2026 primary, six days after it;
+    Utah's stayed false a month past its certification
+    (state_candidates_enhanced_voting's docstring). So the flag is read as
+    certification only when it is set: a state that never sets it waits
+    for the new Congress, and no count is read as certified before the
+    state marks it so."""
+    full = source_for_state(state)
+    reader = _reader_for(full) if full else None
+    if reader is None or (live_source(full).get("strategy") != "enhanced_voting"
+                          and _readers().get("enhanced_voting") is not reader):
+        return None
+    count = await reader(client, election_day, state, live_source(full))
+    if count is None or not count.official:
+        return None
+    count.source_name = source.get("source_name") or count.source_name
+    return count
 
 
 def certified_source(source: dict) -> dict | None:

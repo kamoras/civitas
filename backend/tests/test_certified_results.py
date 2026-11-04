@@ -263,3 +263,22 @@ class TestMassachusettsReader:
         pages = _fixture("ma_2024_general_pages.json")
         assert general_contest(pages["senate"], 2026, "S") is None
         assert general_contest(pages["senate"], 2024, "H") is None
+
+
+class TestEnhancedVotingOfficial:
+    async def test_a_count_is_certified_only_once_the_portal_marks_it_official(self, monkeypatch):
+        from app.pipeline.fetch import election_results as er
+
+        counts = []
+
+        async def live(client, day, state, source):
+            return counts[-1]
+
+        monkeypatch.setattr(er, "_readers", lambda: {"enhanced_voting": live})
+        source = {"source_name": "Rhode Island Board of Elections", "strategy": "enhanced_voting",
+                  "certified_results": {"strategy": "enhanced_voting_official"}}
+        monkeypatch.setattr(er, "source_for_state", lambda state: source)
+        counts.append(StateCount(source_name="RI", page_url=None, official=False))
+        assert await er._enhanced_voting_official(None, DAY, "RI", {}) is None
+        counts.append(StateCount(source_name="RI", page_url=None, official=True))
+        assert (await er._enhanced_voting_official(None, DAY, "RI", {})).official is True
