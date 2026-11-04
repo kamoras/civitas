@@ -165,7 +165,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
         </div>
         <UsageBar
           pct={cpuPct ?? 0}
-          ariaLabel="CPU utilisation"
+          ariaLabel="CPU utilization"
           valueText={cpuPct != null ? formatPct(cpuPct) : "no reading yet"}
         />
         {/* Load average is a different quantity (runnable tasks, smoothed

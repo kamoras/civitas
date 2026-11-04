@@ -606,8 +606,8 @@ export default function ScoresChapter() {
               <Cite id="manning2008" />, with its direction (does it strengthen or roll back?)
               separating cases where both parties have positions on the same topic
               <Cite id="laver2000" />. Each party&apos;s position in an area starts from its
-              platform and is refined over time by the bills earlier runs labelled for that party
-              (by the roll call&apos;s split where there was one, by content otherwise, never from a
+              platform and is refined over time by the bills earlier runs labeled for that party (by
+              the roll call&apos;s split where there was one, by content otherwise, never from a
               housekeeping motion)
               <Cite id="yarowsky1995" />.
             </P>

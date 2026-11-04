@@ -236,7 +236,7 @@ function Manners({ facts }: { facts: CrawlerFacts }) {
         <P>
           When the wait ends, one request is sent to see whether the site will answer; an answer
           clears the record, another refusal doubles the wait. The record is kept on the server, so
-          every job and every restart keeps to it. A Retry-After is honoured: a short one sets the
+          every job and every restart keeps to it. A Retry-After is honored: a short one sets the
           next request&apos;s time, a long one is a wait of its own. A challenge page
           (Cloudflare&apos;s, Akamai&apos;s, Imperva&apos;s) is never answered or worked around, and
           any cookie it sets is thrown away. A source that refuses is recorded as unreadable, with
