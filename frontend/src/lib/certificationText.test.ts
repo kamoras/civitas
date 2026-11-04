@@ -50,3 +50,15 @@ describe("certificationText", () => {
     ).toBe("Dana Smith (D) was sworn in for the seat, per the member roster.");
   });
 });
+
+describe("certificationText at a certification deadline", () => {
+  it("says the deadline passed with the count unchanged, never that the state certified", () => {
+    const text = certificationText(
+      { ...base, basis: "deadline", certifiedOn: "2026-11-30" },
+      "Colorado"
+    );
+    expect(text).toBe(
+      "Certified winner: Dana Smith (D). Colorado's deadline to certify the count passed on November 30, 2026, with the count unchanged since, and no runoff or recount is pending under state law."
+    );
+  });
+});

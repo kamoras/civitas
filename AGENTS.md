@@ -2356,7 +2356,15 @@ wrong number on election night is worse than none:
   state sets (Indiana's `Certified`; Enhanced Voting's `isOfficialResults`
   for GA, WA, VA, UT, ID and RI, which a state that never sets it simply
   waits past). A flag whose meaning isn't shown (Tally's, Vermont's) is not
-  read as certification,
+  read as certification. Where no certification is read (owner decision,
+  2026-11: who won feeds the rest of the platform), the state's legal
+  deadline to certify stands in (`app/data/certification_deadlines.json`,
+  quoted and cited per state from NASS; `apply_deadlines`): a day past it,
+  the live count is taken as the certified one, dated the deadline, if it
+  stopped changing by the deadline day with every reporting unit in. A
+  count that moves after that withdraws it with an alert. The page says the
+  deadline passed with the count unchanged, never that the state certified.
+  All of it goes
   into `RaceCertification`, kept apart from the frozen election-night count
   and read beside the archive at serve time, never written into it. "Certified
   winner" needs all of: the state's certified count; no runoff owed

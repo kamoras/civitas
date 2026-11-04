@@ -918,7 +918,10 @@ export interface LiveCandidateResult {
  * still possible under state law, or sworn in. Word it through
  * certificationText (lib/results.ts). */
 export interface RaceCertification {
-  basis: "certified" | "sworn_in";
+  /** "deadline": the state's own certification wasn't read; its legal
+   * deadline to certify passed with the live count unchanged, and that
+   * count is taken as the certified one, dated the deadline. */
+  basis: "certified" | "deadline" | "sworn_in";
   status: "certified" | "recount_possible" | "recount" | "runoff" | "sworn_in";
   certifiedOn: string | null;
   /** False: the document states no date, and certifiedOn is the day

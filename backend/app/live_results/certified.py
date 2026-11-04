@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.election_calendar import new_congress_day
 from app.models import (
-    ElectionResultEvent, HousePipelineRun, PipelineRun, PipelineStatus, Race, RaceCertification,
+    ElectionResultEvent, HousePipelineRun, PipelineRun, PipelineStatus, Race, RaceCertification, RaceResult,
     Representative, Senator,
 )
 from app.ops_alerts import send_ops_alert
@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 CERTIFIED_EVENT = "certified_winner"
 SWORN_IN = "sworn_in"
+# A live count taken as certified once the state's legal deadline to
+# certify has passed with the count unchanged (apply_deadlines).
+DEADLINE = "deadline"
+# How long after the deadline before the count is read as certified: a
+# state certifying on its last day can post its final figures that day,
+# and the live sync reads them within the hour.
+DEADLINE_GRACE = timedelta(days=1)
 
 # How long after January 3 the sworn-in floor keeps looking: the roster of
 # a Congress that convenes late (a House still electing its Speaker swears
@@ -53,7 +60,7 @@ def certification_due(election_day: date, today: date) -> bool:
 def outcome_for(cert: RaceCertification, today: date) -> Outcome | None:
     """What the stored certification allows the page to say; None for a
     sworn-in record (the seat is filled: there is nothing left to wait for)."""
-    if cert.basis != "certified" or not cert.certified_on:
+    if cert.basis not in ("certified", DEADLINE) or not cert.certified_on:
         return None
     tallies = json.loads(cert.tallies or "[]")
     return outcome(cert.state, cert.office, cert.district, [t["votes"] for t in tallies], cert.votes_counted or 0,
@@ -154,9 +161,11 @@ def post_certified(db: Session, events: list[ElectionResultEvent]) -> int:
         letter = party_letter(winner.get("party"))
         on = date.fromisoformat(d["certifiedOn"])
         when = f" on {on.strftime('%B')} {on.day}" if d.get("certifiedOnStated") else ""
+        name = STATE_NAMES.get(race.state, race.state)
+        settled = (f"{name}'s deadline to certify the count passed on {on.strftime('%B')} {on.day} with the count "
+                   "unchanged" if d.get("basis") == DEADLINE else f"{name} certified the count{when}")
         text = (f"{race_label(race)}: {winner['name']}{f' ({letter})' if letter else ''} is the certified winner. "
-                f"{STATE_NAMES.get(race.state, race.state)} certified the count{when}, "
-                "and no runoff or recount is pending under state law.")
+                f"{settled}, and no runoff or recount is pending under state law.")
         broadcast.publish(
             db, kind="result", subject=f"result:{event.election_date}:{race.id}:{CERTIFIED_EVENT}",
             title=f"{race_label(race)}: certified", text=text, url=f"{broadcast.SITE_URL}/elections/{race.id}",
@@ -241,8 +250,14 @@ async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: d
     # A race stored while a recount could still be asked for is announced
     # the first pass after its window closes, whether or not its state's
     # document was read again today.
+    try:
+        summary["_deadline"] = apply_deadlines(db, election_day, today)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Certification deadlines pass failed")
     rows = db.query(RaceCertification).filter(RaceCertification.election_date == election_day.isoformat(),
-                                              RaceCertification.basis == "certified").all()
+                                              RaceCertification.basis.in_(("certified", DEADLINE))).all()
     late = [event for row in rows if (event := _announce(db, row, today)) is not None]
     db.commit()
     summary["_announced_after_recount_window"] = len(late)
@@ -255,6 +270,56 @@ async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: d
         summary["_sworn_in"] = record_sworn_in(db, election_day)
         db.commit()
     return summary
+
+
+def apply_deadlines(db: Session, election_day: date, today: date) -> dict:
+    """For each state with a certification deadline on file and no
+    certified count read, the live count of each race, taken as certified
+    once the deadline is past (by DEADLINE_GRACE) and the count has not
+    changed since the deadline day, with every reporting unit in where the
+    source counts them. Dated the deadline: the state certified on or before
+    it, so a recount window counted from it is never too short. A count that
+    moves after the deadline (a recount, a correction) is no longer read
+    this way, and a winner already taken from it is withdrawn and alerted."""
+    from app import certification_deadlines
+
+    stored, withdrawn = 0, []
+    for state in sorted(certification_deadlines.states()):
+        last_day = certification_deadlines.deadline(state, election_day)
+        if last_day is None or today <= last_day + DEADLINE_GRACE:
+            continue
+        rows = (db.query(RaceResult, Race).join(Race, Race.id == RaceResult.race_id)
+                .filter(Race.state == state, RaceResult.election_date == election_day.isoformat()).all())
+        for result, race in rows:
+            existing = db.get(RaceCertification, race.id)
+            if existing is not None and existing.basis != DEADLINE:
+                continue  # read from the state's own certification, or sworn in
+            settled = (
+                (result.votes_counted or 0) > 0
+                and result.last_change_at.date() <= last_day
+                and not (result.total_units and result.reporting_units != result.total_units)
+            )
+            if not settled:
+                if existing is not None:
+                    db.delete(existing)
+                    db.flush()
+                    withdrawn.append(race.id)
+                continue
+            tallies = [{k: t[k] for k in ("name", "party", "votes", "candidateId") if k in t}
+                       for t in json.loads(result.tallies or "[]")]
+            _store(db, race, election_day, DEADLINE, last_day.isoformat(), result.source_name, result.source_url,
+                   tallies, result.votes_counted)
+            stored += 1
+    if withdrawn:
+        send_ops_alert(
+            "Certified results: a count moved after its state's certification deadline",
+            f"{', '.join(withdrawn)}: the live count changed after the state's deadline to certify, so it is no "
+            "longer taken as the certified count, and any winner shown from it is withdrawn. The race waits for "
+            "the state's own certification or the new Congress.",
+            dedupe_key=f"certified-deadline-moved-{election_day.isoformat()}-{','.join(withdrawn)}",
+            condition="certified-deadline-moved",
+        )
+    return {"stored": stored, "withdrawn": withdrawn}
 
 
 def _roster_read_since(db: Session, model, since: datetime) -> bool:
@@ -319,7 +384,9 @@ def alert_uncovered(db: Session, election_day: date) -> list[str]:
     only once the new Congress is sworn in. A fact, alerted once a cycle."""
     with_races = {s for (s,) in db.query(Race.state).filter(Race.cycle_year == election_day.year,
                                                            Race.office.in_(("S", "H"))).distinct()}
-    missing = sorted(with_races - certified_states())
+    from app import certification_deadlines
+
+    missing = sorted(with_races - certified_states() - certification_deadlines.states())
     if missing:
         send_ops_alert(
             f"Certified results: {len(missing)} states have no certified reader",

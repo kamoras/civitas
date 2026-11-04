@@ -1060,11 +1060,13 @@ export const MAP_LABEL_HALO =
 export function certificationText(c: RaceCertification, stateName: string): string {
   const on = c.certifiedOn ? formatUtcDate(c.certifiedOn) : null;
   const certified =
-    on && c.certifiedOnStated !== false
-      ? `${stateName} certified the count on ${on}`
-      : on
-        ? `${stateName} has certified the count (first read here ${on})`
-        : `${stateName} has certified the count`;
+    c.basis === "deadline" && on
+      ? `${stateName}'s deadline to certify the count passed on ${on}, with the count unchanged since`
+      : on && c.certifiedOnStated !== false
+        ? `${stateName} certified the count on ${on}`
+        : on
+          ? `${stateName} has certified the count (first read here ${on})`
+          : `${stateName} has certified the count`;
   const who = c.winner
     ? `${c.winner.name}${partyLetter(c.winner.party) ? ` (${partyLetter(c.winner.party)})` : ""}`
     : "";
