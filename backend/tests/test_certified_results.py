@@ -207,3 +207,40 @@ class TestKentuckyReader:
         from app.pipeline.fetch.election_results import certified_states
 
         assert "KY" in certified_states()
+
+
+def _fixture(name):
+    from pathlib import Path
+
+    return json.loads((Path(__file__).parent / "fixtures" / "certified" / name).read_text())
+
+
+class TestWyomingReader:
+    def test_reads_the_2024_certified_general(self):
+        from app.pipeline.fetch.state_candidates_wy import general_contests
+
+        contests = {(c.office, c.district): c for c in general_contests(_fixture("wy_2024_general_rows.json")["rows"],
+                                                                         date(2024, 11, 5))}
+        assert sorted(contests) == [("H", None), ("S", None)]  # the President's contest is no federal seat here
+        senate = contests[("S", None)]
+        assert senate.candidates == [("John Barrasso", "R", 198_418), ("Scott D Morrow", "D", 63_727)]
+        assert senate.total_votes == 198_418 + 63_727 + 2_017  # write-ins count; over- and undervotes don't
+        assert [p for _, p, _ in contests[("H", None)].candidates][:3] == ["R", "D", "L"]
+
+    def test_another_election_s_workbook_is_refused(self):
+        from app.pipeline.fetch.state_candidates_wy import general_contests
+
+        assert general_contests(_fixture("wy_2024_general_rows.json")["rows"], date(2026, 11, 3)) is None
+
+
+class TestOregonReader:
+    def test_reads_every_district_of_the_2024_abstract(self):
+        from app.pipeline.fetch.state_candidates_or import general_contests
+
+        pages = [(p["text"], p["lines"]) for p in _fixture("or_2024_general_pages.json")["pages"]]
+        contests = {(c.office, c.district): c for c in general_contests(pages)}
+        assert sorted(contests) == [("H", n) for n in range(1, 7)]  # two districts to a page
+        first = contests[("H", 1)]
+        assert first.candidates[0] == ("Suzanne Bonamici", "D", 241_556)
+        assert first.total_votes == 241_556 + 98_908 + 10_840 + 687  # "Misc." write-ins count
+        assert ("Lori Chavez-DeRemer", "R", 180_420) in contests[("H", 5)].candidates
