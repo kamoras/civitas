@@ -154,6 +154,46 @@ class TestCountedOnlyWhenThePageRuns:
         await _signal("router")
         assert _counted(db_session) == {}
 
+    async def test_a_background_tab_read_an_hour_later_is_counted(self, db_session, monkeypatch):
+        """Links prefetch only once the tab is shown (components/Link.tsx)."""
+        await _signal("page", "/leaderboard")
+        real = throttle.time.time
+        monkeypatch.setattr(throttle.time, "time", lambda: real() + 3600)
+        await _signal("router")
+        assert _counted(db_session) == {"/leaderboard": 1}
+
+    async def test_page_and_router_signals_posted_from_outside_count_nothing(self, db_session):
+        """They are the frontend proxy's own, sent past nginx; one carrying
+        nginx's edge mark was posted by someone else."""
+        def outside(kind, path="/"):
+            req = _make_request(user_agent=_BROWSER)
+            req.headers = {**req.headers, visits.EDGE_HEADER: "1"}
+            return track_visit(req, kind=kind, path=path)
+
+        await outside("page", "/leaderboard")
+        await outside("router")
+        assert _counted(db_session) == {}
+        # The browser's own navigation beacon does come through nginx.
+        await _signal("page", "/leaderboard")
+        await _signal("router")
+        await outside("navigation", "/compare")
+        assert _counted(db_session) == {"/leaderboard": 1, "/compare": 1}
+
+    async def test_one_ipv6_host_is_one_visitor_across_its_temporary_addresses(self, db_session):
+        await _signal("page", "/leaderboard", ip="2001:db8:1:2:aaaa::1")
+        await _signal("router", ip="2001:db8:1:2:bbbb::7")  # the same /64, a new temporary address
+        assert _counted(db_session) == {"/leaderboard": 1}
+        await _signal("page", "/compare", ip="2001:db8:1:3::1")  # another /64: another client
+        await _signal("router", ip="2001:db8:1:2:cccc::9")
+        assert _counted(db_session) == {"/leaderboard": 1}
+        assert db_session.query(SiteVisit).count() == 1
+
+    def test_client_address(self):
+        assert visits._client_address("2001:db8:1:2:aaaa::1") == "2001:db8:1:2::/64"
+        assert visits._client_address("::ffff:203.0.113.5") == "203.0.113.5"
+        assert visits._client_address("203.0.113.5") == "203.0.113.5"
+        assert visits._client_address("unknown") == "unknown"
+
     async def test_a_navigation_counts_once_the_client_has_run_a_page(self, db_session):
         await _signal("navigation", "/compare")  # no page run: nothing
         assert _counted(db_session) == {}

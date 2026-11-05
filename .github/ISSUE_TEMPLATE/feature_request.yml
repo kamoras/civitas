@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a new data source, score factor, or UI capability
+description: Suggest a new data source, measure, or UI capability
 labels: ["enhancement"]
 body:
   - type: textarea

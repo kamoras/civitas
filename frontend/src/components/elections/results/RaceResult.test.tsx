@@ -41,6 +41,22 @@ const TIE = race({
 });
 
 describe("statusTag", () => {
+  it("says projected, not certified, until a certified winner supersedes it", () => {
+    expect(statusTag(race({ projected: true, leaderParty: "DEM", reportingUnits: 100 })).text).toBe(
+      "Projected · Not certified"
+    );
+    const certified = race({
+      projected: true,
+      leaderParty: "DEM",
+      certification: {
+        basis: "certified",
+        status: "certified",
+        winner: { name: "Dana Smith", party: "DEM", candidateId: null },
+      } as LiveRaceResult["certification"],
+    });
+    expect(statusTag(certified).text).not.toMatch(/Projected/);
+  });
+
   it("tags an exact tie as tied, not leading", () => {
     expect(statusTag(TIE).text).toBe("Tied · Not final");
     expect(statusTag(race()).text).toBe("Leading · Not final");

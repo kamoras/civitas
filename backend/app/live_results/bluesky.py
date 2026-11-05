@@ -19,15 +19,20 @@ What is posted, in priority order:
   1. a seat changing party (FLIP), any chamber.
   2. a count the state calls official — for a Senate race, or a flip.
   3. a Senate lead change with most of the count in.
-  4. every unit reporting in a Senate race.
+  4. every unit reporting in a Senate race, or a Senate race projected
+     (sync.projection_holds), which says every unit is in itself.
+A projection this account posted that the count then withdraws is
+corrected like a flip (0), outside every cap.
 House first returns and lead changes stay on the site: 435 seats of them
 would bury everything else.
 
 Like the developing issue (live_results/signals.py), every post is a fixed
 template around the state's own figures, never model text, and says
 "leads" — "not final" until the state lists its count as official, and
-never "wins" after: Civitas never calls a race, and an official count's
-leader can still face a runoff, a recount or a court.
+never "wins" after: an official count's leader can still face a runoff,
+a recount or a court. The one step past "leads" is "projected" (owner
+decision, 2026-11), on the projection rule's figures alone, and worded as
+not certified.
 """
 
 import json
@@ -73,8 +78,14 @@ _TITLES = {
     er.OFFICIAL: "count listed as official",
     er.LEAD_CHANGE: "lead changes",
     er.ALL_REPORTING: "every unit reporting",
+    er.PROJECTED: "projected, not certified",
+    er.PROJECTION_WITHDRAWN: "projection withdrawn, not final",
 }
-_PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.ALL_REPORTING: 4}
+_PRIORITY = {CORRECTION: 0, er.PROJECTION_WITHDRAWN: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3,
+             er.ALL_REPORTING: 4, er.PROJECTED: 4}
+# Owed and posted outside every cap, like CORRECTION: they take back a
+# claim the account made.
+_RETRACTIONS = frozenset({CORRECTION, er.PROJECTION_WITHDRAWN})
 
 
 def _title(kind: str, race: Race, d: dict) -> str:
@@ -134,6 +145,13 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
     label = race_label(race)
     leader = d.get("leader")
     reporting, shares = _reporting(d), _shares(d)
+    if kind == er.PROJECTION_WITHDRAWN:
+        before = d.get("previouslyProjected")
+        if not before:
+            return None
+        head = f"{label}: the projection for {_who(before)} is withdrawn"
+        return _fit([head, shares, reporting, "Not final"], [head, shares, "Not final"], [head, "Not final"],
+                    budget=budget)
     if kind == CORRECTION:
         # FLIP_REVERSED: the holder's party leads again, or nobody does —
         # an exact tie has no leader to name.
@@ -179,14 +197,22 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
         head = f"{label}: {all_in_line(d)}"
         tail = "Counting can continue after every unit reports"
         return _fit([head, shares, tail], [head, tail], budget=budget)
+    if kind == er.PROJECTED:
+        head = f"{label}: {_who(leader)} is projected to be elected"
+        why = (f"Projected from the count: every unit is in and the lead is at least "
+               f"{d.get('marginFloor') or round(100 * er.PROJECTION_MIN_MARGIN)} points")
+        return _fit([head, shares, why, "Not certified"], [head, why, "Not certified"], [head, "Not certified"],
+                    budget=budget)
     return None
 
 
 def _postable_kind(event: ElectionResultEvent, race: Race, result: RaceResult, d: dict,
-                   flip_posted: bool) -> str | None:
+                   flip_posted: bool, projection_posted: bool = False) -> str | None:
     """Which post this event earns, if any (see the module docstring)."""
     if event.kind == er.FLIP_REVERSED:
         return CORRECTION if flip_posted else None
+    if event.kind == er.PROJECTION_WITHDRAWN:
+        return er.PROJECTION_WITHDRAWN if projection_posted else None
     if event.kind == er.FLIP:
         return er.FLIP
     senate = race.office == "S"
@@ -202,6 +228,8 @@ def _postable_kind(event: ElectionResultEvent, race: Race, result: RaceResult, d
         return er.LEAD_CHANGE
     if event.kind == er.ALL_REPORTING:
         return er.ALL_REPORTING
+    if event.kind == er.PROJECTED:
+        return er.PROJECTED
     return None
 
 
@@ -216,6 +244,8 @@ class _History:
 
     # race -> (kind, Bluesky status, post id) of its latest flip-or-correction post
     last_claim: dict[str, tuple[str, str, int]] = field(default_factory=dict)
+    # race -> (kind, Bluesky status, post id) of its latest projection-or-withdrawal post
+    last_projection: dict[str, tuple[str, str, int]] = field(default_factory=dict)
     said: set[tuple[str, str]] = field(default_factory=set)  # (race, kind)
     recent: set[str] = field(default_factory=set)  # races posted about in the cooldown
     last_hour: int = 0  # posts that spend the budget — corrections never do
@@ -234,9 +264,11 @@ def _history(db: Session, election_date: str, now: datetime) -> _History:
         h.said.add((race_id, kind))
         if kind in (er.FLIP, CORRECTION):
             h.last_claim[race_id] = (kind, bsky_status, post_id)
+        if kind in (er.PROJECTED, er.PROJECTION_WITHDRAWN):
+            h.last_projection[race_id] = (kind, bsky_status, post_id)
         if published_at >= now - timedelta(minutes=RACE_COOLDOWN_MINUTES):
             h.recent.add(race_id)
-        if kind != CORRECTION:
+        if kind not in _RETRACTIONS:
             h.this_election += 1
             if published_at >= now - timedelta(hours=1):
                 h.last_hour += 1
@@ -249,6 +281,8 @@ def _already_said(kind: str, race_id: str, h: _History) -> bool:
     moment — however many times the count raises them."""
     if kind == er.FLIP:
         return h.last_claim.get(race_id, ("", ""))[0] == er.FLIP
+    if kind == er.PROJECTED:
+        return h.last_projection.get(race_id, ("", ""))[0] == er.PROJECTED
     return kind in (er.OFFICIAL, er.ALL_REPORTING) and (race_id, kind) in h.said
 
 
@@ -281,6 +315,10 @@ def _still_true(kind: str, race: Race, result: RaceResult, d: dict) -> bool:
         return bool(result.official) and (race.office == "S" or er.challenger_leads(result))
     if kind == er.ALL_REPORTING:
         return bool(result.total_units) and result.reporting_units == result.total_units
+    if kind == er.PROJECTED:
+        return bool(result.projected)
+    if kind == er.PROJECTION_WITHDRAWN:
+        return not result.projected
     return True
 
 
@@ -295,7 +333,8 @@ def _as_of_now(result: RaceResult, d: dict) -> dict:
     """What a post says, from the count as it stands — a post can wait up
     to two hours behind the budget, and its event's own figures would be
     that old — keeping only what the event alone knows (who led before)."""
-    return er.event_detail(result, **({"previousLeader": d["previousLeader"]} if d.get("previousLeader") else {}))
+    kept = {k: d[k] for k in ("previousLeader", "previouslyProjected") if d.get(k)}
+    return er.event_detail(result, **kept)
 
 
 def post_result_updates(db: Session, election_date: str) -> int:
@@ -328,6 +367,7 @@ def post_result_updates(db: Session, election_date: str) -> int:
     # sent a second "no longer shows a change of party" after the first,
     # in a race swinging around the line.
     posted_flip_races = {rid for rid, (kind, *_) in h.last_claim.items() if kind == er.FLIP}
+    posted_projection_races = {rid for rid, (kind, *_) in h.last_projection.items() if kind == er.PROJECTED}
     recent_races = h.recent
     hour_left = MAX_POSTS_PER_HOUR - h.last_hour
     election_left = MAX_POSTS_PER_ELECTION - h.this_election
@@ -340,8 +380,9 @@ def post_result_updates(db: Session, election_date: str) -> int:
             event.bsky_posted_at = now
             continue
         detail = json.loads(event.detail or "{}")
-        kind = _postable_kind(event, race, result, detail, event.race_id in posted_flip_races)
-        max_age = MAX_CORRECTION_AGE_HOURS if kind == CORRECTION else MAX_EVENT_AGE_HOURS
+        kind = _postable_kind(event, race, result, detail, event.race_id in posted_flip_races,
+                              event.race_id in posted_projection_races)
+        max_age = MAX_CORRECTION_AGE_HOURS if kind in _RETRACTIONS else MAX_EVENT_AGE_HOURS
         if kind is None or now - event.created_at > timedelta(hours=max_age) \
                 or _already_said(kind, race.id, h):
             event.bsky_posted_at = now
@@ -361,7 +402,7 @@ def post_result_updates(db: Session, election_date: str) -> int:
     for priority, created, kind, event, race, detail in queue:
         if event.bsky_posted_at is not None:
             continue  # overtaken by a post earlier in this pass
-        correction = kind == CORRECTION
+        correction = kind in _RETRACTIONS
         if not correction and (hour_left <= 0 or election_left <= 0 or race.id in recent_races):
             continue  # held for a later pass
         url = f"{SITE}/elections/states/{race.state}#race-{race.id}"
@@ -386,10 +427,11 @@ def post_result_updates(db: Session, election_date: str) -> int:
         # retracting something the account never said.
         # "sending" is a send that may have gone out; "pending" on a result
         # post is one never tried (they are never retried), so not shown.
-        to_bluesky = not correction or h.last_claim.get(race.id, ("", ""))[1] in ("sending", "sent")
+        claims = h.last_projection if kind == er.PROJECTION_WITHDRAWN else h.last_claim
+        to_bluesky = not correction or claims.get(race.id, ("", ""))[1] in ("sending", "sent")
         # Threads takes a correction the same way: only where it showed the
         # flip (broadcast.publish's `follows`).
-        claimed = h.last_claim.get(race.id)
+        claimed = claims.get(race.id)
         follows = db.get(BroadcastPost, claimed[2]) if correction and claimed else None
         post = broadcast.publish(
             db, kind="result", subject=_subject(election_date, race.id, kind), title=_title(kind, race, details),
@@ -398,6 +440,8 @@ def post_result_updates(db: Session, election_date: str) -> int:
         h.said.add((race.id, kind))
         if kind in (er.FLIP, CORRECTION):
             h.last_claim[race.id] = (kind, post.bsky_status, post.id)
+        if kind in (er.PROJECTED, er.PROJECTION_WITHDRAWN):
+            h.last_projection[race.id] = (kind, post.bsky_status, post.id)
         posted += 1
         recent_races.add(race.id)
         if not correction:

@@ -1207,14 +1207,14 @@ def reset_all_data() -> dict:
     pipeline run. Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
-    from app.election_phase import active_election
+    from app.election_phase import counting_election
 
     summary: dict = {}
     db = SessionLocal()
     try:
         keeps = RESET_KEEPS
         kept_tiers: list[str] = [*RESET_KEEPS_CACHE_TIERS]
-        if active_election(db).shows_results:
+        if counting_election(db) is not None:
             from app.pipeline.fetch.state_candidates_common import HELD_BALLOT_MARKER_TIERS
 
             keeps = RESET_KEEPS | RESET_KEEPS_WHILE_RESULTS

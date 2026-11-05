@@ -19,6 +19,12 @@ by the local model under a list of banned words, and the posts it wrote
 still judged the numbers ("placing him in the average range", "All
 individual metrics fall within typical expectations"). Every fact in the
 post is one the site already shows, so there is nothing for a model to add.
+
+From election day to January 3 (the lame duck) it stands down while the
+results are on show, and after that picks only members the record shows
+serving in the new Congress (app/returning_members.py): a post about a
+member on the way out was the odd one, and a reader then is following the
+outcome, not a member's record.
 """
 
 import logging
@@ -47,7 +53,27 @@ def _scored_chamber_pool(db: Session, model) -> list:
     )
 
 
-def _pick_politician(db: Session) -> tuple["Senator | Representative | None", str]:
+def _lame_duck_pool(db: Session) -> set[tuple[str, str]] | bool | None:
+    """Between election day and January 3: False while the results are on
+    show (no spotlight beside the count), then the (chamber, id) of the
+    members the record shows serving after January 3
+    (app/returning_members.py), so no post features a member on the way
+    out. None the rest of the time: everyone current."""
+    from app.election_calendar import new_congress_day, previous_election_day
+    from app.election_phase import active_election, election_today
+    from app.returning_members import returning
+
+    today = election_today()
+    held = previous_election_day(today)
+    if held is None or today >= new_congress_day(held):
+        return None
+    if active_election(db, today).shows_results:
+        return False
+    return returning(db, held, today)
+
+
+def _pick_politician(db: Session, only: set[tuple[str, str]] | bool | None = None
+                     ) -> tuple["Senator | Representative | None | bool", str]:
     """Return (entity, chamber), picked uniformly at random from senators
     AND representatives not yet spotlighted this cycle, combined into one
     pool (cycling through everyone before repeating).
@@ -67,10 +93,14 @@ def _pick_politician(db: Session) -> tuple["Senator | Representative | None", st
         for row in db.query(BskySenatorSpotlight.senator_id, BskySenatorSpotlight.chamber).all()
     }
 
+    if only is False:
+        return False, ""
     chambers = {
         "senate": sorted(_scored_chamber_pool(db, Senator), key=lambda m: m.id),
         "house": sorted(_scored_chamber_pool(db, Representative), key=lambda m: m.id),
     }
+    if only is not None:
+        chambers = {c: [m for m in ms if (c, m.id) in only] for c, ms in chambers.items()}
     if not chambers["senate"] and not chambers["house"]:
         return None, ""
 
@@ -80,6 +110,11 @@ def _pick_politician(db: Session) -> tuple["Senator | Representative | None", st
         for entity in members
         if (entity.id, chamber) not in spotlighted_keys
     ]
+    if not combined_unspotlighted and only is not None:
+        # Every returning member has had a turn this cycle: repeat one, but
+        # keep the cycle's history, which the whole chamber picks up again
+        # on January 3.
+        return random.choice([(e, c) for c, ms in chambers.items() for e in ms])
     if not combined_unspotlighted:
         logger.info("All senators and representatives spotlighted — resetting cycle")
         db.query(BskySenatorSpotlight).delete()
@@ -174,7 +209,10 @@ def post_daily_spotlight(db: Session) -> None:
         logger.debug("Spotlight already posted today — skipping")
         return
 
-    entity, chamber = _pick_politician(db)
+    entity, chamber = _pick_politician(db, _lame_duck_pool(db))
+    if entity is False:
+        logger.info("Spotlight paused while the election's results are on show")
+        return
     if not entity:
         logger.warning("No senators or representatives available for spotlight")
         return

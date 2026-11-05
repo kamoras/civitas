@@ -21,7 +21,7 @@ from app.api.election_map import csv_text, leans_max, state_marks
 from app.api.elections import phase_cache_s
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
-from app.election_phase import active_election, election_today
+from app.election_phase import active_election, counting_election, election_today
 from app.live_results.certified import certifications_for
 from app.forecast import accountability
 from app.models import ElectionArchive
@@ -53,6 +53,13 @@ def _with_certifications(db: Session, row: ElectionArchive) -> dict:
     for race in record["races"]:
         race["certification"] = certified.get(race["id"])
     return record
+
+
+def _still_counting(db: Session, cycle: int) -> bool:
+    """The archive is still being copied: this election's count is still
+    read (counting_election), which can outlast the page leading with it."""
+    counting = counting_election(db)
+    return counting is not None and counting.cycle == cycle
 
 
 def _counts(record: dict) -> dict:
@@ -95,7 +102,7 @@ def archive_index(db: Session = Depends(get_db)):
             "accountability": (accountability.summary(accountability.grade(
                 json.loads(row.map_json), json.loads(row.record_json))) if row.map_json else None),
             # Still being copied: the site is on this election's count.
-            "stillCounting": election.cycle == row.cycle and election.shows_results,
+            "stillCounting": _still_counting(db, row.cycle),
             **_counts(_with_certifications(db, row)),
         })
     return cached_json({
@@ -117,7 +124,7 @@ def archive_record(cycle: int = CYCLE, db: Session = Depends(get_db)):
     return cached_json(dict(
         record,
         recordAsOf=_iso(row.record_as_of), mapAsOf=_iso(row.map_as_of), hasMap=row.map_json is not None,
-        stillCounting=election.cycle == cycle and election.shows_results,
+        stillCounting=_still_counting(db, cycle),
         totals=_counts(record),
     ), max_age=phase_cache_s(election))
 
@@ -163,10 +170,9 @@ def latest_check(db: Session) -> dict | None:
            .order_by(ElectionArchive.cycle.desc()).first())
     if row is None:
         return None
-    election = active_election(db)
     return {
         "cycle": row.cycle,
-        "stillCounting": election.cycle == row.cycle and election.shows_results,
+        "stillCounting": _still_counting(db, row.cycle),
         "accountability": (accountability.summary(accountability.grade(
             json.loads(row.map_json), json.loads(row.record_json))) if row.map_json else None),
     }
@@ -188,7 +194,7 @@ def archive_accountability(cycle: int = CYCLE, db: Session = Depends(get_db)):
     not yet official is counted as waiting, never graded."""
     graded = _graded(db, cycle)
     election = active_election(db)
-    return cached_json(dict(graded, stillCounting=election.cycle == cycle and election.shows_results),
+    return cached_json(dict(graded, stillCounting=_still_counting(db, cycle)),
                        max_age=phase_cache_s(election))
 
 

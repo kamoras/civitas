@@ -52,4 +52,17 @@ describe("NavigationBeacon", () => {
     rerender(<Beacon />);
     expect(sendBeacon).not.toHaveBeenCalled();
   });
+
+  it("sends nothing from a browser automation drives", async () => {
+    const Beacon = await freshBeacon();
+    Object.defineProperty(navigator, "webdriver", { value: true, configurable: true });
+    try {
+      const { rerender } = render(<Beacon />);
+      pathname = "/congress";
+      rerender(<Beacon />);
+      expect(sendBeacon).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, "webdriver", { value: false, configurable: true });
+    }
+  });
 });

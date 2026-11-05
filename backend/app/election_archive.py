@@ -158,7 +158,8 @@ def build_record(db: Session, election_day: date) -> dict:
 def freeze(db: Session, election_day: date) -> ElectionArchive | None:
     """Copy the held election's map (once) and record (each pass) into its
     archive row. Called by the live-results sync, inside its lease, only
-    while that election's results are on show; a database with no races for
+    while that election's count is read (election_phase.counting_election);
+    a database with no races for
     it (wiped, or never built) never replaces a record already copied."""
     cycle = election_day.year
     row = db.get(ElectionArchive, cycle)

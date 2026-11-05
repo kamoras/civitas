@@ -8,11 +8,15 @@ describe("visitSignal", () => {
     expect(signal({ "sec-fetch-dest": "document", "sec-fetch-site": "none" })).toBe("page");
   });
 
-  it("ignores a speculative page fetch", () => {
-    expect(signal({ "sec-fetch-dest": "document", "sec-purpose": "prefetch;prerender" })).toBe(
-      null
-    );
+  it("ignores a prefetched page, which runs nothing until opened", () => {
+    expect(signal({ "sec-fetch-dest": "document", "sec-purpose": "prefetch" })).toBe(null);
     expect(signal({ "sec-fetch-dest": "document", purpose: "prefetch" })).toBe(null);
+  });
+
+  it("holds a prerendered page: it confirms only once shown", () => {
+    expect(signal({ "sec-fetch-dest": "document", "sec-purpose": "prefetch;prerender" })).toBe(
+      "page"
+    );
   });
 
   it("ignores a client that sends no fetch metadata", () => {

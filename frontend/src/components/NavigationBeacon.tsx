@@ -25,7 +25,8 @@ export default function NavigationBeacon() {
     if (pathname === lastPath) return;
     const first = lastPath === null;
     lastPath = pathname;
-    if (!first && !pathname.startsWith("/admin")) sendNavigation(pathname);
+    // A browser automation drives is no reader clicking a link.
+    if (!first && !pathname.startsWith("/admin") && !navigator.webdriver) sendNavigation(pathname);
   }, [pathname]);
   return null;
 }

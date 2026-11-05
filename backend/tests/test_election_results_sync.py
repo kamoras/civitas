@@ -97,7 +97,9 @@ class TestApplyCount:
         kinds, _ = _apply(db_session, race, _contest(200, 150, 100))
         assert kinds == [er.ALL_REPORTING]
         kinds, _ = _apply(db_session, race, _contest(200, 150, 100), official=True)
-        assert kinds == [er.OFFICIAL]
+        # 14 points ahead in a count the source lists as official, every
+        # unit in: projected too (projection_holds).
+        assert kinds == [er.OFFICIAL, er.PROJECTED]
 
     def test_a_withdrawn_candidates_row_keeps_the_feeds_mark(self, db_session):
         """Matched to their Candidate row, a candidate the feed marks as
@@ -395,7 +397,7 @@ class TestAnnouncedBaseline:
         kinds, _ = _apply(db_session, race, _contest(199, 150, 100), official=True)
         assert kinds == []
         kinds, _ = _apply(db_session, race, _contest(199, 150, 100), official=True)
-        assert kinds == [er.OFFICIAL]
+        assert kinds == [er.OFFICIAL, er.PROJECTED]
 
     def test_a_lead_change_inside_a_held_poll_is_announced_next_poll(self, db_session):
         race = _setup(db_session)
@@ -975,3 +977,109 @@ def test_a_units_total_without_a_reporting_figure_does_not_break_the_issue(db_se
     _apply(db_session, race, _contest(410, 650, None, total=100))
     assert json.loads(issue.facts)[0] == "Ray Jones (R): 650 votes, 61.3%"
     assert not any("reporting" in f for f in json.loads(issue.facts))
+
+
+class TestProjection:
+    """A race is projected only with every unit fully in, a while after the
+    first votes, at least PROJECTION_MIN_MARGIN ahead and outside the
+    state's runoff and margin-tied recounts (sync.projection_holds)."""
+
+    def _settled_count(self, db, race, d, r, **state_kw):
+        """A first read, then the clock moved past PROJECTION_SETTLE."""
+        _, result = _apply(db, race, _contest(d // 2, r // 2, 50), **state_kw)
+        result.first_reported_at -= er.PROJECTION_SETTLE + timedelta(minutes=1)
+        db.flush()
+        return result
+
+    def test_a_complete_count_far_ahead_is_projected(self, db_session):
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430)
+        kinds, result = _apply(db_session, race, _contest(570, 430, 100))
+        assert kinds == [er.PROJECTED]  # names the count complete, so no separate "all in"
+        assert result.projected is True
+        [event] = db_session.query(ElectionResultEvent).filter_by(kind=er.PROJECTED).all()
+        assert json.loads(event.detail)["leader"]["name"] == "Dana Smith"
+
+    def test_not_before_the_settle_time(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(285, 215, 50))
+        kinds, result = _apply(db_session, race, _contest(570, 430, 100))
+        assert er.PROJECTED not in kinds and not result.projected
+
+    def test_not_with_a_unit_still_out(self, db_session):
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430)
+        kinds, _ = _apply(db_session, race, _contest(570, 430, 99))
+        assert er.PROJECTED not in kinds
+
+    def test_not_where_a_unit_counts_on_its_first_batch(self, db_session):
+        """Enhanced Voting's and Vermont's figures say a unit has reported
+        something, not that it is done: only the official flag projects."""
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430, units_complete=False)
+        kinds, _ = _apply(db_session, race, _contest(570, 430, 100), units_complete=False)
+        assert er.PROJECTED not in kinds
+        kinds, _ = _apply(db_session, race, _contest(570, 430, 100), units_complete=False, official=True)
+        assert er.PROJECTED in kinds
+
+    def test_not_where_the_source_gives_no_unit_figure(self, db_session):
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430)
+        kinds, _ = _apply(db_session, race, _contest(570, 430, None, total=None))
+        assert er.PROJECTED not in kinds
+
+    def test_not_under_the_margin_floor(self, db_session):
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 545, 455)  # 9 points
+        kinds, _ = _apply(db_session, race, _contest(545, 455, 100))
+        assert er.PROJECTED not in kinds
+
+    def test_not_where_the_leader_is_short_of_a_runoff_majority(self, db_session):
+        """Georgia's general needs a majority: 48% to 30% goes to a runoff,
+        however wide the lead."""
+        race = _setup(db_session)
+        third = (("Lee Park", "LIB", 220),)
+        self._settled_count(db_session, race, 480, 300)
+        kinds, _ = _apply(db_session, race, _contest(480, 300, 100, others=third))
+        assert er.PROJECTED not in kinds
+
+    def test_withdrawn_when_the_lead_falls_under_the_floor(self, db_session):
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430)
+        _apply(db_session, race, _contest(570, 430, 100))
+        kinds, result = _apply(db_session, race, _contest(570, 500, 100))
+        assert kinds == [er.PROJECTION_WITHDRAWN] and result.projected is False
+        [event] = db_session.query(ElectionResultEvent).filter_by(kind=er.PROJECTION_WITHDRAWN).all()
+        assert json.loads(event.detail)["previouslyProjected"]["name"] == "Dana Smith"
+        # And raised again once the rule holds again.
+        kinds, result = _apply(db_session, race, _contest(700, 500, 100))
+        assert kinds == [er.PROJECTED] and result.projected is True
+
+    def test_kept_when_a_reporting_figure_lapses(self, db_session):
+        """A poll that drops its unit figures says nothing about the lead."""
+        race = _setup(db_session)
+        self._settled_count(db_session, race, 570, 430)
+        _apply(db_session, race, _contest(570, 430, 100))
+        kinds, result = _apply(db_session, race, _contest(571, 430, None, total=None))
+        assert er.PROJECTION_WITHDRAWN not in kinds and result.projected is True
+
+
+class TestCloseEnoughToContest:
+    def test_a_margin_tied_recount_counts(self):
+        from app.recount_rules import close_enough_to_contest
+
+        # New Hampshire lets a candidate ask for a recount within 20 points.
+        assert close_enough_to_contest("NH", "H", 1, [575, 425], 1000, 2026)
+        assert not close_enough_to_contest("NH", "H", 1, [610, 390], 1000, 2026)
+
+    def test_a_recount_any_candidate_may_ask_for_does_not(self):
+        from app.recount_rules import close_enough_to_contest
+
+        # Pennsylvania's requested recount has no margin condition.
+        assert not close_enough_to_contest("PA", "H", 1, [600, 400], 1000, 2026)
+        assert close_enough_to_contest("PA", "H", 1, [502, 498], 1000, 2026)  # automatic, within 0.5
+
+    def test_a_state_with_no_rule_counts_as_close(self):
+        from app.recount_rules import close_enough_to_contest
+
+        assert close_enough_to_contest("ZZ", "H", 1, [900, 100], 1000, 2026)

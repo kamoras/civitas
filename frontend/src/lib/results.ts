@@ -690,6 +690,30 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         ),
       };
     }
+    case "projected":
+      return {
+        tag: "Projected",
+        tone: "official",
+        text: sentence(
+          `${withParty(d.leader)} is projected to be elected`,
+          shares,
+          d.marginFloor != null
+            ? `Every reporting unit is in and the lead is at least ${d.marginFloor} points`
+            : "Every reporting unit is in and the lead is wide",
+          "Not certified"
+        ),
+      };
+    case "projection_withdrawn":
+      return {
+        tag: "Update",
+        tone: "lead",
+        text: sentence(
+          `The projection for ${withParty(d.previouslyProjected)} is withdrawn`,
+          shares,
+          reporting,
+          notFinal
+        ),
+      };
     case "flip_reversed":
       // The holder's party ahead again — or nobody: an exact tie has no
       // leader to name.
@@ -1060,11 +1084,13 @@ export const MAP_LABEL_HALO =
 export function certificationText(c: RaceCertification, stateName: string): string {
   const on = c.certifiedOn ? formatUtcDate(c.certifiedOn) : null;
   const certified =
-    on && c.certifiedOnStated !== false
-      ? `${stateName} certified the count on ${on}`
-      : on
-        ? `${stateName} has certified the count (first read here ${on})`
-        : `${stateName} has certified the count`;
+    c.basis === "deadline" && on
+      ? `${stateName}'s deadline to certify the count passed on ${on}, with the count unchanged since`
+      : on && c.certifiedOnStated !== false
+        ? `${stateName} certified the count on ${on}`
+        : on
+          ? `${stateName} has certified the count (first read here ${on})`
+          : `${stateName} has certified the count`;
   const who = c.winner
     ? `${c.winner.name}${partyLetter(c.winner.party) ? ` (${partyLetter(c.winner.party)})` : ""}`
     : "";

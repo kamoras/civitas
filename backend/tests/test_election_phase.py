@@ -131,3 +131,73 @@ class TestFreezeUtcnowPinsTheElectionDate:
         monkeypatch.setattr(election_phase, "election_today", lambda: date(2026, 10, 1))
         freeze_utcnow(datetime(2026, 11, 20, 12))
         assert election_phase.election_today() == date(2026, 10, 1)
+
+
+class TestSettledCount:
+    """Once every counted race is settled the results stay up
+    SETTLED_GRACE_DAYS more, not RESULTS_GRACE_DAYS after the count's last
+    move; the count itself is still read to each state's certification
+    deadline (counting_election)."""
+
+    def test_a_settled_count_ends_the_window_early(self):
+        from app.election_phase import SETTLED_GRACE_DAYS
+
+        settled = _changed_on(ELECTION + timedelta(days=1))
+        still_moving = _changed_on(ELECTION + timedelta(days=20))
+        until = ELECTION + timedelta(days=1 + SETTLED_GRACE_DAYS)
+        got = resolve_active_election(until, still_moving, settled)
+        assert got.phase == RESULTS and got.results_until == until
+        after = resolve_active_election(until + timedelta(days=1), still_moving, settled)
+        assert (after.election_day.year, after.phase) == (2028, CAMPAIGN)
+
+    def test_an_open_race_keeps_the_usual_window(self):
+        last = ELECTION + timedelta(days=10)
+        day = last + timedelta(days=RESULTS_GRACE_DAYS)
+        assert resolve_active_election(day, _changed_on(last), _never).phase == RESULTS
+
+    def test_election_day_is_never_cut_short(self):
+        assert resolve_active_election(ELECTION, _never, _changed_on(ELECTION)).phase == ELECTION_DAY
+
+    def test_counting_runs_to_the_latest_certification_deadline(self):
+        from app import certification_deadlines
+        from app.election_phase import counting_window_end
+
+        latest = max(certification_deadlines.deadline(s, ELECTION) for s in certification_deadlines.states())
+        assert counting_window_end(ELECTION, ELECTION) == latest + timedelta(days=1)
+        assert results_window_end(ELECTION, ELECTION) < latest
+
+    def _race(self, db, rid, settled_at):
+        db.add(Race(id=rid, cycle_year=2026, office="S", state=rid[-2:]))
+        db.add(RaceResult(race_id=rid, election_date=ELECTION.isoformat(), source_name="x",
+                          last_change_at=datetime(2026, 11, 4, 9), settled_at=settled_at))
+        db.flush()
+
+    def test_read_from_every_counted_race(self, db_session):
+        from app.election_phase import SETTLED_GRACE_DAYS, all_settled_at, counting_election
+
+        self._race(db_session, "2026-SEN-CO", datetime(2026, 11, 4, 6))
+        self._race(db_session, "2026-SEN-IA", None)
+        assert all_settled_at(db_session, ELECTION) is None
+        db_session.get(RaceResult, "2026-SEN-IA").settled_at = datetime(2026, 11, 5, 3)
+        db_session.flush()
+        assert all_settled_at(db_session, ELECTION) == datetime(2026, 11, 5, 3)
+        # 03:00 UTC is still the 4th in the East.
+        day = date(2026, 11, 4) + timedelta(days=SETTLED_GRACE_DAYS + 1)
+        shown = active_election(db_session, today=day)
+        assert (shown.election_day.year, shown.phase) == (2028, CAMPAIGN)
+        # The count is still read: the page moved on, the archive and the
+        # deadline rule did not.
+        counting = counting_election(db_session, today=day)
+        assert counting is not None and counting.election_day == ELECTION
+        assert counting.counting_until >= date(2026, 12, 7)
+
+    def test_nothing_counted_is_never_settled(self, db_session):
+        from app.election_phase import all_settled_at
+
+        assert all_settled_at(db_session, ELECTION) is None
+
+    def test_no_counting_after_the_new_congress(self, db_session):
+        from app.election_phase import counting_election
+
+        assert counting_election(db_session, today=date(2027, 1, 4)) is None
+        assert counting_election(db_session, today=date(2026, 6, 1)) is None

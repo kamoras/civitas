@@ -198,10 +198,12 @@ class TestColoradoClarity2024:
         assert post.text.startswith("Colorado's 8th Congressional District: Candidate B-8 (R) leads in a seat "
                                     "Democrats hold.")
         assert "3 of 3 counties fully reported (100%)" in post.text and post.text.endswith("Not final.")
-        [(_, co5_all)] = [e for e in _events(db, "2024-HOUSE-CO-5") if e[0] == er.ALL_REPORTING]
-        race5 = db.get(Race, "2024-HOUSE-CO-5")
-        assert eb.compose(er.ALL_REPORTING, race5, co5_all).startswith(
-            "Colorado's 5th Congressional District: its one county has fully reported.")
+        # The 5th's one county reported complete with the leader far ahead:
+        # projected, which tells "all in" itself (sync.apply_count).
+        co5 = [k for k, _ in _events(db, "2024-HOUSE-CO-5")]
+        assert er.PROJECTED in co5 and er.ALL_REPORTING not in co5
+        [(_, co5_projected)] = [e for e in _events(db, "2024-HOUSE-CO-5") if e[0] == er.PROJECTED]
+        assert signals.all_in_line(co5_projected) == "its one county has fully reported"
         texts = _every_text(db)
         assert texts and not any("win" in t.lower() for t in texts)
 
@@ -371,7 +373,9 @@ class TestUtahEnhancedVoting2024:
         await _sync(db, feed, monkeypatch, "UT", freeze_utcnow, datetime(2024, 11, 23, 12))
         assert db.get(RaceResult, "2024-HOUSE-UT-1").votes_counted == 365895
         senate = [k for k, _ in _events(db, "2024-SEN-UT")]
-        assert senate[-1] == er.OFFICIAL
+        # Utah's counties report on their first batch, so only the official
+        # flag projects there, and in the same read.
+        assert senate[-2:] == [er.OFFICIAL, er.PROJECTED]
         posts = [p.text for p in db.query(BroadcastPost)]
         assert any(t.startswith("Utah's U.S. Senate: the state lists its count as official.") for t in posts)
         assert not any("win" in t.lower() for t in _every_text(db))

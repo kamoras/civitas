@@ -536,3 +536,127 @@ class TestNorthCarolinaReader:
             count = await nc.fetch_certified_general(c, date(2024, 11, 5), "NC", {})
             assert count.certified_on == date(2024, 11, 26) and count.contests
             assert await nc.fetch_certified_general(c, date(2026, 11, 3), "NC", {}) is None
+
+
+class TestCertificationDeadlines:
+    def test_every_entry_quotes_and_cites_its_rule(self):
+        from app import certification_deadlines as cd
+
+        for state in cd.states():
+            entry = cd.rule_for(state)
+            assert entry["statute"] and entry["quote"], state
+            assert cd.deadline(state, DAY) > DAY
+
+    def test_deadline_rules(self):
+        from app.certification_deadlines import deadline
+
+        assert deadline("CO", DAY) == date(2026, 11, 30)  # 27 days
+        assert deadline("NE", DAY) == date(2026, 11, 30)  # 4th Monday after
+        assert deadline("NM", DAY) == date(2026, 11, 24)  # 3rd Tuesday after (2024's canvass: Nov 26)
+        assert deadline("UT", DAY) == date(2026, 11, 23)  # 4th Monday of November
+        assert deadline("VA", DAY) == date(2026, 12, 7)   # 1st Monday of December
+        assert deadline("RI", DAY) is None                # no fixed deadline: not read this way
+
+    def _count(self, db, last_change, reporting=650, total=650):
+        from app.models import RaceResult
+
+        race = Race(id="2026-HOUSE-CO-8", cycle_year=2026, office="H", state="CO", district=8)
+        db.add(race)
+        db.add(RaceResult(
+            race_id=race.id, election_date=DAY.isoformat(), source_name="Colorado Secretary of State",
+            source_url="https://results.example/co",
+            tallies=json.dumps([{"name": "Dana Smith", "party": "DEM", "votes": 160_000, "candidateId": None},
+                                {"name": "Ray Jones", "party": "REP", "votes": 140_000, "candidateId": None}]),
+            votes_counted=300_000, reporting_units=reporting, total_units=total, unit_label="counties",
+            official=False, first_reported_at=datetime(2026, 11, 4), last_change_at=last_change,
+        ))
+        db.flush()
+        return race
+
+    def test_a_count_unchanged_past_the_deadline_is_taken_as_certified(self, db_session):
+        race = self._count(db_session, datetime(2026, 11, 20, 12))
+        # Not before the deadline (Nov 30) and its day of grace.
+        assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 1))["stored"] == 0
+        assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 2))["stored"] == 1
+        row = db_session.get(RaceCertification, race.id)
+        view = cr.certification_json(row, date(2026, 12, 2))
+        assert view["basis"] == cr.DEADLINE and view["certifiedOn"] == "2026-11-30"
+        # Colorado: any candidate may ask for a recount within 28 days of the
+        # election, long past; the margin is outside its automatic recount.
+        assert view["status"] == rr.CERTIFIED and view["winner"]["name"] == "Dana Smith"
+
+    def test_a_count_still_moving_or_short_of_its_units_is_not(self, db_session):
+        race = self._count(db_session, datetime(2026, 12, 1, 12))  # moved after the deadline
+        assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 5))["stored"] == 0
+        assert db_session.get(RaceCertification, race.id) is None
+
+    def test_short_of_units(self, db_session):
+        self._count(db_session, datetime(2026, 11, 20), reporting=640)
+        assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 5))["stored"] == 0
+
+    def test_a_count_that_moves_later_is_withdrawn_and_alerted(self, db_session, monkeypatch):
+        from app.models import RaceResult
+
+        sent = []
+        monkeypatch.setattr(cr, "send_ops_alert", lambda *a, **k: sent.append(k["condition"]))
+        race = self._count(db_session, datetime(2026, 11, 20))
+        cr.apply_deadlines(db_session, DAY, date(2026, 12, 2))
+        db_session.get(RaceResult, race.id).last_change_at = datetime(2026, 12, 10)  # a recount moved it
+        out = cr.apply_deadlines(db_session, DAY, date(2026, 12, 11))
+        assert out["withdrawn"] == [race.id] and sent == ["certified-deadline-moved"]
+        assert db_session.get(RaceCertification, race.id) is None
+
+    def test_the_state_s_own_certification_is_never_replaced(self, db_session):
+        race = self._count(db_session, datetime(2026, 11, 20))
+        db_session.add(RaceCertification(race_id=race.id, cycle=2026, election_date=DAY.isoformat(), state="CO",
+                                         office="H", district=8, basis="certified", certified_on="2026-11-25",
+                                         source_name="CO", tallies="[]", certified_on_stated=True))
+        db_session.flush()
+        assert cr.apply_deadlines(db_session, DAY, date(2026, 12, 5))["stored"] == 0
+        assert db_session.get(RaceCertification, race.id).basis == "certified"
+
+
+class TestSettled:
+    """certified.refresh_settled: what election_phase ends the results
+    window from."""
+
+    def _result(self, db, race, projected):
+        from app.models import RaceResult
+
+        db.add(RaceResult(race_id=race.id, election_date=DAY.isoformat(), source_name="Maryland State Board",
+                          tallies="[]", votes_counted=100_000, projected=projected,
+                          first_reported_at=datetime(2026, 11, 4), last_change_at=datetime(2026, 11, 4)))
+        db.flush()
+        return db.get(RaceResult, race.id)
+
+    def test_a_projection_settles_and_a_withdrawal_reopens(self, db_session, freeze_utcnow):
+        result = self._result(db_session, _race(db_session), projected=True)
+        freeze_utcnow(datetime(2026, 11, 4, 6))
+        assert cr.refresh_settled(db_session, DAY, date(2026, 11, 4)) == 0
+        assert result.settled_at == datetime(2026, 11, 4, 6)
+        freeze_utcnow(datetime(2026, 11, 4, 8))
+        cr.refresh_settled(db_session, DAY, date(2026, 11, 4))
+        assert result.settled_at == datetime(2026, 11, 4, 6)  # first settled, kept
+        result.projected = False
+        assert cr.refresh_settled(db_session, DAY, date(2026, 11, 4)) == 1
+        assert result.settled_at is None
+
+    def test_a_certified_winner_settles_without_a_projection(self, db_session):
+        race = _race(db_session)
+        result = self._result(db_session, race, projected=False)
+        cr.apply_certified(db_session, "MD", DAY, _certified(date(2026, 12, 4)), date(2026, 12, 4))
+        # Maryland's recount can still be asked for until Dec 7.
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 4)) == 1
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 8)) == 0
+        assert result.settled_at is not None
+
+    def test_a_certified_count_inside_a_recount_reopens_a_projection(self, db_session):
+        race = _race(db_session)
+        result = self._result(db_session, race, projected=True)
+        cr.apply_certified(db_session, "MD", DAY, _certified(date(2026, 12, 4), d=50_010, r=50_000),
+                           date(2026, 12, 4))
+        # Inside the margin Maryland lets a candidate ask a recount at.
+        assert cr.outcome_for(db_session.get(RaceCertification, race.id), date(2026, 12, 4)).status \
+            == rr.RECOUNT_POSSIBLE
+        assert cr.refresh_settled(db_session, DAY, date(2026, 12, 4)) == 1
+        assert result.settled_at is None

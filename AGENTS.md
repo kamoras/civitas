@@ -1457,9 +1457,23 @@ at or under loads). The page's script can tell what its headers can't, so
 **prefetching happens only on a page shown to a person**:
 `components/Link.tsx` (every in-app link; `Link.test.tsx` fails on a direct
 `next/link` import) and the Documents filter's `next/form` pass
-`prefetch={false}` while `navigator.webdriver` is set or the page is not
-visible, and prefetch as before once it is (a background tab when the
-reader turns to it, within the hold's `_PENDING_S`). No request is added
+`prefetch={false}` while the page is not visible, and prefetch as before
+once it is (a background tab when the reader turns to it, within the
+hold's `_PENDING_S`, six hours). Under `navigator.webdriver` a `Link` is a
+plain `<a>`, the Documents filter a plain `<form>`, and `lib/navigate.ts`
+loads the page instead of pushing the router (2026-11): a click on next/link fetches the next page's data from the
+running page, which reads as a router request, so a driven browser clicking
+through confirmed its own visit; `NavigationBeacon` sends nothing there
+either. Four more holes closed the same day: a prerendered page (Chrome's
+address bar) is held, not skipped, since it confirms only once shown, and
+skipping it lost the visit; Google's private prefetch proxy is asked not
+to prefetch (`/.well-known/traffic-advice`), since its fetch comes from
+Google's address and the reader then opens a page never seen; an IPv6
+client is its /64 and an IPv4-mapped address its IPv4 one
+(`visits._client_address`), since a host rotates temporary addresses in
+its /64; and page and router signals that arrive through nginx count
+nothing (`visits.EDGE_HEADER`, set on every outside `/api/` request), since
+they are the frontend proxy's own, sent past nginx. No request is added
 and nothing is kept; the confirmation is still the router request the
 site makes anyway, now from a page in view outside automation, the same
 conditions the load-timing beacon already had. Under `next build`, Chrome
@@ -2179,7 +2193,10 @@ two issues by rank and at most two issue posts a day
 (`bluesky_poster.MAX_ISSUE_POSTS_PER_DAY`); a Congress day or week only when
 something was on the record — a record vote, a measure passed, a nomination
 confirmed (`congress_bluesky.has_business`) — and a weekend look-ahead only
-when the Record's program shows business ahead. On 2026-10-10 the account
+when the Record's program shows business ahead. The daily member spotlight
+stands down while an election's results are on show, and until January 3
+picks only members the record shows returning (re-elected, or a senator
+whose seat wasn't up: `app/returning_members.py`, 2026-11). On 2026-10-10 the account
 had about 40 followers and 88.5% of its last 1,021 posts drew no
 interaction; posting everything was what taught readers to skip it. Change
 one of these rules with a replay against the stored history, as their
@@ -2228,7 +2245,16 @@ is listed), the voter calendar (150 days out), the poll closing times
 The site's election is not simply the *next* one: from election day (Eastern
 date) it stays on the election just held while any race's vote totals are
 still moving and for `RESULTS_GRACE_DAYS` (14) after the last change, capped at
-January 3 (20th Amendment), and only then rolls to the next cycle.
+January 3 (20th Amendment), and only then rolls to the next cycle. Once every
+counted race is settled (projected or a certified winner, with no runoff or
+recount pending: `certified.refresh_settled`, `RaceResult.settled_at`) it
+rolls `SETTLED_GRACE_DAYS` (3) after the last one settles instead (owner
+decision, 2026-11): sitting members serve to January 3, but a reader stops
+following a decided election long before. The count is still *read* past
+that, to the later of the old window and the day after every live state's
+certification deadline (`election_phase.counting_election`, what the live
+sync, the archive copy and a reset's keep-list follow): the deadline rule
+reads the live count as it stood at the deadline.
 `active_election()` is the one answer for the pipeline's cycle, the API's
 `electionDate`/`phase` and the season jobs — never `next_election_day()`
 directly, which flips to the next cycle the night polls close.
@@ -2324,10 +2350,21 @@ wrong number on election night is worse than none:
   of the result. Its page says so (`rankedChoiceStates`), and before
   election day the ballot page says the voter can rank (the state ballot's
   `rankedChoice`, read from the same citation — never a second copy of it).
-- Civitas never calls a race. A count is "leading" — "not final" until the
-  source itself says official, and still "leading", never "wins", after (an
-  official count's leader can face a runoff: Georgia's general needs a
-  majority) — and every sentence about it — the live-updates feed, the
+- Civitas never calls a race on a partial count. A count is "leading" — "not
+  final" until the source itself says official, and still "leading", never
+  "wins", after (an official count's leader can face a runoff: Georgia's
+  general needs a majority). One step past it, "projected" (owner decision,
+  2026-11; `sync.projection_holds`), more conservative than a network desk:
+  no exit poll and no model of the ballots left, only the count, with every
+  unit the source counts *fully* in (`units_complete`; a source that counts a
+  unit on its first batch, or gives no unit figure, projects only on its
+  official flag), `PROJECTION_SETTLE` (6h) since the first votes, a lead of
+  `PROJECTION_MIN_MARGIN` (10 points of every vote counted), and no runoff
+  or margin-tied recount in reach (`recount_rules.close_enough_to_contest`).
+  It is withdrawn (`projection_withdrawn`) only when the leader changes or
+  the lead stops being decisive, never because a reporting figure lapsed;
+  the certified winner supersedes it; and it is worded "projected to be
+  elected", never "wins". Every sentence about a count — the live-updates feed, the
   DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
   the election-night posts (`live_results/bluesky.py`, published through
   `broadcast.publish` to the Elections feed and Bluesky) — is
@@ -2356,7 +2393,15 @@ wrong number on election night is worse than none:
   state sets (Indiana's `Certified`; Enhanced Voting's `isOfficialResults`
   for GA, WA, VA, UT, ID and RI, which a state that never sets it simply
   waits past). A flag whose meaning isn't shown (Tally's, Vermont's) is not
-  read as certification,
+  read as certification. Where no certification is read (owner decision,
+  2026-11: who won feeds the rest of the platform), the state's legal
+  deadline to certify stands in (`app/data/certification_deadlines.json`,
+  quoted and cited per state from NASS; `apply_deadlines`): a day past it,
+  the live count is taken as the certified one, dated the deadline, if it
+  stopped changing by the deadline day with every reporting unit in. A
+  count that moves after that withdraws it with an alert. The page says the
+  deadline passed with the count unchanged, never that the state certified.
+  All of it goes
   into `RaceCertification`, kept apart from the frozen election-night count
   and read beside the archive at serve time, never written into it. "Certified
   winner" needs all of: the state's certified count; no runoff owed

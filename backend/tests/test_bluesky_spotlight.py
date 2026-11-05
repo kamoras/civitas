@@ -1,10 +1,17 @@
 """The daily member spotlight: who is picked, and the fixed text posted."""
 
+import json
 import re
+from datetime import date, datetime
 from unittest.mock import patch
 
-from app.models import BroadcastPost, BskySenatorSpotlight, Representative, Senator
+import pytest
+
+from app.models import (
+    BroadcastPost, BskySenatorSpotlight, Candidate, Race, RaceResult, Representative, Senator,
+)
 from app.pipeline.analyze.bluesky_spotlight import (
+    _lame_duck_pool,
     _pick_politician,
     _publish_spotlight,
     compose_spotlight,
@@ -13,6 +20,13 @@ from app.pipeline.analyze.bluesky_spotlight import (
     post_daily_spotlight,
     profile_url,
 )
+
+
+@pytest.fixture(autouse=True)
+def _outside_the_lame_duck(freeze_utcnow):
+    """An ordinary day, months from any election: every current member is
+    in the pool. The lame duck's rule has its tests below."""
+    freeze_utcnow(datetime(2026, 6, 1, 15))
 
 
 def _senator(id, score=50.0, **overrides):
@@ -208,3 +222,80 @@ class TestComposeWithFinding:
         post = db_session.query(BroadcastPost).one()
         assert post.text.startswith(f"Jane Roe (D-NV): {self.FINDING}")
         assert bluesky_configured == [(post.text, "https://civitas-research.org/politicians/jane-roe")]
+
+
+class TestLameDuck:
+    """Between election day and January 3 the pool is the members the
+    record shows serving after it (app/returning_members.py), and no
+    spotlight runs while the results are on show."""
+
+    DAY = date(2026, 11, 3)
+
+    def _held(self, db, rid, office, state, district=None):
+        db.add(Race(id=rid, cycle_year=2026, office=office, state=state, district=district))
+
+    def _runs(self, db, rid, cand_id, bioguide, incumbent="I"):
+        db.add(Candidate(id=cand_id, race_id=rid, name=cand_id, party="DEM", incumbent_challenge=incumbent,
+                         member_bioguide=bioguide))
+
+    def _settled(self, db, rid, leader_id):
+        db.add(RaceResult(race_id=rid, election_date=self.DAY.isoformat(), source_name="x",
+                          tallies=json.dumps([{"name": leader_id, "votes": 600, "candidateId": leader_id},
+                                              {"name": "other", "votes": 400}]),
+                          votes_counted=1000, settled_at=datetime(2026, 11, 4, 6),
+                          first_reported_at=datetime(2026, 11, 4), last_change_at=datetime(2026, 11, 4)))
+
+    def _setup(self, db):
+        db.add_all([
+            _representative("re-elected", bioguide_id="B1", district=1),
+            _representative("defeated", bioguide_id="B2", district=2),
+            _representative("retiring", bioguide_id="B3", district=3),
+            _senator("not-up", bioguide_id="S1", state="IA"),
+            _senator("up-and-unsettled", bioguide_id="S2", state="IA"),
+            _senator("open-seat-state", bioguide_id="S3", state="OH"),
+        ])
+        for d in (1, 2, 3):
+            self._held(db, f"2026-HOUSE-CA-{d}", "H", "CA", d)
+        self._runs(db, "2026-HOUSE-CA-1", "c1", "B1")
+        self._settled(db, "2026-HOUSE-CA-1", "c1")
+        self._runs(db, "2026-HOUSE-CA-2", "c2", "B2")
+        self._settled(db, "2026-HOUSE-CA-2", "challenger")
+        self._held(db, "2026-SEN-IA", "S", "IA")
+        self._runs(db, "2026-SEN-IA", "s2", "S2")
+        self._held(db, "2026-SEN-OH", "S", "OH")
+        self._runs(db, "2026-SEN-OH", "open", None, incumbent="O")
+        db.commit()
+
+    def test_only_members_the_record_shows_returning(self, db_session):
+        from app.returning_members import returning
+
+        self._setup(db_session)
+        assert returning(db_session, self.DAY, date(2026, 11, 20)) == {("house", "re-elected"), ("senate", "not-up")}
+
+    def test_paused_while_the_results_are_on_show(self, db_session, freeze_utcnow, bluesky_outbox):
+        self._setup(db_session)
+        freeze_utcnow(datetime(2026, 11, 4, 18))
+        post_daily_spotlight(db_session)
+        assert db_session.query(BroadcastPost).count() == 0
+
+    def test_after_the_results_window_only_returning_members(self, db_session, freeze_utcnow, bluesky_outbox):
+        self._setup(db_session)
+        freeze_utcnow(datetime(2026, 12, 10, 18))  # past the results window, before January 3
+        pool = _lame_duck_pool(db_session)
+        assert pool == {("house", "re-elected"), ("senate", "not-up")}
+        picked = {_pick_politician(db_session, pool)[0].id for _ in range(30)}
+        assert picked <= {"re-elected", "not-up"}
+
+    def test_the_whole_chamber_again_from_january_3(self, db_session, freeze_utcnow):
+        self._setup(db_session)
+        freeze_utcnow(datetime(2027, 1, 3, 18))
+        assert _lame_duck_pool(db_session) is None
+
+    def test_a_used_up_pool_repeats_without_resetting_the_cycle(self, db_session):
+        db_session.add_all([_senator("a"), _senator("b")])
+        db_session.add(BskySenatorSpotlight(senator_id="a", chamber="senate", posted_at=datetime(2026, 11, 1),
+                                            post_text="x"))
+        db_session.commit()
+        entity, _ = _pick_politician(db_session, {("senate", "a")})
+        assert entity.id == "a"
+        assert db_session.query(BskySenatorSpotlight).count() == 1

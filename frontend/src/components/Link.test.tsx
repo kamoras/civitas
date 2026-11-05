@@ -38,10 +38,19 @@ describe("Link", () => {
     expect(lastPrefetch()).toBe(false);
   });
 
-  it("never prefetches in a browser automation drives", () => {
+  it("is a plain link in a browser automation drives", () => {
     setBrowser({ webdriver: true, visibility: "visible" });
-    render(<Link href="/congress">Congress</Link>);
-    expect(lastPrefetch()).toBe(false);
+    const { getByText } = render(
+      <Link href="/congress" prefetch className="x">
+        Congress
+      </Link>
+    );
+    // Not next/link at all: a click loads the page, never a router fetch.
+    expect(seen).toHaveLength(0);
+    const a = getByText("Congress");
+    expect(a.getAttribute("href")).toBe("/congress");
+    expect(a.getAttribute("class")).toBe("x");
+    expect(a.hasAttribute("prefetch")).toBe(false);
   });
 
   it("waits for a background tab to be shown", () => {

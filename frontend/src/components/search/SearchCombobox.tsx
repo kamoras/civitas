@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { fetchSearchSuggestions } from "@/lib/api";
 import type { SearchItem } from "@/types/search";
+import { navigate } from "@/lib/navigate";
 
 // Wait this long after the last keystroke before asking: a word typed at
 // speed is one request, not one per letter.
@@ -124,7 +125,7 @@ export default function SearchCombobox({
   function go(item: SearchItem) {
     setOpen(false);
     onNavigate?.();
-    router.push(item.url);
+    navigate(router, item.url);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

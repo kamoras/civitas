@@ -691,8 +691,10 @@ def _election_ballot_sync() -> None:
 
 
 def _election_results_sync() -> None:
-    """Every covered state's live count, from election day until the
-    results window closes (election_phase), and each special election's,
+    """Every covered state's live count, from election day until its count
+    stops being read (election_phase.counting_election: the results window,
+    or later, each live state's certification deadline), and each special
+    election's,
     from its own day until its window closes (live_results/specials.py) --
     a no-op the rest of the year.
 
@@ -700,12 +702,12 @@ def _election_results_sync() -> None:
     have changed for a day, hourly, since the page then only waits out its
     grace period and a late amendment is all there is left to catch.
     """
-    from app.election_phase import active_election
+    from app.election_phase import counting_election
     from app.live_results.specials import due_specials
 
-    election = active_election()
-    general = election.shows_results
-    last = election.last_result_change
+    election = counting_election()
+    general = election is not None
+    last = election.last_result_change if election else None
     if general and last is not None and utcnow() - last > timedelta(days=1) and utcnow().minute >= 5:
         general = False
     db = SessionLocal()
