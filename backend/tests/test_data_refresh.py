@@ -455,7 +455,40 @@ def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval
 def test_every_generated_file_rebuilds_itself():
     """The computed lean rebuilds its tables like the rest (app/census_lines.py);
     only its next window, new inputs and corrections, is a staleness alert."""
-    assert [f.name for f in dr.DATA_FILES if f.command is None] == []
+    assert {f.name for f in dr.DATA_FILES if f.command is None} == dr.WATCHED_ONLY
+
+
+def test_a_new_nass_summary_is_reported(monkeypatch):
+    """recount_rules.json and certification_deadlines.json quote NASS's
+    canvassing summary; a different edition on NASS's reports page is
+    said, the same one is not, and an unreadable page claims nothing."""
+    cited = "https://www.nass.org/sites/default/files/reports/summary-canvass-certification-laws-oct2024.pdf"
+    doc = {"_source": f"NASS, 'Summary', updated October 2024, {cited}. Quoted per state."}
+    page = {"text": ""}
+
+    class Resp:
+        status_code = 200
+
+        @property
+        def text(self):
+            return page["text"]
+
+        def raise_for_status(self):
+            if page["text"] is None:
+                raise httpx.HTTPError("down")
+
+    monkeypatch.setattr(dr, "source_request", lambda *a, **k: Resp())
+    monkeypatch.setattr(dr, "_record_try", lambda *a, **k: None)
+    ctx = dr.Context(name="recount_rules.json", doc=doc, today=date(2026, 12, 1), last_tried=None)
+
+    page["text"] = '<a href="/sites/default/files/reports/summary-canvass-certification-laws-oct2024.pdf">x</a>'
+    assert dr._nass_summary_stale(ctx) is None
+    page["text"] = '<a href="/sites/default/files/reports/summary-canvass-certification-laws-oct2026.pdf">x</a>'
+    assert "oct2026.pdf" in dr._nass_summary_stale(ctx)
+    page["text"] = "<p>a page with no summary on it</p>"
+    assert dr._nass_summary_stale(ctx) is dr.UNCHECKED
+    page["text"] = None
+    assert dr._nass_summary_stale(ctx) is dr.UNCHECKED
 
 
 def test_the_district_lean_window_is_reported_once_its_next_inputs_are_published(monkeypatch):

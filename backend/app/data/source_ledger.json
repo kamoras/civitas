@@ -46,6 +46,7 @@
     {"publisher": "South Dakota Secretary of State", "takes": "South Dakota's certified general election ballot", "hosts": ["vip.sdsos.gov"]},
     {"publisher": "Clark County Election Department, Nevada", "takes": "Nevada's certified candidates and election results", "hosts": ["www.clarkcountynv.gov"]},
     {"publisher": "Delaware Department of Elections", "takes": "Delaware's certified candidates and election results", "hosts": ["data.delaware.gov", "elections.delaware.gov"]},
-    {"publisher": "GitHub", "takes": "Election returns some sources publish there", "hosts": ["api.github.com"]}
+    {"publisher": "GitHub", "takes": "Election returns some sources publish there", "hosts": ["api.github.com"]},
+    {"publisher": "National Association of Secretaries of State", "takes": "Which edition of its summary of state canvassing, certification and recount laws is current", "hosts": ["www.nass.org"]}
   ]
 }

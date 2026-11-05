@@ -58,6 +58,7 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app import state_names
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import race_relevance
 from app.pipeline.fetch.news_digest import digest_reason
@@ -91,24 +92,10 @@ def coverage_tracker() -> PipelineRunTracker:
     return _coverage_tracker
 
 
-# 2-letter state code -> full state name, for the corroboration check.
-STATE_NAMES: dict[str, str] = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
-    "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
-    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
-    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
-    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
-    "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
-    "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
-    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota",
-    "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
-    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
-    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-    "WI": "Wisconsin", "WY": "Wyoming",
-}
+# 2-letter state code -> full state name, for the corroboration check: the
+# 50 states from app/state_names, D.C. left out as the typed copy this
+# replaced left it out.
+STATE_NAMES: dict[str, str] = {code: name for code, name in state_names.STATE_NAMES.items() if code != "DC"}
 
 
 def _surname(name: str) -> str:

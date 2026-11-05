@@ -20,6 +20,18 @@ SCORE_WEIGHTS: dict[str, float] = {
     "legislativeEffectiveness": 0.34,
 }
 
+# Funding Independence's four parts, as relative weights (each over their
+# sum, 53): the proportions the parts had before v6.13 removed two others,
+# kept and renormalized, with no new weighting judgment
+# (docs/research/funding-independence.md, "Weights"). A part that can't be
+# measured is left out and the others carry its weight.
+FUNDING_INDEPENDENCE_PARTS: dict[str, int] = {
+    "pacDependency": 20,
+    "smallDonorShare": 10,
+    "topDonorConcentration": 10,
+    "industryConcentration": 13,
+}
+
 # Historical Legacy (C-SPAN Presidential Historians Survey) at 50% (President
 # v7); the two mechanical dimensions split the rest. compute_president_overall_score
 # holds Historical Legacy at exactly 50% whenever both mechanical dimensions

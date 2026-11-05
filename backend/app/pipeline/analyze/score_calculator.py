@@ -176,6 +176,7 @@ from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     CONSTITUENT_MIN_VOTES,
     CONSTITUENT_REFERENCE_STATISTIC,
+    FUNDING_INDEPENDENCE_PARTS,
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
@@ -1114,6 +1115,10 @@ def _small_donor_capacity_score(
     return score, expected
 
 
+# Each part's share of Funding Independence (config_definitions).
+_FI_WEIGHT = {part: w / sum(FUNDING_INDEPENDENCE_PARTS.values()) for part, w in FUNDING_INDEPENDENCE_PARTS.items()}
+
+
 def _calc_funding_independence(
     funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
     party: str | None = None,
@@ -1520,8 +1525,9 @@ def _funding_independence_core(
     # alone (13/53 of 50).
     weighted = [
         (w, c) for w, c in (
-            (20 / 53, pac_score), (10 / 53, small_score),
-            (10 / 53, concentration_score), (13 / 53, industry_concentration_score),
+            (_FI_WEIGHT["pacDependency"], pac_score), (_FI_WEIGHT["smallDonorShare"], small_score),
+            (_FI_WEIGHT["topDonorConcentration"], concentration_score),
+            (_FI_WEIGHT["industryConcentration"], industry_concentration_score),
         ) if c is not None
     ]
     score = clamp(sum(w * c for w, c in weighted) / sum(w for w, _ in weighted))
@@ -1544,7 +1550,7 @@ def _funding_independence_core(
         "components": [
             {
                 "label": "PAC dependency",
-                "weight": round(20 / 53, 4),
+                "weight": round(_FI_WEIGHT["pacDependency"], 4),
                 "score": round(pac_score, 1),
                 "detail": (
                     f"{pac_ratio:.0%} of ${total_raised:,.0f} in contributions came from PACs;"
@@ -1553,7 +1559,7 @@ def _funding_independence_core(
             },
             {
                 "label": "Small-donor share",
-                "weight": round(10 / 53, 4),
+                "weight": round(_FI_WEIGHT["smallDonorShare"], 4),
                 "score": None if small_score is None else round(small_score, 1),
                 "detail": (
                     "the campaign itemizes every gift, so its filings report no unitemized "
@@ -1569,13 +1575,13 @@ def _funding_independence_core(
             },
             {
                 "label": "Top-donor concentration",
-                "weight": round(10 / 53, 4),
+                "weight": round(_FI_WEIGHT["topDonorConcentration"], 4),
                 "score": None if concentration_score is None else round(concentration_score, 1),
                 "detail": concentration_detail,
             },
             {
                 "label": "Industry concentration",
-                "weight": round(13 / 53, 4),
+                "weight": round(_FI_WEIGHT["industryConcentration"], 4),
                 "score": None if industry_concentration_score is None else round(industry_concentration_score, 1),
                 "detail": industry_concentration_detail,
             },
