@@ -354,3 +354,26 @@ def test_none_trusts_no_one_and_bad_values_refuse_to_start(tmp_path):
     for i, env in enumerate(({"REAL_IP_FROM": "10.0.0.1; return 200"}, {"REAL_IP_HEADER": "X-Real-IP; deny all"})):
         result, _ = _real_ip_snippet(tmp_path / str(i), **env)
         assert result.returncode != 0
+
+
+def test_outside_api_requests_carry_the_edge_mark():
+    """The visit counter takes page and router signals only from the
+    frontend's proxy, which reaches the backend without passing nginx
+    (app/api/visits.py EDGE_HEADER): every request nginx sends to the API
+    from outside is marked."""
+    from app.api.visits import EDGE_HEADER
+
+    [api] = [b for b in _walk(_parse(CONF.read_text())) if b.head == "location /api/"]
+    assert f"proxy_set_header {EDGE_HEADER} 1" in api.directives
+
+
+def test_the_private_prefetch_proxy_is_asked_not_to_prefetch():
+    """A page prefetched through Google's proxy is opened unseen, so its
+    reader is never counted (frontend/src/lib/visitSignal.ts)."""
+    import json
+
+    [advice] = [b for b in _walk(_parse(CONF.read_text())) if b.head == "location = /.well-known/traffic-advice"]
+    body = next(d for d in advice.directives if d.startswith("return 200 "))
+    assert json.loads(body.removeprefix("return 200 ").strip("'")) == [
+        {"user_agent": "prefetch-proxy", "disallow": True}]
+    assert "default_type application/trafficadvice+json" in advice.directives

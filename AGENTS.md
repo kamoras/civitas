@@ -1457,9 +1457,23 @@ at or under loads). The page's script can tell what its headers can't, so
 **prefetching happens only on a page shown to a person**:
 `components/Link.tsx` (every in-app link; `Link.test.tsx` fails on a direct
 `next/link` import) and the Documents filter's `next/form` pass
-`prefetch={false}` while `navigator.webdriver` is set or the page is not
-visible, and prefetch as before once it is (a background tab when the
-reader turns to it, within the hold's `_PENDING_S`). No request is added
+`prefetch={false}` while the page is not visible, and prefetch as before
+once it is (a background tab when the reader turns to it, within the
+hold's `_PENDING_S`, six hours). Under `navigator.webdriver` a `Link` is a
+plain `<a>`, the Documents filter a plain `<form>`, and `lib/navigate.ts`
+loads the page instead of pushing the router (2026-11): a click on next/link fetches the next page's data from the
+running page, which reads as a router request, so a driven browser clicking
+through confirmed its own visit; `NavigationBeacon` sends nothing there
+either. Four more holes closed the same day: a prerendered page (Chrome's
+address bar) is held, not skipped, since it confirms only once shown, and
+skipping it lost the visit; Google's private prefetch proxy is asked not
+to prefetch (`/.well-known/traffic-advice`), since its fetch comes from
+Google's address and the reader then opens a page never seen; an IPv6
+client is its /64 and an IPv4-mapped address its IPv4 one
+(`visits._client_address`), since a host rotates temporary addresses in
+its /64; and page and router signals that arrive through nginx count
+nothing (`visits.EDGE_HEADER`, set on every outside `/api/` request), since
+they are the frontend proxy's own, sent past nginx. No request is added
 and nothing is kept; the confirmation is still the router request the
 site makes anyway, now from a page in view outside automation, the same
 conditions the load-timing beacon already had. Under `next build`, Chrome

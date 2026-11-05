@@ -18,6 +18,7 @@ per-request.
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import logging
 import re
 import secrets
@@ -576,6 +577,22 @@ def _extract_issue_public_id(raw: str) -> str | None:
     return candidate if from_public_id(candidate) is not None else None
 
 
+def _client_address(raw: str) -> str:
+    """The address one browser keeps for a day. An IPv6 host picks a new
+    temporary address in its /64 at least daily, and on every network change
+    (RFC 8981), so the /64 is the client; an IPv4-mapped address is its IPv4
+    one. Anything unparseable is kept as given."""
+    try:
+        address = ipaddress.ip_address(raw)
+    except ValueError:
+        return raw
+    if address.version == 6:
+        if address.ipv4_mapped is not None:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{address}/64", strict=False))
+    return str(address)
+
+
 def _track_ip(request: Request) -> str:
     # nginx sets X-Real-IP for every request it proxies (nginx/civitas.conf)
     # — the same header its rate limits are keyed by — and the frontend's
@@ -584,9 +601,9 @@ def _track_ip(request: Request) -> str:
     # else can supply it.
     forwarded = request.headers.get("X-Real-IP")
     if forwarded:
-        return forwarded
+        return _client_address(forwarded)
     peer = request.client.host if request.client else None
-    return peer or "unknown"
+    return _client_address(peer) if peer else "unknown"
 
 
 # The first whole UTC day counted by confirmation (#893, deployed the evening
@@ -605,12 +622,22 @@ CONFIRMED_VISITS_SINCE = "2026-10-11"
 # navigation  the browser itself: a page opened inside the app
 #             (NavigationBeacon), which reaches no server otherwise
 VisitSignal = Literal["page", "router", "navigation"]
+# Set by nginx on every /api/ request from outside (nginx/civitas.conf).
+# Page and router signals are the frontend proxy's own, sent to backend:8000
+# over the Docker network without passing nginx; one that arrives through
+# nginx was posted by someone else, and counts nothing. A navigation is the
+# browser's own (NavigationBeacon) and comes through nginx.
+EDGE_HEADER = "X-Civitas-Edge"
 
 # How long an opened page waits for its browser's first router request.
 # Next prefetches the links in view within a second or two of the page
-# hydrating; minutes cover a slow connection or a tab opened in the
-# background.
-_PENDING_S = 10 * 60
+# being shown, but a tab opened in the background (or a prerendered page)
+# prefetches only when the reader turns to it (components/Link.tsx), which
+# can be hours later; ten minutes lost those visits. A longer hold adds no
+# visitor (the hash is the address, which the hold is keyed by too); the
+# most it can do is let another browser on the same address confirm a page
+# it didn't open.
+_PENDING_S = 6 * 3600
 # How long a client that has run a page has its navigations counted: the
 # whole day. Its key changes at midnight anyway (throttle.client_key), so
 # this is "has run a page today", which the visit itself already records.
@@ -721,6 +748,8 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
     thread pool instead, calling put_nowait from the wrong thread. The
     throttle store's calls run on its own threads (throttle.run).
     """
+    if kind != "navigation" and request.headers.get(EDGE_HEADER):
+        return  # page and router signals come only from the frontend's proxy
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
     if _AUTOMATED_BROWSER in user_agent or SELF_DECLARED_CRAWLER.search(user_agent):

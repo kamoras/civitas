@@ -23,11 +23,16 @@ export type VisitSignal = "page" | "router";
 export function visitSignal(headers: Headers): VisitSignal | null {
   const dest = headers.get("sec-fetch-dest");
   if (dest === "document") {
-    // The browser fetching a page it may never show (a speculative
-    // prefetch or prerender) is no one opening it.
+    // A prefetched document runs no script until it is opened, and opening
+    // it sends nothing, so it is no one opening the page. A prerendered one
+    // runs, hidden, and is held like any page: its links prefetch only once
+    // it is shown (components/Link.tsx), so a prerender never opened is
+    // never confirmed, and one opened (Chrome's address bar prerenders a
+    // site typed there) is counted, where skipping it lost the visit.
     const purpose =
       `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`.toLowerCase();
-    return purpose.includes("prefetch") || purpose.includes("prerender") ? null : "page";
+    if (purpose.includes("prerender")) return "page";
+    return purpose.includes("prefetch") ? null : "page";
   }
   return dest === "empty" && headers.get("sec-fetch-site") === "same-origin" ? "router" : null;
 }

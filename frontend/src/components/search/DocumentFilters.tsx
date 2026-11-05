@@ -2,7 +2,7 @@
 
 import Form from "next/form";
 import { useRef, useState } from "react";
-import { usePrefetchAllowed } from "@/components/Link";
+import { useAutomated, usePrefetchAllowed } from "@/components/Link";
 import type { ExploreStats } from "@/lib/api";
 import { EYEBROW } from "@/lib/typeStyles";
 import { BRANCH_FILTERS, type DocumentQuery } from "@/lib/documentSearch";
@@ -36,6 +36,10 @@ export default function DocumentFilters({
   const formRef = useRef<HTMLFormElement>(null);
   // next/form prefetches its action like a link does (components/Link.tsx).
   const prefetchAllowed = usePrefetchAllowed();
+  // Under automation a plain form: next/form submits through the router, a
+  // fetch from the running page the visit counter would read as a reader
+  // (components/Link.tsx). A plain form loads the page instead.
+  const automated = useAutomated();
   // The controls show the address's filters. A choice shows at once and
   // submits; when the address changes some other way (a link on the page),
   // the controls follow it (state derived from props, set during render).
@@ -54,12 +58,7 @@ export default function DocumentFilters({
   const agencies = stats?.agencies ?? [];
 
   return (
-    <Form
-      ref={formRef}
-      action="/search"
-      prefetch={prefetchAllowed ? null : false}
-      className="space-y-4"
-    >
+    <FilterForm formRef={formRef} automated={automated} prefetch={prefetchAllowed ? null : false}>
       <input type="hidden" name="tab" value="documents" />
       {d.q && <input type="hidden" name="q" value={d.q} />}
       {d.politicianId && <input type="hidden" name="politician_id" value={d.politicianId} />}
@@ -169,6 +168,31 @@ export default function DocumentFilters({
           Apply filters
         </button>
       </noscript>
+    </FilterForm>
+  );
+}
+
+function FilterForm({
+  formRef,
+  automated,
+  prefetch,
+  children,
+}: {
+  formRef: React.RefObject<HTMLFormElement | null>;
+  automated: boolean;
+  prefetch: null | false;
+  children: React.ReactNode;
+}) {
+  if (automated) {
+    return (
+      <form ref={formRef} action="/search" className="space-y-4">
+        {children}
+      </form>
+    );
+  }
+  return (
+    <Form ref={formRef} action="/search" prefetch={prefetch} className="space-y-4">
+      {children}
     </Form>
   );
 }

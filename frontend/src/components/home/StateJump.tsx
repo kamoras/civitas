@@ -8,6 +8,7 @@ import { useYourState } from "@/hooks/useYourState";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import { stateBallotHref } from "@/lib/elections";
+import { navigate } from "@/lib/navigate";
 
 const STATES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
 
@@ -49,7 +50,7 @@ export default function StateJump({
       <select
         id={id}
         defaultValue=""
-        onChange={(e) => e.target.value && router.push(hrefFor(e.target.value))}
+        onChange={(e) => e.target.value && navigate(router, hrefFor(e.target.value))}
         className="mt-1 min-h-11 w-full border border-ink-hi bg-surface px-2 text-body text-ink-hi"
       >
         <option value="">Choose a state</option>
