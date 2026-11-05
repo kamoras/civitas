@@ -2193,7 +2193,10 @@ two issues by rank and at most two issue posts a day
 (`bluesky_poster.MAX_ISSUE_POSTS_PER_DAY`); a Congress day or week only when
 something was on the record — a record vote, a measure passed, a nomination
 confirmed (`congress_bluesky.has_business`) — and a weekend look-ahead only
-when the Record's program shows business ahead. On 2026-10-10 the account
+when the Record's program shows business ahead. The daily member spotlight
+stands down while an election's results are on show, and until January 3
+picks only members the record shows returning (re-elected, or a senator
+whose seat wasn't up: `app/returning_members.py`, 2026-11). On 2026-10-10 the account
 had about 40 followers and 88.5% of its last 1,021 posts drew no
 interaction; posting everything was what taught readers to skip it. Change
 one of these rules with a replay against the stored history, as their
