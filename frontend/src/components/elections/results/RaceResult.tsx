@@ -63,7 +63,9 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
   if (r.projected && !r.certification?.winner)
     return {
       text: flipShown(r) ? "Flip · Projected · Not certified" : "Projected · Not certified",
-      className: flipShown(r) ? "border-signal-amber/60 text-signal-amber" : "border-phos/60 text-phos",
+      className: flipShown(r)
+        ? "border-signal-amber/60 text-signal-amber"
+        : "border-phos/60 text-phos",
     };
   if (flipShown(r))
     return {
