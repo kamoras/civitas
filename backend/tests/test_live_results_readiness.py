@@ -149,6 +149,7 @@ class TestPollClose:
         "GA": (0, 0), "SC": (0, 0), "VA": (0, 0),  # 7 PM Eastern
         "WV": (0, 30),  # 7:30 PM Eastern
         "RI": (1, 0),  # 8 PM Eastern
+        "FL": (1, 0),  # 7 PM Central (the western panhandle)
         "IN": (0, 0),  # 6 PM Central (Indiana's west; the east closes 6 PM Eastern)
         "VT": (0, 0),  # 7 PM Eastern
         "AR": (1, 30),  # 7:30 PM Central

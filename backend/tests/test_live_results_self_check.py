@@ -91,6 +91,61 @@ class TestLiveSelfCheck:
             "status": 200, "headers": {"content-type": "text/plain; charset=utf-8"}, "body": "staged"}}
 
 
+class TestUncontestedSeats:
+    """Florida prints no race for a candidate elected unopposed at
+    qualifying (FL-10, 2026), so its count has no contest for the seat."""
+
+    @staticmethod
+    def _seat(db, cycle, district, names):
+        race = Race(id=f"{cycle}-HOUSE-FL-{district}", cycle_year=cycle, office="H", state="FL", district=district)
+        db.add(race)
+        for i, name in enumerate(names):
+            db.add(Candidate(id=f"H{cycle}FL{district}{i}", race_id=race.id, name=name, party="DEM",
+                             confirmed_general=True))
+        db.flush()
+
+    @staticmethod
+    def _house(*districts):
+        return StateCount(source_name="FL", page_url=None, official=False, contests=[
+            ContestCount(office="H", district=d, candidates=[("A", "R", 0), ("B", "D", 0)]) for d in districts])
+
+    async def test_a_seat_with_one_confirmed_nominee_is_not_looked_for(self, db_session, monkeypatch):
+        self._seat(db_session, 2026, 9, ["SOTO, DARREN", "MOORE, THOMAS"])
+        self._seat(db_session, 2026, 10, ["FROST, MAXWELL"])
+        count = self._house(9)
+
+        async def fetch(client, state, day):
+            return count
+
+        monkeypatch.setattr(readiness, "fetch_state_count", fetch)
+        monkeypatch.setattr(readiness, "save_recording", lambda *a: None)
+        assert await readiness.state_status(db_session, None, "FL", DAY) == ("ready", None)
+        count.contests.clear()
+        count.contests.extend(self._house(10).contests)
+        assert await readiness.state_status(db_session, None, "FL", DAY) == (
+            "problem", "its feed lists 1 contests but none, by label or by candidates, for 2026-HOUSE-FL-9")
+
+    async def test_the_self_check_skips_a_seat_uncontested_in_the_cycle_it_replays(self, db_session, monkeypatch):
+        self._seat(db_session, 2026, 10, ["FROST, MAXWELL"])
+        for district in (9, 10):
+            self._seat(db_session, 2028, district, ["A, B", "C, D"])
+        monkeypatch.setattr(readiness, "load_recording", lambda state: {"election_day": "2026-11-03", "responses": {}})
+
+        async def fetch(client, state, day):
+            return self._house(9)
+
+        monkeypatch.setattr(readiness, "fetch_state_count", fetch)
+        assert await readiness.self_check(db_session, None, "FL", date(2028, 11, 7)) is None
+        monkeypatch.setattr(readiness, "fetch_state_count", lambda client, state, day: _only_district_10())
+        assert await readiness.self_check(db_session, None, "FL", date(2028, 11, 7)) == (
+            "its reader, on its recorded 2026-11-03 feed, found no contest for 2028-HOUSE-FL-9")
+
+
+async def _only_district_10():
+    return StateCount(source_name="FL", page_url=None, official=False,
+                      contests=[ContestCount(office="H", district=10, candidates=[("A", "R", 0)])])
+
+
 AFTER_CLOSE = datetime(2026, 11, 4, 3)
 
 
