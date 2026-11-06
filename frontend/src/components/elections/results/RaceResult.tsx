@@ -13,7 +13,6 @@ import {
   PARTY_NOT_GIVEN,
   partyTextClass,
   raceLabel,
-  reportingShare,
   reportingText,
 } from "@/lib/results";
 import { safeHref } from "@/lib/formatting";
@@ -73,9 +72,7 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
       className: "border-signal-amber/60 text-signal-amber",
     };
   if (r.official) return { text: "Leads · Official count", className: "border-phos/60 text-phos" };
-  const share = reportingShare(r);
-  if (share != null && share < 0.5)
-    return { text: `Early · ${NOT_FINAL}`, className: "border-white/20 text-ink-lo" };
+  if (r.early) return { text: `Early · ${NOT_FINAL}`, className: "border-white/20 text-ink-lo" };
   return { text: `Leading · ${NOT_FINAL}`, className: "border-white/25 text-ink-lo" };
 }
 

@@ -32,7 +32,6 @@ import {
   ledParty,
   partyTag,
   pollsStillOpen,
-  reportingShare,
   seatsLed,
   stateFeedBehind,
   stateShade,
@@ -97,8 +96,7 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
     return announced
       ? `${name}: no votes in the latest count${announced}`
       : `${name}: no votes yet`;
-  const share = reportingShare(r);
-  const early = !r.official && share != null && share < 0.5;
+  const early = !r.official && r.early;
   return `${name}: ${lead.name} (${partyTag(lead.party)}) ${
     r.official ? "leads · official count" : `leads · ${NOT_FINAL.toLowerCase()}`
   }${early ? " · early" : ""}${flipShown(r) ? " · flip" : announced}`;

@@ -827,7 +827,8 @@ describe("ElectionsPage", () => {
 
   it("lists both Senate races of a state electing two senators, and says early under half in", async () => {
     fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
-    const regular = { ...RESULTS.races[0], reportingUnits: 500 };
+    // 500 of 2,653 precincts in: the API says early (api/elections.py).
+    const regular = { ...RESULTS.races[0], reportingUnits: 500, early: true };
     const special = {
       ...RESULTS.races[0],
       raceId: "2026-SEN-GA-SPECIAL",

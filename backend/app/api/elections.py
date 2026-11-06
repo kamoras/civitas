@@ -64,7 +64,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, dedupe_merge_map, no
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.summary import state_summaries
-from app.live_results.sync import elected_congress_sits, redrawn_states
+from app.live_results.sync import FLIP_MIN_REPORTING_SHARE, elected_congress_sits, redrawn_states
 from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
 from app.pipeline.fetch.web_archive import captured_on
 from app.pipeline.fetch.ballot_measure_pdf_sources import terms_block, unread_reason
@@ -1831,6 +1831,12 @@ def _result_json(result: RaceResult, race: Race, state_last_ok: datetime | None 
         # Whether reportingUnits counts units fully reported (True) or
         # units with any results (False); null on a row from before.
         "unitsComplete": result.units_complete,
+        # Under half the reporting units in, short of the official flag: the
+        # first units to report are routinely unrepresentative, so the page
+        # says "early" and draws the lead fainter (sync.FLIP_MIN_REPORTING_SHARE,
+        # the same floor a change of party waits for).
+        "early": (not result.official and bool(result.total_units) and result.reporting_units is not None
+                  and result.reporting_units < FLIP_MIN_REPORTING_SHARE * result.total_units),
         "sourceName": result.source_name,
         "sourceUrl": result.source_url,
         "fetchedAt": result.fetched_at.isoformat() + "Z",

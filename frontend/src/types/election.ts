@@ -963,6 +963,10 @@ export interface LiveRaceResult {
    * false: units that have posted any results. Null from a row written
    * before the backend said which. Word it through reportingText. */
   unitsComplete?: boolean | null;
+  /** Under half the reporting units in, short of the official flag: the
+   * backend's floor (sync.FLIP_MIN_REPORTING_SHARE). The page says "early"
+   * and draws the lead fainter; it never works this out itself. */
+  early?: boolean;
   sourceName: string;
   sourceUrl: string | null;
   fetchedAt: string;

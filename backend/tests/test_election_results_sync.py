@@ -1083,3 +1083,19 @@ class TestCloseEnoughToContest:
         from app.recount_rules import close_enough_to_contest
 
         assert close_enough_to_contest("ZZ", "H", 1, [900, 100], 1000, 2026)
+
+
+def test_the_api_says_early_under_half_the_units_short_of_official(db_session):
+    """The page's "early" tag and fainter fill are served, never worked out
+    on the page (api/elections._result_json, sync.FLIP_MIN_REPORTING_SHARE)."""
+    from app.api.elections import _result_json
+
+    race = _setup(db_session)
+    _, result = _apply(db_session, race, _contest(100, 90, 49))
+    assert _result_json(result, race)["early"] is True
+    _, result = _apply(db_session, race, _contest(200, 150, 50))
+    assert _result_json(result, race)["early"] is False
+    _, result = _apply(db_session, race, _contest(201, 150, 10), official=True)
+    assert _result_json(result, race)["early"] is False  # the official flag settles it
+    _, result = _apply(db_session, race, _contest(202, 150, None, total=None))
+    assert _result_json(result, race)["early"] is False  # no reporting figure: not said either way

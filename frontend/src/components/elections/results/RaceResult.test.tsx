@@ -5,8 +5,20 @@ import type { LiveRaceResult } from "@/types/election";
 
 afterEach(cleanup);
 
+/** `early` as the backend serves it (api/elections.py: under half the
+ * units in, short of the official flag), unless a test sets it. */
+function withEarly(r: LiveRaceResult): LiveRaceResult {
+  if (r.early !== undefined) return r;
+  const early =
+    !r.official &&
+    !!r.totalUnits &&
+    r.reportingUnits != null &&
+    r.reportingUnits < r.totalUnits / 2;
+  return { ...r, early };
+}
+
 function race(overrides: Partial<LiveRaceResult> = {}): LiveRaceResult {
-  return {
+  return withEarly({
     raceId: "2026-HOUSE-GA-2",
     state: "GA",
     office: "H",
@@ -29,7 +41,7 @@ function race(overrides: Partial<LiveRaceResult> = {}): LiveRaceResult {
       { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
     ],
     ...overrides,
-  };
+  });
 }
 
 const TIE = race({
