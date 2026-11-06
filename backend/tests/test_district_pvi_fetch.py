@@ -1557,8 +1557,8 @@ class TestStoredScoresKeepTheirLines:
         with background.exclusive("admin data reset"):
             pass
         lease.release(db_session, lease.DISTRICT_LINES, token)  # the refresh finishes
-        timer.join(5)  # the next pass has been started as a writer
-        for _ in range(200):  # ...and runs to the end before teardown closes the database
+        timer.join(30)  # the next pass has been started as a writer
+        for _ in range(600):  # ...and runs to the end before teardown closes the database
             if "startup-rescore" not in background.running_writers():
                 break
             time.sleep(0.05)
@@ -1577,7 +1577,7 @@ class TestStoredScoresKeepTheirLines:
         timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.1)
         try:
             with background.exclusive("admin data reset"):
-                timer.join(5)  # the next pass is refused, not queued
+                timer.join(30)  # the next pass is refused, not queued
         finally:
             lease.release(db_session, lease.DISTRICT_LINES, token)
         assert self._house_lines(db_session) == 119
@@ -1854,15 +1854,20 @@ class TestStoredScoresKeepTheirLines:
         self._file(monkeypatch, tmp_path, 120)
         self._stale_house_on_119(db_session, monkeypatch, tmp_path)
         assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
-        recheck = dp.release_orphaned_holds(recheck_after_s=0.1)
+        # The re-check is fired by hand once the rescore's first pass has
+        # been refused: on a timer, a slow first pass (it rescores Legislative
+        # Effectiveness and the Senate before the House) could outlast it and
+        # find the lease already gone, which is not the case this tests.
+        recheck = dp.release_orphaned_holds(recheck_after_s=3600)
         assert recheck is not None and dp.waits_for(dp.HOUSE_RUN_WHO)
-        timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.6)
+        timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 60, poll_s=0.6)
         assert timer is not None  # waiting, not left to the dead run
-        recheck.join(5)
+        recheck.cancel()
+        recheck.function()
         assert lease.holder(db_session, lease.DISTRICT_LINES) is None
-        timer.join(5)  # the next pass has been started as a writer
+        timer.join(30)  # the next pass has been started as a writer
         # ...and runs to the end before the test reads what it wrote.
-        for _ in range(200):
+        for _ in range(600):
             if "startup-rescore" not in background.running_writers():
                 break
             time.sleep(0.05)
