@@ -50,7 +50,7 @@ from app.atomic_write import runtime_data_path, write_text_atomic
 from app.election_calendar import previous_election_day
 from app.http_client import make_async_client
 from app.live_results.sync import _contest_race, contest_is_sane, place_by_candidates
-from app.models import Race
+from app.models import Candidate, Race
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.fetch.election_results import (
     FeedUnreadable, StateCount, UntrustedCount, fetch_state_count, live_results_states,
@@ -161,20 +161,49 @@ def _replay(recording: dict) -> httpx.AsyncClient:
     return make_async_client(transport=httpx.MockTransport(handler))
 
 
+def _uncontested_seats(db: Session, state: str, cycle: int) -> dict[str, tuple[str, int | None]]:
+    """{race id: (office, district)} of `state`'s races in `cycle` whose
+    confirmed November ballot names exactly one candidate. A state need not
+    print such a race: Florida elects an unopposed candidate when
+    qualifying closes (Maxwell Frost, FL-10, 2026), so its results file has
+    no contest for the seat, and there is nothing to count."""
+    confirmed: dict[str, int] = {}
+    seats: dict[str, tuple[str, int | None]] = {}
+    rows = (
+        db.query(Race.id, Race.office, Race.district)
+        .join(Candidate, Candidate.race_id == Race.id)
+        .filter(Race.state == state, Race.cycle_year == cycle, Candidate.confirmed_general.is_(True))
+    )
+    for race_id, office, district in rows:
+        confirmed[race_id] = confirmed.get(race_id, 0) + 1
+        seats[race_id] = (office, district)
+    return {r: seats[r] for r, n in confirmed.items() if n == 1}
+
+
 def _unaccounted(
     db: Session, state: str, election_day: date, count: StateCount, offices: tuple[str, ...],
+    count_cycle: int | None = None,
 ) -> list[str]:
     """The `offices` races on file for `election_day`'s cycle that `count`
     holds no contest for, by label or by candidates. With no such race on
-    file, a count holding no federal contest at all is one gap."""
+    file, a count holding no federal contest at all is one gap. A seat with
+    a single confirmed nominee in the cycle the count is from
+    (`count_cycle`, default this one) is not looked for."""
     cycle = election_day.year
     matched = set()
     for contest in count.contests:
         race = _contest_race(db, cycle, state, contest) if contest_is_sane(contest) else None
         if race is not None:
             matched.add(race.id)
+    count_cycle = count_cycle or cycle
+    uncontested = _uncontested_seats(db, state, count_cycle)
+    # Within one cycle a race is its own; a count from another cycle is
+    # matched by seat (only the self-check's House seats come here).
+    skip = set(uncontested) if count_cycle == cycle else set(uncontested.values())
     expected = {
-        r.id for r in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle, Race.office.in_(offices))
+        r.id for r in db.query(Race.id, Race.office, Race.district).filter(
+            Race.state == state, Race.cycle_year == cycle, Race.office.in_(offices))
+        if (r.id if count_cycle == cycle else (r.office, r.district)) not in skip
     }
     matched |= set(place_by_candidates(db, state, election_day, count.unplaced, matched))
     if not expected:
@@ -216,7 +245,7 @@ async def self_check(db: Session, client: httpx.AsyncClient | None, state: str, 
                     "feed is held, so its reader could not be checked")
     if count is None:
         return f"its reader found no election in {where}"
-    missing = _unaccounted(db, state, election_day, count, ("H",))
+    missing = _unaccounted(db, state, election_day, count, ("H",), count_cycle=day.year)
     if missing:
         return f"its reader, on {where}, found no contest for {', '.join(missing)}"
     if recording is None and responses:
