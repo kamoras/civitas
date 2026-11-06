@@ -48,9 +48,14 @@ POINTS = {
 }
 
 
+_REAL_STORED, _REAL_STORE = civic._stored, civic._store
+
+
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
     civic._answers.clear()
+    monkeypatch.setattr(civic, "_stored", lambda key: None)
+    monkeypatch.setattr(civic, "_store", lambda key, contests: None)
     monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
     monkeypatch.setattr(civic, "_points", lambda state: {k.replace("XX", state): v for k, v in POINTS.items()})
 
@@ -212,3 +217,20 @@ def test_disagreeing_answers_about_unlike_races_are_logged_not_raised():
     reading.races = {("S", None, None): [kept], ("S", None, "special"): [], ("upper", "7", None): []}
     reading.conflicts = {("S", None, "special"), ("upper", "7", None), ("upper", None, None)}
     assert reading.records() == [kept]
+
+
+@pytest.mark.asyncio
+async def test_kept_answers_survive_a_restart(monkeypatch, file_sessionmaker):
+    """A deploy between the evening sync and the nightly run empties the
+    process: the database copy answers, and nothing is asked again."""
+    monkeypatch.setattr(civic, "_stored", _REAL_STORED)
+    monkeypatch.setattr(civic, "_store", _REAL_STORE)
+    monkeypatch.setattr(civic, "SessionLocal", file_sessionmaker)
+    asked = _serve(monkeypatch, {"1.0,1.0": _ballot("4th", "19th", "40th"), "2.0,2.0": civic._UNPLACED})
+    first = await _read()
+    assert asked
+    civic._answers.clear()
+    asked.clear()
+    assert await _read() == first
+    assert asked == []
+    assert isinstance(civic._answers["12000|2.0,2.0"][1], civic.Unplaced)
