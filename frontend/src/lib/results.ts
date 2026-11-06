@@ -425,7 +425,7 @@ export function resultFill(result: LiveRaceResult | undefined, covered: boolean)
   if (isTied(result)) return TIED_FILL;
   if (result.official) return partyMark(result.leaderParty);
   const share = reportingShare(result);
-  const opacity = share == null ? UNKNOWN_SHARE : share < 0.5 ? FAINT : 0.45 + 0.45 * share;
+  const opacity = share == null ? UNKNOWN_SHARE : result.early ? FAINT : 0.45 + 0.45 * share;
   return fade(partyMark(result.leaderParty), opacity);
 }
 
@@ -855,7 +855,7 @@ function progressPhrase(r: LiveRaceResult): string {
       : r.unitsComplete === false
         ? `results from ${pct} of ${units}`
         : `${pct} in`;
-  return share < 0.5 ? `${phrase}, early` : phrase;
+  return r.early ? `${phrase}, early` : phrase;
 }
 
 /** One race's standing in words, as its map fill says it: "no votes yet",
@@ -895,11 +895,11 @@ function aggregateOpacity(races: LiveRaceResult[]): number {
   let unknown = false;
   for (const r of races) {
     if (r.official) continue;
-    const share = r.votesCounted > 0 ? reportingShare(r) : 0;
+    if (!(r.votesCounted > 0) || r.early) return FAINT;
+    const share = reportingShare(r);
     if (share == null) unknown = true;
     else min = Math.min(min, share);
   }
-  if (min < 0.5) return FAINT;
   if (unknown) return UNKNOWN_SHARE;
   return 0.45 + 0.45 * min;
 }
