@@ -48,6 +48,7 @@ import logging
 import os
 import pathlib
 import re
+from urllib.parse import urljoin
 import shutil
 import subprocess
 import sys
@@ -988,6 +989,41 @@ def _district_lean_stale(ctx: Context) -> object:
             f"window.")
 
 
+# The recount and certification laws (recount_rules.json,
+# certification_deadlines.json) are quoted from NASS's canvassing summary,
+# which NASS republishes as the laws change (the October 2024 edition is
+# the one cited). A new edition can't be read in by rule: each state's
+# sentence becomes a rule a person checks against its statute. So the
+# check is monthly, on NASS's own reports page, and says when the summary
+# listed there is no longer the one the file quotes.
+NASS_REPORTS = "https://www.nass.org/member-resources/election-administration-reports"
+_NASS_SUMMARY_RE = re.compile(r'href="([^"]*canvass[^"]*\.pdf)"', re.I)
+
+
+def _nass_summary_stale(ctx: Context) -> object:
+    cited = re.search(r"https://www\.nass\.org\S*canvass\S*\.pdf", str(ctx.doc.get("_source") or ""), re.I)
+    if not cited:
+        return None
+    if ctx.tried_within(30):
+        return UNCHECKED
+    _record_try(ctx.name, "release check")
+    try:
+        resp = source_request("GET", NASS_REPORTS, headers=signed_headers(NASS_REPORTS, {"User-Agent": USER_AGENT}),
+                              timeout=30)
+        resp.raise_for_status()
+    except Exception:
+        logger.info("NASS summary check: reports page unreadable", exc_info=True)
+        return UNCHECKED
+    listed = {urljoin(NASS_REPORTS, href) for href in _NASS_SUMMARY_RE.findall(resp.text)}
+    if not listed:
+        return UNCHECKED  # the page changed shape: nothing to compare, and no claim either way
+    if cited.group(0) in listed:
+        return None
+    return (f"quotes NASS's canvassing summary at {cited.group(0)}, and NASS's reports page now lists "
+            f"{', '.join(sorted(listed))}. Each state's entry is a statute as NASS summarized it, so the new "
+            "summary is read against the file by hand; the file stays in use until then.")
+
+
 # District tables (AGENTS.md 3a, §8): built from the Census block
 # equivalency files for the lines of the Congresses the site needs, by
 # rule (app/census_lines.py). The sitting Congress and the one the coming
@@ -1694,7 +1730,13 @@ def _forward_finding(docs: dict[str, dict]) -> str | None:
             "and the map shows these figures.")
 
 
+# Hand-kept files of law, quoted and cited: nothing regenerates them, and
+# the one thing checked by rule is whether their source has a newer edition.
+WATCHED_ONLY = frozenset({"recount_rules.json", "certification_deadlines.json"})
+
 DATA_FILES: list[DataFile] = [
+    DataFile("recount_rules.json", stale=_nass_summary_stale),
+    DataFile("certification_deadlines.json", stale=_nass_summary_stale),
     DataFile("poll_close_times.json", command=_poll_close_command, due=_poll_close_due, gate=_poll_close_gate,
              timeout_s=300),
     DataFile("election_calendar.json", command=_calendar_command, due=_calendar_due, gate=_calendar_gate,
