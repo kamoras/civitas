@@ -280,6 +280,7 @@ def _readers() -> dict:
     from app.pipeline.fetch import (
         state_candidates_clarity,
         state_candidates_enhanced_voting,
+        state_candidates_fl_enight,
         state_candidates_in,
         state_candidates_tally_enr,
         state_candidates_totalvote,
@@ -293,6 +294,7 @@ def _readers() -> dict:
         "totalvote_enr": state_candidates_totalvote.fetch_general_results,
         "enhanced_voting": state_candidates_enhanced_voting.fetch_general_results,
         "vt_enr": state_candidates_vt.fetch_general_results,
+        "fl_enight": state_candidates_fl_enight.fetch_general_results,
     }
 
 

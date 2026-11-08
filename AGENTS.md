@@ -2267,7 +2267,10 @@ and the primaries' ramp to the last congressional primary): read it for any
 In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
 Enhanced Voting, one reader per vendor beside its primary adapter
-(`fetch_general_results`), dispatched by `fetch/election_results.py`; a
+(`fetch_general_results`), and Indiana's, Vermont's and Florida's own
+systems (Florida's the Division of Elections' file, named by the election's
+date, `state_candidates_fl_enight.py`), dispatched by
+`fetch/election_results.py`; a
 state's `live_results` block in `state_candidate_sources.json` names a feed its
 primary adapter doesn't read. The count is stored per race (`RaceResult`) with
 structured events (`ElectionResultEvent`), and the rules are strict because a
@@ -2339,7 +2342,10 @@ wrong number on election night is worse than none:
   `reportingText`): "N of M precincts fully reported" where it counts units
   FULLY in — Clarity's county roll-up ("Percent Completely Reported";
   Colorado's 8th read 0 of 3 counties all night in 2024 beside 230,000
-  votes), TotalVote's "Precincts Fully", Tally's precinctsReporting — and
+  votes), TotalVote's "Precincts Fully", Tally's precinctsReporting,
+  Florida's counties with all five parts of their count marked complete on
+  County Reporting Status (precincts, vote-by-mail, early, provisional,
+  ten-day overseas; 1 of 67 three days after the 2026 general) — and
   "Results from N of M counties" where a unit counts on its first batch
   (Enhanced Voting: Utah read 29 of 29 counties two days in with a third of
   the vote still to count). A share short of every unit never rounds to 100%.

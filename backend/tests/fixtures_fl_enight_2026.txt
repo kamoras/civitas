@@ -1,0 +1,28 @@
+ElectionDate	PartyCode	PartyName	RaceCode	RaceName	CountyCode	CountyName	Juris1num	Juris2num	Precincts	PrecinctsReporting	CanNameLast	CanNameFirst	CanNameMiddle	CanVotes
+11/03/2026	REP	Republican Party	USS	United States Senator	ALA	Alachua	   	 	63	63	Moody	Ashley		34791
+11/03/2026	REP	Republican Party	USS	United States Senator	FRA	Franklin	   	 	8	8	Moody	Ashley		3410
+11/03/2026	REP	Republican Party	USS	United States Senator	LAK	Lake	   	 	92	92	Moody	Ashley		104289
+11/03/2026	DEM	Democratic Party	USS	United States Senator	ALA	Alachua	   	 	63	63	Nixon	Angie		69665
+11/03/2026	DEM	Democratic Party	USS	United States Senator	FRA	Franklin	   	 	8	8	Nixon	Angie		1591
+11/03/2026	DEM	Democratic Party	USS	United States Senator	LAK	Lake	   	 	92	92	Nixon	Angie		71490
+11/03/2026	NPA	No Party Affiliation	USS	United States Senator	ALA	Alachua	   	 	63	63	Gillespie	Neil	J.	980
+11/03/2026	NPA	No Party Affiliation	USS	United States Senator	FRA	Franklin	   	 	8	8	Gillespie	Neil	J.	50
+11/03/2026	NPA	No Party Affiliation	USS	United States Senator	LAK	Lake	   	 	92	92	Gillespie	Neil	J.	2127
+11/03/2026	REP	Republican Party	USR	Representative in Congress, District 5	DUV	Duval	005	 	81	81	Rutherford	John	H.	104518
+11/03/2026	REP	Republican Party	USR	Representative in Congress, District 5	STJ	St. Johns	005	 	49	49	Rutherford	John	H.	83399
+11/03/2026	DEM	Democratic Party	USR	Representative in Congress, District 5	DUV	Duval	005	 	81	81	Grage	Rachel		94952
+11/03/2026	DEM	Democratic Party	USR	Representative in Congress, District 5	STJ	St. Johns	005	 	49	49	Grage	Rachel		50169
+11/03/2026	WRI	Write-in	USR	Representative in Congress, District 5	DUV	Duval	005	 	81	81	Upham	William	Lintag	0
+11/03/2026	WRI	Write-in	USR	Representative in Congress, District 5	STJ	St. Johns	005	 	49	49	Upham	William	Lintag	0
+11/03/2026	REP	Republican Party	USR	Representative in Congress, District 11	LAK	Lake	011	 	62	62	Strada	Joe		69473
+11/03/2026	REP	Republican Party	USR	Representative in Congress, District 11	ORA	Orange	011	 	65	65	Strada	Joe		58876
+11/03/2026	REP	Republican Party	USR	Representative in Congress, District 11	SUM	Sumter	011	 	33	33	Strada	Joe		65169
+11/03/2026	DEM	Democratic Party	USR	Representative in Congress, District 11	LAK	Lake	011	 	62	62	Pericola	James		55527
+11/03/2026	DEM	Democratic Party	USR	Representative in Congress, District 11	ORA	Orange	011	 	65	65	Pericola	James		84087
+11/03/2026	DEM	Democratic Party	USR	Representative in Congress, District 11	SUM	Sumter	011	 	33	33	Pericola	James		28494
+11/03/2026	LPF	Libertarian Party	USR	Representative in Congress, District 11	LAK	Lake	011	 	62	62	Groves	Ralph		1543
+11/03/2026	LPF	Libertarian Party	USR	Representative in Congress, District 11	ORA	Orange	011	 	65	65	Groves	Ralph		1643
+11/03/2026	LPF	Libertarian Party	USR	Representative in Congress, District 11	SUM	Sumter	011	 	33	33	Groves	Ralph		769
+11/03/2026	REP	Republican Party	GOV	Governor and Lieutenant Governor	FRA	Franklin	   	 	8	8	Avila	Donalds	/	3377
+11/03/2026	DEM	Democratic Party	GOV	Governor and Lieutenant Governor	FRA	Franklin	   	 	8	8	Graham	Jolly	/	1603
+11/03/2026	LPF	Libertarian Party	GOV	Governor and Lieutenant Governor	FRA	Franklin	   	 	8	8	Skelly	Jewett	/	20
