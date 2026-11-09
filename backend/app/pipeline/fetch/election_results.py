@@ -287,6 +287,7 @@ def _readers() -> dict:
         state_candidates_tally_enr,
         state_candidates_totalvote,
         state_candidates_tx,
+        state_candidates_voterportal,
         state_candidates_vt,
     )
 
@@ -301,6 +302,7 @@ def _readers() -> dict:
         "tx_enr": state_candidates_tx.fetch_general_results,
         "mn_media": state_candidates_mn.fetch_general_results,
         "md_results": state_candidates_md.fetch_general_results,
+        "voterportal": state_candidates_voterportal.fetch_general_results,
     }
 
 

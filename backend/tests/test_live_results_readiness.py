@@ -156,6 +156,7 @@ class TestPollClose:
         "AR": (1, 30),  # 7:30 PM Central
         "IA": (2, 0), "NE": (2, 0),  # 8 PM Central (Nebraska's west: 7 PM Mountain)
         "MN": (2, 0),  # 8 PM Central
+        "LA": (2, 0),  # 8 PM Central
         "CO": (2, 0), "NM": (2, 0), "SD": (2, 0),  # 7 PM Mountain (South Dakota's west)
         "TX": (2, 0),  # 7 PM Mountain (El Paso and Hudspeth)
         "MT": (3, 0), "UT": (3, 0),  # 8 PM Mountain
