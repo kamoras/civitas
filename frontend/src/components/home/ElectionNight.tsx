@@ -1,30 +1,21 @@
 import Link from "@/components/Link";
-import type { ResultsSummary, ResultsSummaryState } from "@/types/election";
-import { NOT_FINAL, formatEasternTime } from "@/lib/results";
+import type { ResultsSummary } from "@/types/election";
+import { formatEasternTime } from "@/lib/results";
 import { fetchResultsSummary } from "@/lib/resultsSummaryServer";
+import { INLINE_LINK } from "@/lib/controlStyles";
 import { TYPE } from "@/lib/typeStyles";
 
-// States given in full; the rest are one tap away in the line below them,
-// so any counting state is reachable from the first screen.
-const SHOWN = 5;
-
-const STATUS: Record<ResultsSummaryState["status"], { tag: string; tone: string }> = {
-  not_final: { tag: `Leading · ${NOT_FINAL}`, tone: "text-signal-amber" },
-  official: { tag: "Leads · Official count", tone: "text-phos" },
-};
-
-const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-small text-phos-mid hover:text-phos";
-
 /**
- * The live count, state by state, at the top of the homepage while the
- * results are up (backend election_phase: from election night until the
- * count settles). Outside that window, or before any state has counted,
- * it renders nothing and the homepage is unchanged.
+ * One line at the top of the homepage while election results are up
+ * (backend election_phase: from election night until the count settles,
+ * which can run to January 3): how many states are counting, when the
+ * count last moved, and the way to the count itself. Outside that window,
+ * or before any state has counted, it renders nothing.
  *
- * Every sentence is the backend's fixed template around the state's own
- * figures (live_results/summary.py): "leads", "not final" until the state
- * lists its count as official, never "wins". Civitas never calls a race.
+ * One line, not the count: until 2026-11 this listed five states' leaders
+ * in full, a screen of the homepage for the whole window. Each state's
+ * count, worded by the backend's templates ("leads", "not final", never
+ * "wins"), is on /elections and the state's page.
  */
 export default async function ElectionNight() {
   const data = await fetchResultsSummary();
@@ -32,78 +23,27 @@ export default async function ElectionNight() {
   return <ElectionNightList data={data} />;
 }
 
-function Entry({ entry }: { entry: ResultsSummaryState }) {
-  const status = STATUS[entry.status];
-  return (
-    <li className="grid grid-cols-1 gap-x-8 gap-y-1 border-b border-white/[0.07] py-3 md:grid-cols-[11rem_minmax(0,1fr)_auto]">
-      <p className="font-mono text-small leading-relaxed">
-        <span className="text-ink-hi md:block">{entry.stateName}</span>
-        <span className="md:hidden text-ink-min"> · </span>
-        <span className={`md:block ${status.tone}`}>{status.tag}</span>
-      </p>
-      <div className="min-w-0">
-        {entry.lines.map((line) => (
-          <p key={line} className="font-sans text-body leading-snug text-ink-hi">
-            {line}
-          </p>
-        ))}
-        <p className="mt-0.5 font-mono text-small text-ink-min">
-          {entry.source} · {formatEasternTime(entry.lastChangeAt)}
-        </p>
-      </div>
-      <p>
-        <Link href={entry.href} className={COMMAND}>
-          [ {entry.stateName} results ]
-        </Link>
-      </p>
-    </li>
-  );
-}
-
 export function ElectionNightList({ data }: { data: ResultsSummary }) {
-  const shown = data.states.slice(0, SHOWN);
-  const more = data.states.slice(SHOWN);
+  const counting = data.states.length;
+  const changed = data.phase.lastResultChange ? formatEasternTime(data.phase.lastResultChange) : "";
   return (
-    <section aria-labelledby="election-night" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
-      <h2
-        id="election-night"
-        className={`${TYPE.kicker} flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2`}
-      >
-        <span>
-          The count · {data.states.length} {data.states.length === 1 ? "state" : "states"} counting
-        </span>
-        <Link
-          href="/elections"
-          className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-        >
-          Every state&apos;s count &rarr;
-        </Link>
+    <section
+      aria-labelledby="election-night"
+      className="mx-auto mt-6 flex max-w-7xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 sm:px-6"
+    >
+      <h2 id="election-night" className={TYPE.kicker}>
+        Election results
       </h2>
-      <ul>
-        {shown.map((e) => (
-          <Entry key={e.state} entry={e} />
-        ))}
-      </ul>
-      {more.length > 0 && (
-        <p className="py-3 font-mono text-small leading-loose text-ink-min">
-          Also counting:{" "}
-          {more.map((e, i) => (
-            <span key={e.state}>
-              {i > 0 && " · "}
-              <Link
-                href={e.href}
-                className="text-phos-mid underline decoration-white/30 underline-offset-4 hover:text-phos"
-              >
-                {e.stateName}
-              </Link>
-            </span>
-          ))}
-        </p>
-      )}
-      <p className="pb-1 font-sans text-body leading-relaxed text-ink-lo">
-        Counts as each state&apos;s election office publishes them. Civitas never calls a race:
-        &ldquo;leads&rdquo; is the count so far, not a result.{" "}
-        <Link href="/about/elections" className="underline underline-offset-2 hover:text-phos">
+      <p className={TYPE.small}>
+        {counting} {counting === 1 ? "state" : "states"} counting
+        {changed && <> · last change {changed}</>}
+      </p>
+      <p className={TYPE.small}>
+        <Link href="/elections" className={INLINE_LINK}>
+          See the count
+        </Link>
+        {" · "}
+        <Link href="/about/elections" className={INLINE_LINK}>
           How results are read
         </Link>
       </p>

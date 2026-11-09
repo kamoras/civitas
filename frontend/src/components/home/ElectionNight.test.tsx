@@ -33,35 +33,27 @@ const phase = {
 };
 
 describe("ElectionNightList", () => {
-  it("prints the backend's sentences beside a not-final tag and links each state's results", () => {
+  it("is one line: the states counting, the last change, the way to the count", () => {
     const data: ResultsSummary = { phase, states: [state("CO", "Colorado")] };
     render(<ElectionNightList data={data} />);
-    expect(screen.getByText(data.states[0].lines[0])).toBeTruthy();
-    expect(screen.getByText("Leading · Not final")).toBeTruthy();
-    expect(screen.getByText(/1 state counting/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "[ Colorado results ]" }).getAttribute("href")).toBe(
-      "/elections/states/CO"
+    expect(screen.getByText(/1 state counting · last change Nov 3, 10:50 PM ET/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "See the count" }).getAttribute("href")).toBe(
+      "/elections"
     );
+    expect(screen.getByRole("link", { name: "How results are read" }).getAttribute("href")).toBe(
+      "/about/elections"
+    );
+    // No state's lines: the count itself is on /elections.
+    expect(screen.queryByText(data.states[0].lines[0])).toBeNull();
   });
 
-  it("says official only when the state lists the count as official", () => {
-    render(
-      <ElectionNightList
-        data={{ phase, states: [state("WY", "Wyoming", { status: "official", official: 2 })] }}
-      />
+  it("counts every state without listing them", () => {
+    const states = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"].map((n, i) =>
+      state(`S${i}`, n)
     );
-    expect(screen.getByText("Leads · Official count")).toBeTruthy();
-    expect(screen.queryByText(/Not final/)).toBeNull();
-  });
-
-  it("keeps every counting state one tap away", () => {
-    const names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"];
-    const states = names.map((n, i) => state(`S${i}`, n));
-    render(<ElectionNightList data={{ phase, states }} />);
-    for (const s of states) {
-      expect(document.querySelector(`a[href="${s.href}"]`)).toBeTruthy();
-    }
-    expect(screen.getByText(/7 states counting/)).toBeTruthy();
+    render(<ElectionNightList data={{ phase: { ...phase, lastResultChange: null }, states }} />);
+    expect(screen.getByText("7 states counting")).toBeTruthy();
+    expect(document.querySelectorAll("li")).toHaveLength(0);
   });
 });
 
