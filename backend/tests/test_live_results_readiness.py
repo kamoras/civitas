@@ -149,11 +149,13 @@ class TestPollClose:
         "GA": (0, 0), "SC": (0, 0), "VA": (0, 0),  # 7 PM Eastern
         "WV": (0, 30),  # 7:30 PM Eastern
         "RI": (1, 0),  # 8 PM Eastern
+        "MD": (1, 0),  # 8 PM Eastern
         "FL": (1, 0),  # 7 PM Central (the western panhandle)
         "IN": (0, 0),  # 6 PM Central (Indiana's west; the east closes 6 PM Eastern)
         "VT": (0, 0),  # 7 PM Eastern
         "AR": (1, 30),  # 7:30 PM Central
         "IA": (2, 0), "NE": (2, 0),  # 8 PM Central (Nebraska's west: 7 PM Mountain)
+        "MN": (2, 0),  # 8 PM Central
         "CO": (2, 0), "NM": (2, 0), "SD": (2, 0),  # 7 PM Mountain (South Dakota's west)
         "TX": (2, 0),  # 7 PM Mountain (El Paso and Hudspeth)
         "MT": (3, 0), "UT": (3, 0),  # 8 PM Mountain

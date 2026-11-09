@@ -282,6 +282,8 @@ def _readers() -> dict:
         state_candidates_enhanced_voting,
         state_candidates_fl_enight,
         state_candidates_in,
+        state_candidates_md,
+        state_candidates_mn,
         state_candidates_tally_enr,
         state_candidates_totalvote,
         state_candidates_tx,
@@ -297,6 +299,8 @@ def _readers() -> dict:
         "vt_enr": state_candidates_vt.fetch_general_results,
         "fl_enight": state_candidates_fl_enight.fetch_general_results,
         "tx_enr": state_candidates_tx.fetch_general_results,
+        "mn_media": state_candidates_mn.fetch_general_results,
+        "md_results": state_candidates_md.fetch_general_results,
     }
 
 
