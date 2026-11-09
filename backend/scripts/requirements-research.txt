@@ -31,6 +31,6 @@ rdata==1.1.0
 six==1.17.0
 statsmodels==0.15.0
 time-machine==3.6.0
-tzdata==2026.5
+tzdata==2026.6
 wrapt==2.5.2
 xarray==2026.9.0
