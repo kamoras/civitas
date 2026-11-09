@@ -26,6 +26,15 @@ below.
   and production ships one only after `main`'s CI succeeds on the merge
   commit (`check-and-deploy.sh`). CI is what vets them, so a gap in CI is
   a gap in what reaches production: keep the required checks complete.
+  A second, the owner's (2026-11-09): dependency and security updates are
+  chores, not authored work. An assistant may merge a PR that only updates
+  dependencies (a Dependabot PR, one that takes several of them together,
+  or a pin the repository's own watches ask for, such as torch's), squashed,
+  once every check `main` requires has passed, and close the Dependabot PRs
+  it supersedes. Such a PR, its commit and its comments may say an
+  assistant made them. Anything beyond the version change itself (code a
+  new version needs, a config fix found on the way) is ordinary work and
+  goes through the owner.
 - An assistant that cannot follow these rules does not commit.
 
 ## Working Agreement — finish the whole job
