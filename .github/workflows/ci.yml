@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # check-and-deploy.sh starts a run on main for a commit that has none: a
+  # Dependabot update merged with the workflow's own token, which starts no
+  # push run (dependabot-auto-merge.yml).
+  workflow_dispatch:
 
 # Default GITHUB_TOKEN permissions are broader than any job here needs (none
 # push packages, comment on PRs, or write releases) — scope down to
@@ -266,8 +270,8 @@ jobs:
         id: check
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "Push to main — running embedding tests."
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Run on main — running embedding tests."
             echo "needed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi

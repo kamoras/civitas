@@ -626,7 +626,7 @@ class TestLiveResults:
         assert race["leaderParty"] == "REP" and race["flip"] is True
         assert race["candidates"][0] == {"name": "Ray Jones", "party": "REP", "votes": 600, "pct": 60.0, "candidateId": None}
         assert data["updates"][0]["kind"] == "flip"
-        assert "GA" in data["liveStates"] and "TX" not in data["liveStates"]
+        assert "GA" in data["liveStates"] and "PA" not in data["liveStates"]
         assert data["senateStates"] == ["CO"]
         assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET

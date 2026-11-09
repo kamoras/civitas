@@ -108,9 +108,14 @@ exit 0
 EOF
   # What gh run list --jq '.[0].conclusion' prints: "success", "failure",
   # empty while a run is in progress, and "null" for a commit with no run.
-  printf '#!/usr/bin/env bash\necho %q\n' "$ci" > "$STUBS/gh"
+  # `gh workflow run` (starting CI on main) leaves a marker instead.
+  cat > "$STUBS/gh" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "workflow run" ]]; then touch "$REPO/.ci-dispatched"; exit 0; fi
+echo "$ci"
+EOF
   chmod +x "$STUBS"/*
-  rm -f "$REPO/.build-ran" "$REPO/.stack-deployed"
+  rm -f "$REPO/.build-ran" "$REPO/.stack-deployed" "$REPO/.ci-dispatched"
 
   ( cd "$REPO" && PATH="$STUBS:$PATH" bash check-and-deploy.sh )
 }
@@ -136,6 +141,15 @@ for ci in "" null; do
   [[ -f "$REPO/.build-ran" ]] && fail "built before CI finished (${ci:-in progress})"
   [[ -f "$REPO/.last-deployed-sha" ]] && fail "marker written before CI finished (${ci:-in progress})"
 done
+[[ -f "$REPO/.ci-dispatched" ]] && fail "started a CI run for a commit younger than a tick"
+# No run for a commit older than a tick (a merge made with a workflow's own
+# token starts none): start one on main, and still wait for it.
+CI_DISPATCH_AFTER_S=-1 run_scenario "no CI run for an older commit: must start one, not build" 0 0 null
+[[ -f "$REPO/.ci-dispatched" ]] || fail "did not start a CI run for a commit with none"
+[[ -f "$REPO/.build-ran" ]] && fail "built before the started CI run finished"
+[[ -f "$REPO/.last-deployed-sha" ]] && fail "marker written before the started CI run finished"
+CI_DISPATCH_AFTER_S=-1 run_scenario "CI in progress: must not start another" 0 0 ""
+[[ -f "$REPO/.ci-dispatched" ]] && fail "started a CI run while one was in progress"
 if run_scenario "CI failed: must refuse" 0 0 failure; then fail "exited 0 on a failed CI run"; fi
 [[ -f "$REPO/.build-ran" ]] && fail "built despite failed CI"
 [[ -f "$REPO/.last-deployed-sha" ]] && fail "marker written despite failed CI"

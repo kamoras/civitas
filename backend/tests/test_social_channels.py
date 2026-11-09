@@ -78,7 +78,10 @@ def meta(monkeypatch, db_session):
     fake = Meta()
     monkeypatch.setattr(graph, "TRANSPORT", httpx.MockTransport(fake))
     monkeypatch.setattr(graph, "POLL_INTERVAL_S", 0.01)
-    monkeypatch.setattr(graph, "POLL_TIMEOUT_S", 0.05)
+    # Long enough that a container which does become ready is never timed
+    # out on a loaded runner (0.05 s here failed CI on 2026-11-09 with three
+    # polls 0.01 s apart); the never-ready test sets its own short one.
+    monkeypatch.setattr(graph, "POLL_TIMEOUT_S", 10.0)
     alerts, resolved = [], []
     monkeypatch.setattr(graph, "send_ops_alert", lambda s, b, **kw: alerts.append((s, b, kw)) or True)
     monkeypatch.setattr(graph, "resolve_ops_alert", lambda c: resolved.append(c) or 1)
@@ -174,8 +177,9 @@ def test_the_jpeg_route_serves_a_post_picture_and_nothing_else(db_session, meta)
     assert client.get("/api/cards/posts/999.jpg").status_code == 404
 
 
-def test_a_container_never_ready_fails_the_delivery(db_session, meta, both):
-    meta.pending = 99
+def test_a_container_never_ready_fails_the_delivery(db_session, meta, both, monkeypatch):
+    monkeypatch.setattr(graph, "POLL_TIMEOUT_S", 0.05)
+    meta.pending = 10**9
     post = _publish(db_session)
     d = _deliveries(db_session, post)["threads"]
     assert d.status == "failed" and "not ready" in d.error
