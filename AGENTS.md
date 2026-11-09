@@ -20,9 +20,8 @@ below.
 - **Every change is vetted by a human before it merges.** The owner reviews
   the diff, runs it, and merges it; nothing merges on a tool's say-so, and an
   assistant never approves or merges its own work. One exception, the
-  owner's (2026-11): Dependabot's patch and minor updates, and any update
-  that fixes a Dependabot security alert, merge on their own once every
-  check `main` requires has passed (`.github/workflows/dependabot-auto-merge.yml`),
+  owner's (2026-11): Dependabot's patch and minor updates merge on their
+  own once every check `main` requires has passed (`.github/workflows/dependabot-auto-merge.yml`),
   and production ships one only after `main`'s CI succeeds on the merge
   commit (`check-and-deploy.sh`). CI is what vets them, so a gap in CI is
   a gap in what reaches production: keep the required checks complete.
@@ -3866,8 +3865,9 @@ GitHub-hosted runners only. Deployment is **pull-based**, not triggered by
 GitHub Actions: a cron job on the production Pi (`*/5 * * * *
 check-and-deploy.sh`) polls `origin/main` and, when it finds a new commit,
 checks `gh run list --workflow CI` for that commit and ships it only once
-that run has succeeded (a failed run is refused; a run still going, or not
-started, is asked again on the next tick; override with `FORCE_DEPLOY=1`),
+that run has succeeded (a failed run is refused; a run still going is
+asked again on the next tick, and for a commit with no run the script
+starts one, see Dependabot auto-merge below; override with `FORCE_DEPLOY=1`),
 then builds images and runs
 `docker stack deploy` itself — no separate `deploy.sh` to call anymore.
 GitHub Actions never executes anything on the Pi. Until 2026-11 only a
@@ -3876,14 +3876,17 @@ stricter gate is what lets Dependabot updates merge on their own (see
 "Standing rules"). `check-and-deploy.test.sh` covers the gate and runs in
 CI ("Deploy script self-test").
 
-**Dependabot auto-merge needs three things set in GitHub, outside the
-repo**, and the workflow refuses to enable auto-merge without the first
-two: a ruleset on `main` requiring the CI checks (without required checks
-GitHub merges at once); a fine-grained token with Contents, Pull requests
-and Dependabot alerts access to this repository, stored as the *Dependabot*
-secret `DEPENDABOT_AUTOMERGE_TOKEN` (a merge made with the workflow's own
-token wouldn't run CI on `main`, so it would never deploy); and "Allow
-auto-merge" on in the repository's settings.
+**Dependabot auto-merge needs no secret** (owner decision, 2026-11-09:
+nothing to keep or rotate). It needs two settings in GitHub, outside the
+repo: required CI checks on `main` (the workflow refuses to enable
+auto-merge without them, since GitHub would otherwise merge at once) and
+"Allow auto-merge". The workflow uses its own `GITHUB_TOKEN`, and a merge
+made with that token starts no workflow, so `main` gets no push run of CI
+for it. `check-and-deploy.sh` starts one (`gh workflow run CI --ref main`,
+`ci.yml`'s `workflow_dispatch`) for a tip with no run once it is older
+than a tick (`CI_DISPATCH_AFTER_S`), and deploys when that run succeeds.
+Without a personal token Dependabot's alert lookup is off, so only patch
+and minor updates merge on their own; a major waits, security fix or not.
 
 **Why not a self-hosted GitHub Actions runner (removed 2026-07):** the
 deploy job used to run on a self-hosted runner registered directly on the

@@ -30,6 +30,10 @@ flock -n 200 || exit 0   # a previous check/deploy is still running
 
 log() { echo "$(date -Iseconds) $*" >> deploy-poll.log; }
 
+# How old main's tip must be, with no CI run listed, before this starts one
+# (the CI gate below): one cron tick.
+CI_DISPATCH_AFTER_S=${CI_DISPATCH_AFTER_S:-300}
+
 # What we last actually finished deploying — not `git rev-parse HEAD`.
 # HEAD gets reset to origin/main below *before* the build/deploy runs, so
 # using HEAD as "already handled" would make a deferred cycle (pipeline
@@ -249,8 +253,25 @@ if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
       log "CI $ci_conclusion for $REMOTE — not deploying (FORCE_DEPLOY=1 to override)"
       exit 1
       ;;
+    null)
+      # No run at all. A merge made with a workflow's own GITHUB_TOKEN (the
+      # Dependabot auto-merge) starts no push run, so start one on main.
+      # Only once the commit is older than a tick: an ordinary push's own
+      # run can take a moment to be listed, and a second run would be waste.
+      committed=$(git log -1 --format=%ct "$REMOTE" 2>/dev/null || echo 0)
+      if (( $(date +%s) - committed > CI_DISPATCH_AFTER_S )); then
+        if gh workflow run CI --ref main >/dev/null 2>&1; then
+          log "no CI run for $REMOTE — started one on main; deploying once it succeeds"
+        else
+          log "no CI run for $REMOTE and starting one failed — asking again next tick"
+        fi
+      else
+        log "no CI run for $REMOTE yet — waiting for its push run"
+      fi
+      exit 0
+      ;;
     *)
-      log "CI not finished for $REMOTE (${ci_conclusion:-no run yet}) — deploying once it succeeds"
+      log "CI not finished for $REMOTE (${ci_conclusion:-in progress}) — deploying once it succeeds"
       exit 0
       ;;
   esac
