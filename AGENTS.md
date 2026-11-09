@@ -2275,9 +2275,12 @@ and the primaries' ramp to the last congressional primary): read it for any
 In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
 Enhanced Voting, one reader per vendor beside its primary adapter
-(`fetch_general_results`), and Indiana's, Vermont's and Florida's own
-systems (Florida's the Division of Elections' file, named by the election's
-date, `state_candidates_fl_enight.py`), dispatched by
+(`fetch_general_results`), and Indiana's, Vermont's, Florida's and Texas's
+own systems (Florida's the Division of Elections' file, named by the
+election's date, `state_candidates_fl_enight.py`; Texas's the Civix results
+app beside its candidate portal, `state_candidates_tx.py`, read with no
+reporting figure since its precinct field doesn't say a count is complete),
+dispatched by
 `fetch/election_results.py`; a
 state's `live_results` block in `state_candidate_sources.json` names a feed its
 primary adapter doesn't read. The count is stored per race (`RaceResult`) with

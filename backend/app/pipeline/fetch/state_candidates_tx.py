@@ -52,8 +52,11 @@ No API key, no auth — public GET/POST JSON.
    districts and the 16 Senate districts up this year.
 """
 
+import base64
+import json
 import logging
 import re
+from datetime import date
 
 import httpx
 
@@ -62,6 +65,7 @@ from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     clean_display_name,
+    normalize_party,
     parse_state_leg_office,
     parse_statewide_office,
 )
@@ -226,3 +230,122 @@ async def fetch_confirmed_candidates(
             "display_name": full,
         })
     return results
+
+
+# ---------------------------------------------------------------------------
+# Election-night count (fetch_general_results), read 2026-11-09.
+#
+# The same vendor's results app (ivis-enr-ui, "Election Night Results") is
+# served on this host; results.texas-election.com, the Secretary of State's
+# own address for it, answers with a bot wall's challenge and is not read.
+# The app's API answers GET `.../s3/enr/election/{id}` with a JSON object of
+# base64-encoded JSON parts. The ones read here:
+#
+#   Version   "enr/53815/117/": the election id and a publish number that
+#             rises with every republish (117 on 2026-11-09).
+#   Home      {"ElecDate": "11032026", ...}: the election's own date.
+#   Federal   {"Races": [{"N": "U. S. REPRESENTATIVE DISTRICT 19",
+#             "Candidates": [{"N", "P", "V", ...}], "T": 221753}, ...]}:
+#             every federal contest with each candidate's votes and the
+#             contest's total (equal to the candidates' sum in every 2026
+#             contest). Write-in candidates are party "W".
+#
+# The election is found by its date in the candidate portal's list
+# (getElectionsByYear; the two APIs share election ids), and its Home must
+# carry the same date.
+#
+# No reporting figure is read. The per-county rows (countyInfo) carry
+# precincts "reporting" per contest, but the certified CD-18 special runoff
+# of 2026-01-31 still reads 241 of 1,157, so the figure does not say a
+# count is complete. Each election also carries a flag "O", "Y" on the
+# certified primaries and runoffs and "N" on the general so far; nothing
+# the app publishes says what it means, so the count is never read as
+# official here, and the deadline rule (certification_deadlines.json: the
+# Governor's canvass by the 33rd day) supplies the winner.
+
+ENR_BASE = "https://goelect.txelections.civixapps.com/api-ivis-system/api/s3/enr"
+ENR_PAGE = "https://goelect.txelections.civixapps.com/ivis-enr-ui/races"
+_VERSION_RE = re.compile(r"enr/(\d+)/(\d+)/?$")
+
+
+def _decoded(payload: dict, part: str):
+    from app.pipeline.fetch.election_results import FeedUnreadable
+
+    try:
+        return json.loads(base64.b64decode(payload[part]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise FeedUnreadable(f"TX results part {part!r} could not be read") from exc
+
+
+def general_contests(federal: dict) -> list:
+    """The federal contests of a decoded Federal part."""
+    from app.pipeline.fetch.election_results import ContestCount, is_special_contest
+
+    out = []
+    for race in federal.get("Races") or []:
+        label = race.get("N") or ""
+        parsed = _parse_office(label)
+        if parsed is None:
+            continue
+        candidates = [
+            (clean_display_name(c.get("N") or ""), normalize_party(c.get("P") or "", ballot_list=True), c["V"])
+            for c in race.get("Candidates") or []
+            if isinstance(c.get("V"), int) and (c.get("N") or "").strip()
+        ]
+        total = race.get("T")
+        counted = sum(v for _, _, v in candidates)
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=candidates,
+            total_votes=total if isinstance(total, int) and total >= counted else None,
+            is_special=is_special_contest(label),
+        ))
+    return out
+
+
+async def fetch_general_results(client: httpx.AsyncClient, election_day: date, state: str, source: dict):
+    """Texas's count for `election_day`, or None when the state's election
+    list holds no election on that date."""
+    from app.pipeline.fetch.election_results import FeedUnreadable, StateCount, UntrustedCount, pick_election
+
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", f"{CIVIX_BASE}/getElectionsByYear/{election_day.year}",
+        timeout=30.0, log_label="TX Civix elections list", headers=_HEADERS,
+    )
+    if resp is None:
+        raise FeedUnreadable(f"{state} election list could not be read")
+    try:
+        listed = resp.json() or []
+    except ValueError as exc:
+        raise FeedUnreadable(f"{state} election list is not JSON") from exc
+    held = [
+        (e.get("txElectionName") or "", e) for e in listed
+        if isinstance(e, dict) and e.get("dtElectionDate") == election_day.isoformat()
+    ]
+    election = pick_election(held, state, election_day)
+    if election is None:
+        return None
+    eid = election.get("idElection")
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", f"{ENR_BASE}/election/{eid}",
+        timeout=60.0, log_label="TX election-night results", headers=_HEADERS,
+    )
+    if resp is None:
+        raise FeedUnreadable(f"{state} results for election {eid} could not be read")
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        raise FeedUnreadable(f"{state} results for election {eid} are not JSON") from exc
+    if not isinstance(payload, dict):
+        raise FeedUnreadable(f"{state} results for election {eid} are not an object")
+    home = _decoded(payload, "Home")
+    if home.get("ElecDate") != election_day.strftime("%m%d%Y"):
+        raise UntrustedCount(f"{state} election {eid} is dated {home.get('ElecDate')!r}, not {election_day}")
+    version = _VERSION_RE.search(str(payload.get("Version") or ""))
+    if version is None or version.group(1) != str(eid):
+        raise UntrustedCount(f"{state} results answered version {payload.get('Version')!r} for election {eid}")
+    return StateCount(
+        source_name=source.get("source_name") or "Texas Secretary of State (election night results)",
+        page_url=ENR_PAGE, official=False, unit_label="counties", units_complete=False,
+        contests=general_contests(_decoded(payload, "Federal")),
+        source_version=f"{eid}:{version.group(2)}",
+    )

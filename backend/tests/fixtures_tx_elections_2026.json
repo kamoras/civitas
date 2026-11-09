@@ -1,0 +1,62 @@
+[
+ {
+  "idElection": 53814,
+  "txElectionName": "2026 DEMOCRATIC PRIMARY ELECTION",
+  "cdElectionType": "P",
+  "dtElectionDate": "2026-03-03"
+ },
+ {
+  "idElection": 53813,
+  "txElectionName": "2026 REPUBLICAN PRIMARY ELECTION",
+  "cdElectionType": "P",
+  "dtElectionDate": "2026-03-03"
+ },
+ {
+  "idElection": 56181,
+  "txElectionName": "2026 SPECIAL ELECTION SENATE DISTRICT 4",
+  "cdElectionType": "S",
+  "dtElectionDate": "2026-05-02"
+ },
+ {
+  "idElection": 54612,
+  "txElectionName": "2026 SPECIAL RUNOFF ELECTION CONGRESSIONAL DISTRICT 18\t",
+  "cdElectionType": "SR",
+  "dtElectionDate": "2026-01-31"
+ },
+ {
+  "idElection": 54613,
+  "txElectionName": "2026 SPECIAL RUNOFF ELECTION SENATE DISTRICT 9",
+  "cdElectionType": "SR",
+  "dtElectionDate": "2026-01-31"
+ },
+ {
+  "idElection": 53815,
+  "txElectionName": "2026 NOVEMBER GENERAL ELECTION",
+  "cdElectionType": "GE",
+  "dtElectionDate": "2026-11-03"
+ },
+ {
+  "idElection": 66734,
+  "txElectionName": "2026 SPECIAL ELECTION HOUSE DISTRICT 93",
+  "cdElectionType": "S",
+  "dtElectionDate": "2026-11-03"
+ },
+ {
+  "idElection": 66618,
+  "txElectionName": "2026 SPECIAL ELECTION SENATE DISTRICT 22",
+  "cdElectionType": "S",
+  "dtElectionDate": "2026-11-03"
+ },
+ {
+  "idElection": 58314,
+  "txElectionName": "2026 DEMOCRATIC PRIMARY RUNOFF ELECTION",
+  "cdElectionType": "RU",
+  "dtElectionDate": "2026-05-26"
+ },
+ {
+  "idElection": 58315,
+  "txElectionName": "2026 REPUBLICAN PRIMARY RUNOFF ELECTION",
+  "cdElectionType": "RU",
+  "dtElectionDate": "2026-05-26"
+ }
+]
