@@ -9,6 +9,13 @@ updates:
     labels:
       - dependencies
       - python
+    # A directory's scan includes everything under it, so this entry also
+    # read scripts/requirements-research.txt, which has an entry of its own
+    # below: 2026-11-09 brought pyreadr twice (#1357 from here, #1358 from
+    # /backend/scripts) and pandas from here. Patterns are relative to
+    # `directory` (Dependabot options reference, `exclude-paths`).
+    exclude-paths:
+      - "scripts/**"
     # requirements.txt pins the *whole resolved tree*, not just direct
     # dependencies. That means Dependabot sees ~90 pinned lines and treats
     # each as independently upgradable — but many of them are not. Some are
