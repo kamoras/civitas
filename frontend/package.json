@@ -18,7 +18,7 @@
     "asset-versions": "node scripts/assetVersions.mjs"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.5",
     "modern-screenshot": "4.7.0",
     "next": "^16.4.3",
     "react": "^19.3.1",
