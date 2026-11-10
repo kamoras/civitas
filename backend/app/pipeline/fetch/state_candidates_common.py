@@ -1507,6 +1507,17 @@ def clean_display_name(display_name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(_DISPLAY_ANNOTATION_RE, " ", display_name or "")).strip()
 
 
+def first_last(name: str) -> str:
+    """A "LAST, FIRST MIDDLE[, SUFFIX]" printing ("Doe, Jane M.", "Roe,
+    John, III") in reading order ("Jane M. Doe", "John Roe III"),
+    otherwise verbatim: Maine's results and Hawaii's print names this way,
+    and the live sync and the shown name both read a name in reading order."""
+    parts = [p.strip() for p in (name or "").split(",")]
+    if len(parts) < 2:
+        return clean_display_name(name)
+    return clean_display_name(" ".join([parts[1], parts[0], *parts[2:]]))
+
+
 def surname(display_name: str, last_first: bool = False) -> str | None:
     """Trailing token of a "First [Middle] Last" display name, which is
     what the shared matcher compares against the surname FEC stores before

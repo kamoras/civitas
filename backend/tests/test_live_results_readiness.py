@@ -162,6 +162,7 @@ class TestPollClose:
         "MT": (3, 0), "UT": (3, 0),  # 8 PM Mountain
         "ND": (4, 0),  # latest statutory close, 9 PM Mountain
         "ID": (4, 0), "WA": (4, 0),  # 8 PM Pacific (northern Idaho)
+        "HI": (5, 0),  # 7 PM Hawaii
     }
 
     def test_every_live_state_closes_when_its_statute_says(self):
