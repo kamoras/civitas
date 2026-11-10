@@ -55,14 +55,16 @@ Connecticut nominates on a PLURALITY — Conn. Gen. Stat. Sec. 9-433 sets
 no runoff or majority requirement for a party primary — so
 `runoff_threshold_pct: null`.
 
-The vendor publishes no certification flag anywhere (confirmed empty
-across every real response captured, and the version-number churn
-observed live during this same research session is itself evidence
-results are still being updated after polls close) — the same shape as
-Arkansas/Tennessee/Florida in this system, so a nominee is confirmed
-only once `settle_days` has passed since the matched election's own
-date (reusing `_settled` from state_candidates_tabular.py rather than
-re-deriving the same freshness rule a fourth time).
+None of the four files above carries a status (the version-number
+churn observed live during this same research session is itself
+evidence results are still being updated after polls close). The app's
+townStatus file marks each town "( *Unofficial Results )" or "( Official
+Results )" (the live reader below reads it), but "Official" is not shown
+to mean certified, so a nominee is confirmed only once `settle_days` has
+passed since the matched election's own date, as for
+Arkansas/Tennessee/Florida (reusing `_settled` from
+state_candidates_tabular.py rather than re-deriving the same freshness
+rule a fourth time).
 
 STATEWIDE OFFICES (with `statewide_offices` set) come from two places,
 because a Connecticut nominee usually never faces a primary at all: the
@@ -99,6 +101,13 @@ import httpx
 import pdfplumber
 from pdfplumber.utils import extract_words
 
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    FeedUnreadable,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+)
 from app.pipeline.fetch.http_utils import fetch_json_with_retry, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
@@ -106,6 +115,7 @@ from app.pipeline.fetch.state_candidates_common import (
     federal_record,
     normalize_party,
     office_from_columns,
+    parse_office,
     parse_statewide_office,
     pick_nominee,
 )
@@ -550,3 +560,135 @@ async def fetch_confirmed_candidates(
             return None
         results.extend(_merge_house(primaried, house))
     return results
+
+
+# ── Election-night count (fetch_general_results), read 2026-11-10 ──────
+#
+# The same app's files for the general, found by its date in
+# Elections.json and confirmed by the election's own Lookupdata (its DT
+# the date, its ET "G" for a general):
+#   stateVotes_Electiondata.json    each office's lines, by candidate id
+#   candidateGrouping_Electiondata.json
+#       a cross-endorsed candidate's combined total, under one of their
+#       line ids: Connecticut prints a candidate once per party that
+#       nominated them (the 2026 5th district's Jahana Hayes on the
+#       Democratic line, 139,000, and the Working Families line, 7,353;
+#       grouped, 146,353)
+#   officePrecincts_Electiondata.json   "155 of 155 (100%)" per office
+#   townStatus_Electiondata.json    each town's "( *Unofficial Results )",
+#       "( Official Results )" in every town of the 2024 general
+#
+# A candidate's lines are combined by their printed name, under the party
+# of the line that carried the most votes, and the sum must equal the
+# app's own grouped total wherever it has one, else the files are not
+# what this reads (FeedUnreadable). A registered write-in ("WI") keeps
+# their votes. The reporting figure is the office's precincts reported,
+# worded as precincts with results: nothing says a reported precinct's
+# absentee ballots are all in. Official only when every town says
+# "Official Results". The Secretary of the State, Treasurer and
+# Comptroller canvass federal results on the last Wednesday of the
+# election's month (certification_deadlines.json).
+
+_PRECINCTS_RE = re.compile(r"^\s*([\d,]+)\s+of\s+([\d,]+)")
+
+
+def _count(raw) -> int | None:
+    raw = str(raw if raw is not None else "").replace(",", "").strip()
+    return int(raw) if raw.isdigit() else None
+
+
+def general_contests(lookup: dict, votes: dict, grouping: dict, precincts: dict) -> list[ContestCount]:
+    """The federal contests of one election's files, each candidate's
+    lines combined."""
+    candidates = lookup.get("candidateIds") or {}
+    parties = lookup.get("partyIds") or {}
+    out = []
+    for entry in lookup.get("officeList") or []:
+        for office_id, office in entry.items():
+            label = str(office.get("NM") or "")
+            seat = office_from_columns(office, _OFFICE_SPEC)
+            if seat is None:
+                parsed = parse_office(label)
+                if parsed is None or parsed[0] != "S":
+                    continue
+                seat = parsed
+            lines: dict[str, list] = {}
+            ids: dict[str, str] = {}
+            total = 0
+            for choice in votes.get(office_id) or []:
+                for choice_id, vote in choice.items():
+                    count = _count((vote or {}).get("V"))
+                    if count is None:
+                        raise FeedUnreadable(f"CT office {office_id} has votes {vote!r}")
+                    total += count
+                    who = candidates.get(choice_id) or {}
+                    name = clean_display_name(str(who.get("NM") or ""))
+                    if not name:
+                        continue
+                    party = str((parties.get(str(who.get("P"))) or {}).get("CD") or "")
+                    key = " ".join(name.casefold().split())
+                    ids[choice_id] = key
+                    held = lines.setdefault(key, [name, 0, party, -1])
+                    held[1] += count
+                    if count > held[3]:
+                        held[2], held[3] = party, count
+            for choice in grouping.get(office_id) or []:
+                for choice_id, vote in choice.items():
+                    key = ids.get(choice_id)
+                    if key is None or lines[key][1] != _count((vote or {}).get("V")):
+                        raise FeedUnreadable(f"CT office {office_id}'s grouped total for {choice_id} is not its lines' sum")
+            reported = _PRECINCTS_RE.match(str(precincts.get(office_id) or ""))
+            out.append(ContestCount(
+                office=seat[0], district=seat[1],
+                candidates=[(n, normalize_party(p, ballot_list=True), v) for n, v, p, _ in lines.values()],
+                total_votes=total,
+                reporting_units=_count(reported.group(1)) if reported else None,
+                total_units=(_count(reported.group(2)) or None) if reported else None,
+                is_special=is_special_contest(label),
+            ))
+    return out
+
+
+async def _election_file(client, url: str, label: str) -> dict:
+    got = await fetch_json_with_retry(client, _rate_limiter, url, label)
+    if not isinstance(got, dict):
+        raise FeedUnreadable(f"{label} could not be read")
+    return got
+
+
+async def fetch_general_results(client: httpx.AsyncClient, election_day, state: str, source: dict):
+    """Connecticut's count for the general on `election_day`, or None when
+    the app lists no election on that date."""
+    listed = await fetch_json_with_retry(client, _rate_limiter, f"{BASE}/Elections.json", f"{state} election list")
+    if not isinstance(listed, list):
+        raise FeedUnreadable(f"{state} election list could not be read")
+    day = election_day.strftime("%m/%d/%Y")
+    on_day = [e for e in listed if isinstance(e, dict) and str(e.get("Name") or "").startswith(f"{day} --")]
+    generals = []
+    for entry in on_day:
+        eid = entry.get("ID")
+        version = (await _election_file(client, f"{BASE}/election/{eid}/Version.json", f"{state} election version")).get("Version")
+        if not version:
+            raise FeedUnreadable(f"{state} election {eid} has no version")
+        lookup = await _election_file(client, f"{BASE}/election/{eid}/{version}/Lookupdata.json", f"{state} lookup data")
+        meta = lookup.get("election") or {}
+        if meta.get("DT") == day and meta.get("ET") == "G":
+            generals.append((eid, version, lookup))
+    if not generals:
+        return None
+    if len(generals) > 1:
+        raise UntrustedCount(f"{state} lists {len(generals)} generals on {day}")
+    eid, version, lookup = generals[0]
+    folder = f"{BASE}/election/{eid}/{version}/"
+    votes = await _election_file(client, folder + "stateVotes_Electiondata.json", f"{state} vote totals")
+    grouping = await _election_file(client, folder + "candidateGrouping_Electiondata.json", f"{state} grouped totals")
+    precincts = await _election_file(client, folder + "officePrecincts_Electiondata.json", f"{state} precincts reported")
+    towns = await _election_file(client, folder + "townStatus_Electiondata.json", f"{state} town status")
+    statuses = [str((t or {}).get("TS") or "") for t in towns.values()]
+    official = bool(statuses) and all("Official Results" in t and "Unofficial" not in t for t in statuses)
+    return StateCount(
+        source_name=source.get("source_name") or "Connecticut Secretary of the State (election night reporting)",
+        page_url="https://ctemspublic.tgstg.net/", official=official,
+        unit_label="precincts", units_complete=False,
+        contests=general_contests(lookup, votes, grouping, precincts), source_version=f"{eid}:{version}",
+    )

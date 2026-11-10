@@ -49,6 +49,10 @@ def deadline(state: str, election_day: date) -> date | None:
     if "days" in spec:
         return election_day + timedelta(days=int(spec["days"]))
     weekday = _WEEKDAYS.index(spec["weekday"])
+    if spec.get("last"):
+        # The last such weekday of the month the election is held in.
+        month_end = (election_day.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        return month_end - timedelta(days=(month_end.weekday() - weekday) % 7)
     if "month" in spec:
         year = election_day.year + (1 if spec["month"] < election_day.month else 0)
         return _nth_weekday_after(date(year, spec["month"], 1) - timedelta(days=1), weekday, int(spec["nth"]))

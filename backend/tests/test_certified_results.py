@@ -555,6 +555,7 @@ class TestCertificationDeadlines:
         assert deadline("NM", DAY) == date(2026, 11, 24)  # 3rd Tuesday after (2024's canvass: Nov 26)
         assert deadline("UT", DAY) == date(2026, 11, 23)  # 4th Monday of November
         assert deadline("VA", DAY) == date(2026, 12, 7)   # 1st Monday of December
+        assert deadline("CT", DAY) == date(2026, 11, 25)  # last Wednesday of November
         assert deadline("RI", DAY) is None                # no fixed deadline: not read this way
 
     def _count(self, db, last_change, reporting=650, total=650):
