@@ -148,6 +148,7 @@ class TestPollClose:
     EXPECTED = {
         "GA": (0, 0), "SC": (0, 0), "VA": (0, 0),  # 7 PM Eastern
         "WV": (0, 30),  # 7:30 PM Eastern
+        "NC": (0, 30),  # 7:30 PM Eastern
         "RI": (1, 0),  # 8 PM Eastern
         "MD": (1, 0),  # 8 PM Eastern
         "FL": (1, 0),  # 7 PM Central (the western panhandle)
