@@ -1,0 +1,284 @@
+{
+ "Elections.json": [
+  {
+   "ID": "108",
+   "Name": "11/03/2026 -- November 2026 State Election",
+   "DefaultElection": "Y"
+  },
+  {
+   "ID": "111",
+   "Name": "08/11/2026 -- Democratic Primary",
+   "DefaultElection": "N"
+  },
+  {
+   "ID": "112",
+   "Name": "08/11/2026 -- Republican Primary",
+   "DefaultElection": "N"
+  }
+ ],
+ "election/108/Version.json": {
+  "Version": 53452
+ },
+ "election/108/53452/Lookupdata.json": {
+  "election": {
+   "ID": "108",
+   "NM": "11/03/2026 -- November 2026 State Election",
+   "DT": "11/03/2026",
+   "ET": "G",
+   "EC": "SE",
+   "P": "",
+   "DNM": "2026 General Election"
+  },
+  "officeList": [
+   {
+    "19667": {
+     "ID": "19667",
+     "NM": "Representative in Congress 2",
+     "OT": "C",
+     "OO": "3",
+     "DT": "Connecticut 02",
+     "D": "2"
+    }
+   },
+   {
+    "19670": {
+     "ID": "19670",
+     "NM": "Representative in Congress 5",
+     "OT": "C",
+     "OO": "6",
+     "DT": "Connecticut 05",
+     "D": "5"
+    }
+   },
+   {
+    "19825": {
+     "ID": "19825",
+     "NM": "State Senator 1",
+     "OT": "S",
+     "OO": "7",
+     "DT": "Connecticut 01",
+     "D": "1"
+    }
+   }
+  ],
+  "candidateIds": {
+   "43512": {
+    "NM": "John W. Fonfara",
+    "LN": "Fonfara",
+    "FN": "John",
+    "MN": "W.",
+    "P": "1",
+    "CO": "0"
+   },
+   "44120": {
+    "NM": "Luis Delgado",
+    "LN": "Delgado",
+    "FN": "Luis",
+    "MN": "",
+    "P": "7",
+    "CO": "0"
+   },
+   "44397": {
+    "NM": "George Patrick Austin",
+    "LN": "Austin",
+    "FN": "George",
+    "MN": "Patrick",
+    "P": "3",
+    "CO": "0"
+   },
+   "43495": {
+    "NM": "Joe Courtney",
+    "LN": "Courtney",
+    "FN": "Joe",
+    "MN": "",
+    "P": "1",
+    "CO": "0"
+   },
+   "44204": {
+    "NM": "Chris Shea",
+    "LN": "Shea",
+    "FN": "Chris",
+    "MN": "",
+    "P": "6",
+    "CO": "1"
+   },
+   "43492": {
+    "NM": "Jahana Hayes",
+    "LN": "Hayes",
+    "FN": "Jahana",
+    "MN": "",
+    "P": "1",
+    "CO": "0"
+   },
+   "43574": {
+    "NM": "George Patrick Austin",
+    "LN": "Austin",
+    "FN": "George",
+    "MN": "Patrick",
+    "P": "6",
+    "CO": "0"
+   },
+   "44492": {
+    "NM": "Jonathan DeBarros",
+    "LN": "DeBarros",
+    "FN": "Jonathan",
+    "MN": "",
+    "P": "1026",
+    "CO": "0"
+   },
+   "44353": {
+    "NM": "Jahana Hayes",
+    "LN": "Hayes",
+    "FN": "Jahana",
+    "MN": "",
+    "P": "12",
+    "CO": "0"
+   },
+   "44490": {
+    "NM": "Kyle Gauck",
+    "LN": "Gauck",
+    "FN": "Kyle",
+    "MN": "",
+    "P": "1026",
+    "CO": "0"
+   }
+  },
+  "partyIds": {
+   "7": {
+    "CD": "G",
+    "NM": "Green Party",
+    "P": "112"
+   },
+   "12": {
+    "CD": "WF",
+    "NM": "Working Families Party",
+    "P": "22"
+   },
+   "6": {
+    "CD": "R",
+    "NM": "Republican Party",
+    "P": "135"
+   },
+   "1026": {
+    "CD": "WI",
+    "NM": "Write In",
+    "P": "274"
+   },
+   "1": {
+    "CD": "D",
+    "NM": "Democratic Party",
+    "P": "250"
+   },
+   "3": {
+    "CD": "IND",
+    "NM": "Independent Party",
+    "P": "204"
+   }
+  }
+ },
+ "election/108/53452/stateVotes_Electiondata.json": {
+  "19825": [
+   {
+    "43512": {
+     "V": "14466",
+     "TO": "90.91%"
+    }
+   },
+   {
+    "44120": {
+     "V": "1447",
+     "TO": "9.09%"
+    }
+   }
+  ],
+  "19667": [
+   {
+    "43495": {
+     "V": "182279",
+     "TO": "62.44%"
+    }
+   },
+   {
+    "43574": {
+     "V": "103566",
+     "TO": "35.48%"
+    }
+   },
+   {
+    "44397": {
+     "V": "6062",
+     "TO": "2.08%"
+    }
+   },
+   {
+    "44490": {
+     "V": "29",
+     "TO": "0.01%"
+    }
+   }
+  ],
+  "19670": [
+   {
+    "43492": {
+     "V": "139000",
+     "TO": "54.93%"
+    }
+   },
+   {
+    "44204": {
+     "V": "106667",
+     "TO": "42.15%"
+    }
+   },
+   {
+    "44353": {
+     "V": "7353",
+     "TO": "2.91%"
+    }
+   },
+   {
+    "44492": {
+     "V": "46",
+     "TO": "0.02%"
+    }
+   }
+  ]
+ },
+ "election/108/53452/candidateGrouping_Electiondata.json": {
+  "19667": [
+   {
+    "43574": {
+     "V": "109628",
+     "TO": "37.56%"
+    }
+   }
+  ],
+  "19670": [
+   {
+    "43492": {
+     "V": "146353",
+     "TO": "57.84%"
+    }
+   }
+  ]
+ },
+ "election/108/53452/officePrecincts_Electiondata.json": {
+  "19825": "19 of 19 (100%)",
+  "19667": "155 of 155 (100%)",
+  "19670": "161 of 161 (100%)"
+ },
+ "election/108/53452/townStatus_Electiondata.json": {
+  "1": {
+   "TS": "( *Unofficial Results )",
+   "PR": "1 of 1 (100.00%)"
+  },
+  "2": {
+   "TS": "( *Unofficial Results )",
+   "PR": "7 of 7 (100.00%)"
+  },
+  "3": {
+   "TS": "( *Unofficial Results )",
+   "PR": "1 of 1 (100.00%)"
+  }
+ }
+}

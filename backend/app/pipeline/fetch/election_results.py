@@ -279,6 +279,7 @@ def _readers() -> dict:
     # Imported lazily: each vendor module imports this one's dataclasses.
     from app.pipeline.fetch import (
         state_candidates_clarity,
+        state_candidates_ct,
         state_candidates_enhanced_voting,
         state_candidates_fl_enight,
         state_candidates_hi,
@@ -307,6 +308,7 @@ def _readers() -> dict:
         "voterportal": state_candidates_voterportal.fetch_general_results,
         "hi_summary": state_candidates_hi.fetch_general_results,
         "nc_enr": state_candidates_nc_enr.fetch_general_results,
+        "ct_enr": state_candidates_ct.fetch_general_results,
     }
 
 
