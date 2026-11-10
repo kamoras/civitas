@@ -960,7 +960,7 @@ def test_totalvote_reads_the_split_span_minute_stamp():
 class TestNotAPerson:
     @pytest.mark.parametrize("label", [
         "Write-In", "  write-in ", "Write-ins", "Write-in: Not Certified", "Write-in: Not Assigned",
-        "OTHER WRITE-INS", "Write-In Scattering", "Scattering", "BLANK", "Blank Votes", "Over Votes",
+        "OTHER WRITE-INS", "Write-In Scattering", "Write-In (Miscellaneous)", "Scattering", "BLANK", "Blank Votes", "Over Votes",
         "Overvotes", "Under Votes", "Undervotes", "None of these candidates", "Uncommitted", "Withdrawn",
         "Total Votes", "Ballots Cast",
     ])

@@ -2276,7 +2276,7 @@ In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
 Enhanced Voting, one reader per vendor beside its primary adapter
 (`fetch_general_results`), and the state-run systems of Indiana, Vermont,
-Florida, Texas, Minnesota, Maryland, Louisiana and Hawaii (Florida's the Division of
+Florida, Texas, Minnesota, Maryland, Louisiana, Hawaii and North Carolina (Florida's the Division of
 Elections' file, named by the election's date, `state_candidates_fl_enight.py`;
 Texas's the Civix results app beside its candidate portal,
 `state_candidates_tx.py`, and Maryland's results pages,
@@ -2284,7 +2284,8 @@ Texas's the Civix results app beside its candidate portal,
 says a count is complete; Minnesota's media files by date,
 `state_candidates_mn.py`; Louisiana's voter portal, the same files its
 candidate list comes from, `state_candidates_voterportal.py`; Hawaii's
-summary file beside its statewide report, `state_candidates_hi.py`), dispatched by
+summary file beside its statewide report, `state_candidates_hi.py`; North
+Carolina's results app's own files, `state_candidates_nc_enr.py`), dispatched by
 `fetch/election_results.py`; a
 state's `live_results` block in `state_candidate_sources.json` names a feed its
 primary adapter doesn't read. The count is stored per race (`RaceResult`) with

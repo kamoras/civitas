@@ -1419,7 +1419,8 @@ async def discover_certification_link(
 # and whose votes are still votes; both were live bugs in the live-count
 # readers before this was anchored. Each arm is a vendor's own printed
 # convention (Washington/Idaho's "Write-in: Not Certified", Vermont's
-# "OTHER WRITE-INS", Maine's "BLANK", Louisiana's "Write-In Scattering"),
+# "OTHER WRITE-INS", Maine's "BLANK", Louisiana's "Write-In Scattering",
+# North Carolina's "Write-In (Miscellaneous)"),
 # a data-format vocabulary like FEC's "SELF-EMPLOYED", not a guess about
 # who a person is.
 NOT_A_PERSON_RE = re.compile(
@@ -1428,7 +1429,7 @@ NOT_A_PERSON_RE = re.compile(
         write[\s-]*ins?
         (?:\s+(?:votes?|totals?|scatter(?:ing|ed)))?
         (?:\s*[:(\-]\s*(?:not\s+(?:assigned|certified|qualified)|unassigned|unresolved|unqualified
-                          |uncertified|scatter(?:ing|ed))\s*\)?)?
+                          |uncertified|scatter(?:ing|ed)|miscellaneous)\s*\)?)?
     | scatter(?:ing|ed)
     | (?:over|under)\s*-?\s*votes?
     | blank(?:\s+(?:votes?|ballots?))?
