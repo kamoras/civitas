@@ -8,6 +8,12 @@ owed and no recount still possible under the state's law. Nothing here is a
 call: the certified figures are the state's, copied, and the wording is a
 fixed template around them.
 
+A candidate the state's law elects with no contest on the ballot (Florida
+keeps an unopposed candidate off the general ballot and deems them elected,
+Fla. Stat. 101.151(7)) is recorded with basis "unopposed" from the state's
+own candidate list marking them so (record_unopposed): there is no count to
+certify and nothing a recount could change.
+
 Where no certified reader covers a state, the floor is the new Congress: on
 and after January 3 the member sworn in for the seat (record_sworn_in) is
 recorded with basis "sworn_in", once the roster has been read since the
@@ -29,7 +35,8 @@ from app.models import (
 )
 from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
-    FeedUnreadable, UntrustedCount, certified_states, fetch_certified_count,
+    FeedUnreadable, UntrustedCount, certified_states, fetch_certified_count, fetch_elected_unopposed,
+    source_for_state, unopposed_source, unopposed_states,
 )
 from app.recount_rules import CERTIFIED, RECOUNT, RUNOFF, Outcome, close_enough_to_contest, outcome
 from app.time_utils import utcnow
@@ -38,6 +45,11 @@ logger = logging.getLogger(__name__)
 
 CERTIFIED_EVENT = "certified_winner"
 SWORN_IN = "sworn_in"
+# Elected with no contest on the ballot, as the state's candidate list
+# marks it under a law that elects such a candidate (record_unopposed).
+UNOPPOSED = "unopposed"
+# Bases that name the seat's winner without a count to certify.
+_UNCOUNTED = (SWORN_IN, UNOPPOSED)
 # A live count taken as certified once the state's legal deadline to
 # certify has passed with the count unchanged (apply_deadlines).
 DEADLINE = "deadline"
@@ -74,7 +86,7 @@ def certification_json(cert: RaceCertification | None, today: date) -> dict | No
         return None
     tallies = json.loads(cert.tallies or "[]")
     found = outcome_for(cert, today)
-    status = SWORN_IN if cert.basis == SWORN_IN else found.status
+    status = cert.basis if cert.basis in _UNCOUNTED else found.status
     total = cert.votes_counted or 0
     top = tallies[0] if tallies else None
     return {
@@ -85,12 +97,12 @@ def certification_json(cert: RaceCertification | None, today: date) -> dict | No
         # Civitas first read it as certified.
         "certifiedOnStated": bool(cert.certified_on_stated),
         "recountUntil": found.until.isoformat() if found and found.until else None,
-        "statute": found.statute if found else None,
+        "statute": found.statute if found else _unopposed_statute(cert),
         "sourceName": cert.source_name,
         "sourceUrl": cert.source_url,
         "votesCounted": cert.votes_counted,
         "winner": ({"name": top["name"], "party": top.get("party"), "candidateId": top.get("candidateId")}
-                   if top and status in (CERTIFIED, SWORN_IN) else None),
+                   if top and status in (CERTIFIED, *_UNCOUNTED) else None),
         "candidates": [
             {"name": t["name"], "party": t.get("party"), "votes": t.get("votes"),
              "pct": round(100 * t["votes"] / total, 1) if total and t.get("votes") is not None else None,
@@ -98,6 +110,13 @@ def certification_json(cert: RaceCertification | None, today: date) -> dict | No
             for t in tallies
         ],
     }
+
+
+def _unopposed_statute(cert: RaceCertification) -> str | None:
+    if cert.basis != UNOPPOSED:
+        return None
+    block = unopposed_source(source_for_state(cert.state) or {})
+    return (block or {}).get("statute")
 
 
 def _store(db: Session, race: Race, election_day: date, basis: str, certified_on: str | None,
@@ -247,6 +266,22 @@ async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: d
             db.rollback()
             logger.exception("Storing certified results failed for %s", state)
             summary[state] = {"status": "failed"}
+    for state in sorted(unopposed_states()):
+        try:
+            found = await fetch_elected_unopposed(client, state, election_day)
+        except (FeedUnreadable, UntrustedCount) as exc:
+            summary[f"{state}:unopposed"] = {"status": "unavailable", "reason": str(exc)}
+            _alert_unread(state, election_day, today, f"Its list of candidates elected unopposed: {exc}")
+            continue
+        try:
+            stored, new = record_unopposed(db, state, election_day, found, today)
+            db.commit()
+            summary[f"{state}:unopposed"] = {"status": "ok", "races": stored, "events": len(new)}
+            announced.extend(new)
+        except Exception:
+            db.rollback()
+            logger.exception("Storing unopposed winners failed for %s", state)
+            summary[f"{state}:unopposed"] = {"status": "failed"}
     # A race stored while a recount could still be asked for is announced
     # the first pass after its window closes, whether or not its state's
     # document was read again today.
@@ -272,6 +307,45 @@ async def sync_certified(db: Session, client: httpx.AsyncClient, election_day: d
     summary["_unsettled"] = refresh_settled(db, election_day, today)
     db.commit()
     return summary
+
+
+def record_unopposed(
+    db: Session, state: str, election_day: date, records: list[dict], today: date,
+) -> tuple[int, list[ElectionResultEvent]]:
+    """Store each candidate the state's list marks elected unopposed as the
+    seat's winner (basis "unopposed"), where the race on file names that
+    candidate, and that candidate alone, as on the November ballot. A seat
+    the state certified a count for keeps it. Returns (stored, events)."""
+    from app.live_results.sync import _filed_surnames, _surnames
+
+    block = unopposed_source(source_for_state(state) or {}) or {}
+    stored, events = 0, []
+    for rec in records:
+        q = db.query(Race).filter(Race.state == state, Race.cycle_year == election_day.year,
+                                  Race.office == rec.get("office"), Race.is_special.is_(False))
+        if rec.get("office") == "H":
+            q = q.filter(Race.district == (rec.get("district") or 0))
+        races = q.all()
+        if len(races) != 1:
+            logger.warning("%s unopposed %s: %d races on file", state, rec.get("display_name"), len(races))
+            continue
+        race = races[0]
+        existing = db.get(RaceCertification, race.id)
+        if existing is not None and existing.basis not in _UNCOUNTED:
+            continue
+        on_ballot = [c for c in race.candidates if c.confirmed_general]
+        name = rec.get("display_name") or rec.get("last_name") or ""
+        if len(on_ballot) != 1 or not (_surnames([name]) & _filed_surnames([on_ballot[0].name])):
+            logger.warning("%s unopposed %s: the race on file confirms %d candidates, not this one alone",
+                           state, name, len(on_ballot))
+            continue
+        row = _store(db, race, election_day, UNOPPOSED, None, block.get("source_name") or "", block.get("url"),
+                     [{"name": name, "party": rec.get("party_label") or rec.get("party"), "votes": None,
+                       "candidateId": on_ballot[0].id}], None)
+        stored += 1
+        if (event := _announce(db, row, today)) is not None:
+            events.append(event)
+    return stored, events
 
 
 def apply_deadlines(db: Session, election_day: date, today: date) -> dict:
@@ -353,7 +427,7 @@ def record_sworn_in(db: Session, election_day: date) -> int:
     done = 0
     for race in races:
         existing = db.get(RaceCertification, race.id)
-        if existing is not None and (existing.basis == SWORN_IN or certification_json(existing, today)["winner"]):
+        if existing is not None and (existing.basis in _UNCOUNTED or certification_json(existing, today)["winner"]):
             continue
         names = _filed_surnames(c.name for c in race.candidates if c.confirmed_general)
         if not names:
@@ -415,8 +489,8 @@ def race_is_settled(result: RaceResult, cert: RaceCertification | None, today: d
     recount at any margin is settled: a margin past every runoff and
     margin-tied recount is not what such a recount reverses."""
     if cert is not None:
-        status = SWORN_IN if cert.basis == SWORN_IN else outcome_for(cert, today).status
-        if status in (CERTIFIED, SWORN_IN):
+        status = cert.basis if cert.basis in _UNCOUNTED else outcome_for(cert, today).status
+        if status in (CERTIFIED, *_UNCOUNTED):
             return True
         if status in (RUNOFF, RECOUNT):
             return False

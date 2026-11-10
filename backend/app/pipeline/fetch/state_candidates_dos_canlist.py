@@ -226,8 +226,39 @@ def parse_canlist(
                 "last_name": last,
                 "display_name": display,
                 "party_label": m.group("party"),
+                "unopposed": cells[1].upper() == "UNOPPOSED",
             })
     return records
+
+
+async def _federal_report(client: httpx.AsyncClient, url: str, election_id: str, state: str) -> str | None:
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "POST", url, log_label=f"{state} candidate list {election_id} FED",
+        headers=FETCH_HEADERS,
+        data={"elecid": election_id, "OfficeGroup": "FED", "StatusCode": "ALL", "OfficeCode": "ALL",
+              "CountyCode": "ALL", "PartyCode": "ALL", "FormsButton1": "RUN QUERY"},
+    )
+    return None if resp is None or resp.status_code != 200 else resp.text
+
+
+async def fetch_elected_unopposed(client: httpx.AsyncClient, election_day, state: str, source: dict) -> list[dict]:
+    """The federal candidates the Division lists as Unopposed for the
+    general on `election_day`: each elected when qualifying closed, with no
+    contest on the ballot (the statute is the source entry's). Raises
+    FeedUnreadable when the list can't be read or names no candidate at all
+    (an empty report is a failed read, never "nobody unopposed")."""
+    from app.pipeline.fetch.election_results import FeedUnreadable
+
+    url = source.get("url")
+    if not url:
+        raise FeedUnreadable(f"{state} dos_canlist_unopposed source has no url")
+    page = await _federal_report(client, url, election_day.strftime("%Y%m%d") + "-GEN", state)
+    if page is None:
+        raise FeedUnreadable(f"{state} candidate list could not be read")
+    records = parse_canlist(page)
+    if not records:
+        raise FeedUnreadable(f"{state} candidate list names no federal candidate")
+    return [r for r in records if r.get("unopposed")]
 
 
 async def fetch_confirmed_candidates(

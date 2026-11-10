@@ -661,3 +661,73 @@ class TestSettled:
             == rr.RECOUNT_POSSIBLE
         assert cr.refresh_settled(db_session, DAY, date(2026, 12, 4)) == 1
         assert result.settled_at is None
+
+
+class TestElectedUnopposed:
+    FROST = {"office": "H", "district": 10, "display_name": "Maxwell Alejandro Frost", "last_name": "Frost",
+             "party": "D", "party_label": "DEM", "unopposed": True}
+
+    def _seat(self, db, *others):
+        race = Race(id="2026-HOUSE-FL-10", cycle_year=2026, office="H", state="FL", district=10)
+        db.add(race)
+        db.add(Candidate(id="H6FL10001", race_id=race.id, name="FROST, MAXWELL ALEJANDRO", party="DEM",
+                         confirmed_general=True))
+        for i, name in enumerate(others):
+            db.add(Candidate(id=f"H6FL1000{i + 2}", race_id=race.id, name=name, party="REP", confirmed_general=True))
+        db.flush()
+        return race
+
+    def test_the_sole_candidate_the_list_marks_unopposed_is_the_winner(self, db_session):
+        race = self._seat(db_session)
+        stored, events = cr.record_unopposed(db_session, "FL", DAY, [self.FROST], date(2026, 11, 10))
+        assert stored == 1 and len(events) == 1
+        view = cr.certification_json(db_session.get(RaceCertification, race.id), date(2026, 11, 10))
+        assert view["status"] == cr.UNOPPOSED and view["basis"] == cr.UNOPPOSED
+        assert view["winner"] == {"name": "Maxwell Alejandro Frost", "party": "DEM", "candidateId": "H6FL10001"}
+        assert view["statute"] == "Fla. Stat. 101.151(7)"  # the source entry's
+        assert view["votesCounted"] is None and view["certifiedOn"] is None
+        # Said once, and stored again unchanged on the next day's read.
+        assert cr.record_unopposed(db_session, "FL", DAY, [self.FROST], date(2026, 11, 11)) == (1, [])
+
+    def test_a_race_on_file_with_an_opponent_is_not_taken_from_the_list(self, db_session):
+        race = self._seat(db_session, "DOE, JANE")
+        assert cr.record_unopposed(db_session, "FL", DAY, [self.FROST], date(2026, 11, 10)) == (0, [])
+        assert db_session.get(RaceCertification, race.id) is None
+
+    def test_a_certified_count_is_never_replaced(self, db_session):
+        race = self._seat(db_session)
+        cr._store(db_session, race, DAY, "certified", "2026-11-17", "Florida", None,
+                  [{"name": "Maxwell Frost", "party": "DEM", "votes": 1}], 1)
+        cr.record_unopposed(db_session, "FL", DAY, [self.FROST], date(2026, 11, 20))
+        assert db_session.get(RaceCertification, race.id).basis == "certified"
+
+    def test_the_sync_reads_the_list_and_alerts_when_it_cannot(self, db_session, monkeypatch):
+        race = self._seat(db_session)
+        alerts = []
+
+        async def listed(client, state, day):
+            return [self.FROST]
+
+        monkeypatch.setattr(cr, "certified_states", lambda: set())
+        monkeypatch.setattr(cr, "unopposed_states", lambda: {"FL"})
+        monkeypatch.setattr(cr, "fetch_elected_unopposed", listed)
+        monkeypatch.setattr(cr, "send_ops_alert", lambda *a, **k: alerts.append(a))
+        summary = asyncio.run(cr.sync_certified(db_session, None, DAY, date(2026, 11, 10)))
+        assert summary["FL:unopposed"] == {"status": "ok", "races": 1, "events": 1}
+        assert db_session.get(RaceCertification, race.id).basis == cr.UNOPPOSED
+
+        async def down(client, state, day):
+            from app.pipeline.fetch.election_results import FeedUnreadable
+
+            raise FeedUnreadable("FL candidate list could not be read")
+
+        monkeypatch.setattr(cr, "fetch_elected_unopposed", down)
+        summary = asyncio.run(cr.sync_certified(db_session, None, DAY, date(2026, 11, 11)))
+        assert summary["FL:unopposed"]["status"] == "unavailable" and alerts
+        # The winner already on file stands.
+        assert db_session.get(RaceCertification, race.id).basis == cr.UNOPPOSED
+
+    def test_florida_is_read_for_unopposed_winners(self):
+        from app.pipeline.fetch.election_results import unopposed_states
+
+        assert "FL" in unopposed_states()

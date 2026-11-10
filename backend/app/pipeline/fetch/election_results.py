@@ -468,6 +468,50 @@ def certified_states() -> set[str]:
     }
 
 
+def _unopposed_readers() -> dict:
+    """Readers of the candidates a state's law elects without a contest
+    (a state's `elected_unopposed` block), by strategy: each takes (client,
+    election_day, state, source) and returns the candidate-list records the
+    state marks elected unopposed. Raises FeedUnreadable when the list
+    can't be read."""
+    from app.pipeline.fetch import state_candidates_dos_canlist
+
+    return {"dos_canlist_unopposed": state_candidates_dos_canlist.fetch_elected_unopposed}
+
+
+def unopposed_source(source: dict) -> dict | None:
+    """The state's `elected_unopposed` block: the list naming the
+    candidates its law elects with no contest on the ballot, and the law."""
+    block = source.get("elected_unopposed")
+    return dict(block) if isinstance(block, dict) else None
+
+
+def unopposed_states() -> set[str]:
+    """Every state with a reader for candidates elected unopposed."""
+    readers = _unopposed_readers()
+    return {
+        s for s in configured_states()
+        if (src := source_for_state(s)) and (block := unopposed_source(src)) and block.get("strategy") in readers
+    }
+
+
+async def fetch_elected_unopposed(client: httpx.AsyncClient, state: str, election_day: date) -> list[dict]:
+    """The state's candidates elected unopposed for `election_day`'s
+    general ([] where it has no reader). Raises FeedUnreadable."""
+    source = source_for_state(state)
+    block = unopposed_source(source) if source else None
+    reader = _unopposed_readers().get((block or {}).get("strategy"))
+    if reader is None:
+        return []
+    try:
+        return await reader(client, election_day, state.upper(), block)
+    except (UntrustedCount, FeedUnreadable):
+        raise
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        logger.exception("%s unopposed candidates read failed", state)
+        raise FeedUnreadable(f"{state} unopposed candidates read failed ({type(exc).__name__})") from exc
+
+
 async def fetch_certified_count(
     client: httpx.AsyncClient, state: str, election_day: date,
 ) -> StateCount | None:

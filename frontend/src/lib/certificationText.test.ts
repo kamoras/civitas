@@ -62,3 +62,22 @@ describe("certificationText at a certification deadline", () => {
     );
   });
 });
+
+describe("certificationText for a seat elected unopposed", () => {
+  it("names the law and says there is no count", () => {
+    const text = certificationText(
+      {
+        ...base,
+        basis: "unopposed",
+        status: "unopposed",
+        certifiedOn: null,
+        votesCounted: null,
+        statute: "Fla. Stat. 101.151(7)",
+      },
+      "Florida"
+    );
+    expect(text).toBe(
+      "Dana Smith (D) was elected unopposed: Florida law keeps an unopposed candidate off the ballot (Fla. Stat. 101.151(7)), so there is no count."
+    );
+  });
+});

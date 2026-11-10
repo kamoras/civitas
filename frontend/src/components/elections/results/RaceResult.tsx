@@ -16,7 +16,7 @@ import {
   reportingText,
 } from "@/lib/results";
 import { safeHref } from "@/lib/formatting";
-import type { LiveRaceResult } from "@/types/election";
+import type { LiveRaceResult, RaceCertification } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { TYPE } from "@/lib/typeStyles";
@@ -324,25 +324,50 @@ export function HouseNoCountRow({
   raceId,
   state,
   district,
+  certification = null,
 }: {
   raceId: string;
   state: string;
   district: number | null;
+  /** The seat's winner on record with no count (elected unopposed, or
+   * sworn in), from LiveResults.certifiedRaces. */
+  certification?: RaceCertification | null;
 }) {
+  const won = certification?.winner ? certification : null;
   return (
     <li id={`result-${raceId}`} tabIndex={-1} className={HOUSE_ROW_GRID}>
       <span className="font-mono text-small text-ink-hi">
         {raceLabel({ state, office: "H", district })}
       </span>
-      <span className="min-w-0 text-small text-ink-min">No count shown here</span>
+      {won ? (
+        <span className="min-w-0">
+          <span className="block break-words text-small text-ink">
+            <span className={partyTextClass(won.winner?.party ?? null)}>{won.winner?.name}</span>
+          </span>
+          <CertificationLine certification={won} state={state} />
+        </span>
+      ) : (
+        <span className="min-w-0 text-small text-ink-min">No count shown here</span>
+      )}
       <span className="hidden font-mono text-small text-ink-min sm:block">—</span>
       <span
-        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-small text-ink-min`}
+        className={`${HOUSE_ROW_TAG} border ${
+          won ? "border-white/40 text-ink-hi" : "border-dashed border-white/25 text-ink-min"
+        } px-2 py-0.5 font-mono text-small`}
       >
-        No count
+        {won ? certifiedTag(won) : "No count"}
       </span>
     </li>
   );
+}
+
+/** The tag of a winner on record with no count. */
+function certifiedTag(c: RaceCertification): string {
+  return c.status === "unopposed"
+    ? "Unopposed"
+    : c.status === "sworn_in"
+      ? "Sworn in"
+      : "Certified";
 }
 
 /** A Senate race on the state's ballot that Civitas shows no count for
@@ -353,13 +378,19 @@ export function HouseNoCountRow({
  * votes yet", which says this race's count is under way. */
 export function SenateNoCountCard({
   raceId,
+  state,
   isSpecial,
   headingLevel = 3,
+  certification = null,
 }: {
   raceId: string;
+  state: string;
   isSpecial: boolean;
   headingLevel?: 2 | 3;
+  /** The seat's winner on record with no count, as for HouseNoCountRow. */
+  certification?: RaceCertification | null;
 }) {
+  const won = certification?.winner ? certification : null;
   const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <article
@@ -372,13 +403,22 @@ export function SenateNoCountCard({
         <Heading id={`result-${raceId}-title`} className={TYPE.section}>
           {`U.S. Senate${isSpecial ? " (special)" : ""}`}
         </Heading>
-        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-small text-ink-min">
-          No count
+        <span
+          className={`border ${
+            won ? "border-white/40 text-ink-hi" : "border-dashed border-white/25 text-ink-min"
+          } px-2 py-0.5 font-mono text-small`}
+        >
+          {won ? certifiedTag(won) : "No count"}
         </span>
       </div>
-      <p className="mt-2 text-body text-ink-min">
-        Civitas shows no count for this race, though it shows one for the state&apos;s other races.
-      </p>
+      {won ? (
+        <CertificationLine certification={won} state={state} />
+      ) : (
+        <p className="mt-2 text-body text-ink-min">
+          Civitas shows no count for this race, though it shows one for the state&apos;s other
+          races.
+        </p>
+      )}
     </article>
   );
 }

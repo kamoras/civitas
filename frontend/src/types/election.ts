@@ -920,9 +920,12 @@ export interface LiveCandidateResult {
 export interface RaceCertification {
   /** "deadline": the state's own certification wasn't read; its legal
    * deadline to certify passed with the live count unchanged, and that
-   * count is taken as the certified one, dated the deadline. */
-  basis: "certified" | "deadline" | "sworn_in";
-  status: "certified" | "recount_possible" | "recount" | "runoff" | "sworn_in";
+   * count is taken as the certified one, dated the deadline.
+   * "unopposed": no contest was on the ballot; the state's candidate list
+   * marks the candidate elected unopposed under a law that elects them
+   * (`statute` names it), so there is no count to certify. */
+  basis: "certified" | "deadline" | "sworn_in" | "unopposed";
+  status: "certified" | "recount_possible" | "recount" | "runoff" | "sworn_in" | "unopposed";
   certifiedOn: string | null;
   /** False: the document states no date, and certifiedOn is the day
    * Civitas first read it as certified. */
@@ -1043,6 +1046,16 @@ export interface ResultEvent {
   };
 }
 
+/** A race with a certification and no count (LiveResults.certifiedRaces). */
+export interface CertifiedRace {
+  raceId: string;
+  state: string;
+  office: "S" | "H";
+  district: number | null;
+  isSpecial: boolean;
+  certification: RaceCertification;
+}
+
 export interface LiveResults {
   cycleYear: number;
   phase: ElectionPhaseInfo;
@@ -1074,6 +1087,10 @@ export interface LiveResults {
    * state's feed couldn't be read". Optional for an older backend. */
   feeds?: Record<string, LiveFeedStatus>;
   races: LiveRaceResult[];
+  /** Races with a certification on file and no count: a seat elected
+   * unopposed with no contest on the ballot, or a member sworn in where no
+   * count was read. Optional for an older backend. */
+  certifiedRaces?: CertifiedRace[];
   /** Newest first. */
   updates: ResultEvent[];
   /** Not from the backend's body: set by fetchLiveResults from the

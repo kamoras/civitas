@@ -2440,7 +2440,14 @@ wrong number on election night is worse than none:
   date is dated by its first read. Where no certified reader covers a state,
   the floor is the member sworn in for the seat, recorded from January 3 once
   the roster has been read since the Congress convened (`record_sworn_in`).
-  The wording is a fixed template (`certificationText`, `post_certified`;
+  A candidate the state's law elects with no contest on the ballot (Florida
+  prints no unopposed candidate and deems them elected, Fla. Stat.
+  101.151(7)) is shown elected unopposed from the day after the election,
+  read from the state's own candidate list marking them so (a state's
+  `elected_unopposed` block, `record_unopposed`), and only where the race on
+  file confirms that candidate alone; the state results page shows such a
+  winner, and a member sworn in, in the race's no-count row
+  (`certifiedRaces`). The wording is a fixed template (`certificationText`, `post_certified`;
   Senate posts only).
 - "Civitas never calls a race" governs **election-night counts**: what a
   count says, and when. It is not a ban on describing an election before
