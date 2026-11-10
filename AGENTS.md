@@ -2276,7 +2276,7 @@ In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
 Enhanced Voting, one reader per vendor beside its primary adapter
 (`fetch_general_results`), and the state-run systems of Indiana, Vermont,
-Florida, Texas, Minnesota, Maryland, Louisiana, Hawaii, North Carolina and Connecticut (Florida's the Division of
+Florida, Texas, Minnesota, Maryland, Louisiana, Hawaii, North Carolina, Connecticut and Delaware (Florida's the Division of
 Elections' file, named by the election's date, `state_candidates_fl_enight.py`;
 Texas's the Civix results app beside its candidate portal,
 `state_candidates_tx.py`, and Maryland's results pages,
@@ -2286,7 +2286,8 @@ says a count is complete; Minnesota's media files by date,
 candidate list comes from, `state_candidates_voterportal.py`; Hawaii's
 summary file beside its statewide report, `state_candidates_hi.py`; North
 Carolina's results app's own files, `state_candidates_nc_enr.py`; Connecticut's
-election-night app, beside its primary adapter in `state_candidates_ct.py`), dispatched by
+election-night app, beside its primary adapter in `state_candidates_ct.py`; Delaware's
+results page's statewide file, `state_candidates_de.py`), dispatched by
 `fetch/election_results.py`; a
 state's `live_results` block in `state_candidate_sources.json` names a feed its
 primary adapter doesn't read. The count is stored per race (`RaceResult`) with
@@ -2320,7 +2321,7 @@ wrong number on election night is worse than none:
   not an alert: the same reader is run on the state's previous general,
   live through the state's own index where it still lists it, else on the
   recording replayed offline (bundled first-install recordings for IA, ID,
-  MT and RI, whose indexes no longer list a general), and passes when it
+  MT, RI and DE, whose indexes no longer list a general), and passes when it
   accounts for every House seat on file. Only a failed self-check, a
   refused or unreadable feed, or a staged general missing a race is
   alerted, one alert a day (condition `results-readiness`), worded as what

@@ -152,6 +152,7 @@ class TestPollClose:
         "RI": (1, 0),  # 8 PM Eastern
         "MD": (1, 0),  # 8 PM Eastern
         "CT": (1, 0),  # 8 PM Eastern
+        "DE": (1, 0),  # 8 PM Eastern
         "FL": (1, 0),  # 7 PM Central (the western panhandle)
         "IN": (0, 0),  # 6 PM Central (Indiana's west; the east closes 6 PM Eastern)
         "VT": (0, 0),  # 7 PM Eastern
