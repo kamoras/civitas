@@ -9,7 +9,7 @@ from app import scoring_revisions
 # What every ScoreSnapshot records is scoring_version(): this, followed by
 # the count of refits the data refresh has installed under the acceptance
 # rule since (app/scoring_revisions.py), so trend charts annotate those too.
-ALGORITHM_VERSION = "v6.38"
+ALGORITHM_VERSION = "v6.39"
 
 
 def scoring_version() -> str:

@@ -1,0 +1,191 @@
+{
+  "_source": "scripts/calibrate_sponsorship_edge_weights.py on GovInfo's Bill Status bulk data, Congresses 113-118, generated 2026-11-10",
+  "chambers": {
+    "house": {
+      "enacted": 1.0,
+      "advanced": 0.6,
+      "stalled": 0.3
+    },
+    "senate": {
+      "enacted": 1.0,
+      "advanced": 0.1,
+      "stalled": 0.05
+    }
+  },
+  "calibrated_through": 118,
+  "fit": {
+    "house": {
+      "best": {
+        "enacted": 1.0,
+        "advanced": 1.0,
+        "stalled": 0.15
+      },
+      "adopted": false,
+      "meanSpearman": 0.1661,
+      "inUseMeanSpearman": 0.1629,
+      "flatMeanSpearman": 0.1645,
+      "forward": {
+        "delta": -0.00011,
+        "se": 0.00229,
+        "n": 3,
+        "steps": [
+          {
+            "congress": 115,
+            "weights": [
+              1.0,
+              0.5,
+              0.4
+            ],
+            "spearman": 0.2625,
+            "inUse": 0.2616
+          },
+          {
+            "congress": 116,
+            "weights": [
+              1.0,
+              0.65,
+              0.5
+            ],
+            "spearman": 0.1729,
+            "inUse": 0.1696
+          },
+          {
+            "congress": 117,
+            "weights": [
+              1.0,
+              0.8,
+              0.65
+            ],
+            "spearman": 0.0639,
+            "inUse": 0.0684
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "congress": 113,
+          "members": 379,
+          "spearman": 0.1308,
+          "inUse": 0.1344
+        },
+        {
+          "congress": 114,
+          "members": 385,
+          "spearman": 0.1808,
+          "inUse": 0.1808
+        },
+        {
+          "congress": 115,
+          "members": 351,
+          "spearman": 0.2597,
+          "inUse": 0.2616
+        },
+        {
+          "congress": 116,
+          "members": 379,
+          "spearman": 0.172,
+          "inUse": 0.1696
+        },
+        {
+          "congress": 117,
+          "members": 365,
+          "spearman": 0.0875,
+          "inUse": 0.0684
+        }
+      ]
+    },
+    "senate": {
+      "best": {
+        "enacted": 1.0,
+        "advanced": 0.1,
+        "stalled": 0.05
+      },
+      "adopted": true,
+      "meanSpearman": 0.2822,
+      "inUseMeanSpearman": 0.2477,
+      "flatMeanSpearman": 0.2442,
+      "forward": {
+        "delta": 0.04471,
+        "se": 0.01193,
+        "n": 3,
+        "steps": [
+          {
+            "congress": 115,
+            "weights": [
+              1.0,
+              0.1,
+              0.1
+            ],
+            "spearman": 0.2984,
+            "inUse": 0.2721
+          },
+          {
+            "congress": 116,
+            "weights": [
+              1.0,
+              0.1,
+              0.05
+            ],
+            "spearman": 0.3061,
+            "inUse": 0.2653
+          },
+          {
+            "congress": 117,
+            "weights": [
+              1.0,
+              0.1,
+              0.05
+            ],
+            "spearman": 0.2759,
+            "inUse": 0.2088
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "congress": 113,
+          "members": 87,
+          "spearman": 0.1731,
+          "inUse": 0.1694
+        },
+        {
+          "congress": 114,
+          "members": 93,
+          "spearman": 0.3349,
+          "inUse": 0.3227
+        },
+        {
+          "congress": 115,
+          "members": 91,
+          "spearman": 0.3213,
+          "inUse": 0.2721
+        },
+        {
+          "congress": 116,
+          "members": 92,
+          "spearman": 0.3061,
+          "inUse": 0.2653
+        },
+        {
+          "congress": 117,
+          "members": 92,
+          "spearman": 0.2759,
+          "inUse": 0.2088
+        }
+      ]
+    }
+  },
+  "_comparison": {
+    "metric": "forward within-party Spearman of leadership with next-Congress advanced legislation",
+    "delta": 0.04471,
+    "se": 0.01193,
+    "n": 3,
+    "subgroups": {
+      "senate": {
+        "delta": 0.04471,
+        "se": 0.01193,
+        "n": 3
+      }
+    }
+  }
+}

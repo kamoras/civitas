@@ -476,8 +476,9 @@ The correct pattern, established by `_district_pvi()` /
    refit is measured against. A refit whose parameters equal the copy in
    use reports `{"unchanged": true}` and installs its new measurements.
    The search calibrations (§3b), the election map's priors, the
-   position-confidence structure and commemorative detection refit this
-   way. An installed refit that changes what member scoring reads
+   position-confidence structure, commemorative detection and Legislative
+   Leadership's cosponsorship edge weights (per chamber,
+   `sponsorship_edge_weights.json`) refit this way. An installed refit that changes what member scoring reads
    (`DataFile.scoring_inputs`) moves the scoring version by itself:
    `app/scoring_revisions.py` records it, every snapshot after it carries
    `scoring_version()` ("v6.38.1": `ALGORITHM_VERSION`, now in

@@ -2047,7 +2047,7 @@ async def run_senate_pipeline(
             if s.get("bioguideId")
         }
         leadership_scores = compute_leadership_scores(
-            all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
+            all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map, chamber="senate",
         )
         ideology_scores = compute_ideology_scores(
             all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,

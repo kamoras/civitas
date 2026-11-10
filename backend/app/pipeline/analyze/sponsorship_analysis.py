@@ -21,8 +21,8 @@ Leadership (PageRank, Brin & Page 1998):
     from a message bill introduced purely for the cosponsor list — a
     senator who signs onto ten resolutions with zero chance of passing
     accrues the same network weight as one who cosponsors ten bills that
-    actually became law (external critique, 2026-07; see
-    ENACTED_EDGE_WEIGHT/ADVANCED_EDGE_WEIGHT/STALLED_EDGE_WEIGHT below for how this is addressed).
+    actually became law (external critique, 2026-07; see edge_weights
+    below for how this is addressed).
 
 Ideology (SVD/PCA, Poole & Rosenthal 1985):
     The second right-singular vector of the cosponsorship matrix captures
@@ -44,38 +44,46 @@ from app.pipeline.analyze.score_calculator import _ADVANCEMENT_ACTION_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
-# Cosponsorship-edge weights by bill outcome, replacing the prior flat 1.0
-# per cosponsorship. Calibrated 2026-07 against the live Senate/House
-# cosponsorship-enrichment corpus (see PR description for the population
-# breakdown): most recently-sponsored bills never advance within the
-# 2-year window this data is sampled from, so a stalled bill still needs a
-# real (non-zero) weight to avoid collapsing the matrix into near-total
-# sparsity — it remains genuine evidence of a cosponsorship relationship,
-# just weaker evidence of productive collaboration than a bill that
-# cleared a real procedural hurdle. Same [floor, 1.0] shape as every other
-# calibrated scale in this codebase (e.g. score_calculator.py's
-# volume_factor): stalled is not zeroed out, just discounted.
-ENACTED_EDGE_WEIGHT = 1.0
-ADVANCED_EDGE_WEIGHT = 0.6
-STALLED_EDGE_WEIGHT = 0.3
+# Cosponsorship-edge weights by bill outcome (enacted, advanced, stalled):
+# how much one cosponsorship counts toward the sponsor's leadership.
+# Generated data, never typed (AGENTS.md section 3a): fitted by
+# scripts/calibrate_sponsorship_edge_weights.py on GovInfo's Bill Status
+# files, scored on how well a member's leadership in one Congress ranks the
+# legislation they get advanced in the next, and refit by data_refresh once
+# a Congress ends, installed only when it beats the weights in use forward
+# in time. A stalled bill keeps a weight: it is still evidence of a
+# cosponsorship relationship. One set per chamber: each chamber's
+# leadership is its own network, and a refit replaces a chamber's weights
+# only where it beats them.
+EDGE_WEIGHTS_FILE = "sponsorship_edge_weights.json"
 
 
-def _cosponsorship_edge_weight(bill: dict) -> float | None:
+def edge_weights(chamber: str) -> tuple[float, float, float]:
+    """(enacted, advanced, stalled) for `chamber` ("senate" or "house")
+    from the copy in use."""
+    from app import data_refresh
+
+    w = (data_refresh.read(EDGE_WEIGHTS_FILE).get("chambers") or {})[chamber]
+    return float(w["enacted"]), float(w["advanced"]), float(w["stalled"])
+
+
+def _cosponsorship_edge_weight(bill: dict, weights: tuple[float, float, float]) -> float | None:
     """How much a single cosponsorship of `bill` should count toward
     Legislative Leadership's PageRank — see the weight tiers' calibration
     note. None when the bill carries no outcome data at all (an enrichment
     path that doesn't fetch isLaw/latestAction); see _edge_weight_fn."""
+    enacted, advanced, stalled = weights
     if bill.get("isLaw"):
-        return ENACTED_EDGE_WEIGHT
+        return enacted
     action = bill.get("latestAction")
     if action is None:
         return None
     if any(kw in action.lower() for kw in _ADVANCEMENT_ACTION_KEYWORDS):
-        return ADVANCED_EDGE_WEIGHT
-    return STALLED_EDGE_WEIGHT
+        return advanced
+    return stalled
 
 
-def _edge_weight_fn(bills_data: list[dict]):
+def _edge_weight_fn(bills_data: list[dict], chamber: str):
     """_cosponsorship_edge_weight with unknown outcomes filled by the mean
     weight of this run's bills whose outcome IS known.
 
@@ -83,11 +91,12 @@ def _edge_weight_fn(bills_data: list[dict]):
     maximum — so a sponsor whose bills came through the outcome-less path
     looked like one whose bills all became law. Missing data should be
     neutral: the typical known bill, not the best case (or the worst)."""
-    known = [w for w in (_cosponsorship_edge_weight(b) for b in bills_data) if w is not None]
-    default = sum(known) / len(known) if known else ENACTED_EDGE_WEIGHT
+    weights = edge_weights(chamber)
+    known = [w for w in (_cosponsorship_edge_weight(b, weights) for b in bills_data) if w is not None]
+    default = sum(known) / len(known) if known else weights[0]
 
     def weight(bill: dict) -> float:
-        w = _cosponsorship_edge_weight(bill)
+        w = _cosponsorship_edge_weight(bill, weights)
         return default if w is None else w
 
     return weight
@@ -110,7 +119,7 @@ def _build_cosponsorship_matrix(
             current cohort.
         weight_fn: optional bill dict -> float, applied per cosponsorship
             edge (defaults to a flat 1.0 for every edge). Leadership/
-            PageRank passes _edge_weight_fn(bills_data); Ideology/SVD
+            PageRank passes _edge_weight_fn(bills_data, chamber); Ideology/SVD
             intentionally leaves this at the default — see module
             docstring for why.
 
@@ -189,28 +198,13 @@ def _rescale(u: np.ndarray, log_scale: bool = False) -> list[float]:
     return [float(v) for v in u]
 
 
-def compute_leadership_scores(
-    bills_data: list[dict],
-    cosponsors_map: dict[str, list[dict]],
-    senator_bioguide_ids: set[str],
-    senator_parties: dict[str, str] | None = None,
-) -> dict[str, float]:
-    """Compute PageRank-based legislative leadership scores.
-
-    Returns a dict mapping bioguideId → leadership score (0.0 to 1.0).
-    Higher values indicate senators whose bills attract more cosponsors
-    from other influential senators (Brin & Page 1998).
-    """
-    if len(senator_bioguide_ids) < 5:
-        return {}
-
-    id_to_row, n, P = _build_cosponsorship_matrix(
-        bills_data, cosponsors_map, senator_bioguide_ids,
-        weight_fn=_edge_weight_fn(bills_data),
-    )
-    if n < 5:
-        return {}
-
+def pagerank(P: np.ndarray) -> np.ndarray:
+    """The stationary distribution of the cosponsorship matrix's columns
+    as a Markov chain (damping 0.85; a column holding less than 10 is
+    topped up evenly first, so a member with few cosponsorships is not
+    read as a sink). Also run by scripts/calibrate_sponsorship_edge_weights.py,
+    so the weights are fitted on exactly this ranking."""
+    n = P.shape[0]
     P_pr = np.copy(P)
     min_data = 10.0
     for col in range(n):
@@ -231,8 +225,35 @@ def compute_leadership_scores(
         if np.sum(np.abs(y - x)) < 1e-10:
             break
         x = y
+    return x.flatten()
 
-    scores = _rescale(x.flatten(), log_scale=True)
+
+def compute_leadership_scores(
+    bills_data: list[dict],
+    cosponsors_map: dict[str, list[dict]],
+    senator_bioguide_ids: set[str],
+    senator_parties: dict[str, str] | None = None,
+    *,
+    chamber: str,
+) -> dict[str, float]:
+    """Compute PageRank-based legislative leadership scores, with
+    `chamber`'s cosponsorship edge weights.
+
+    Returns a dict mapping bioguideId → leadership score (0.0 to 1.0).
+    Higher values indicate senators whose bills attract more cosponsors
+    from other influential senators (Brin & Page 1998).
+    """
+    if len(senator_bioguide_ids) < 5:
+        return {}
+
+    id_to_row, n, P = _build_cosponsorship_matrix(
+        bills_data, cosponsors_map, senator_bioguide_ids,
+        weight_fn=_edge_weight_fn(bills_data, chamber),
+    )
+    if n < 5:
+        return {}
+
+    scores = _rescale(pagerank(P), log_scale=True)
 
     row_to_id = {v: k for k, v in id_to_row.items()}
     return {row_to_id[i]: scores[i] for i in range(n) if row_to_id[i] in senator_bioguide_ids}
