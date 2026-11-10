@@ -34,6 +34,12 @@ class TestBundledRecordings:
         assert readiness.load_recording(state) is not None
         assert await readiness.self_check(db_session, None, state, DAY) is None
 
+    async def test_delawares_recording_accounts_for_its_at_large_seat(self, db_session):
+        db_session.add(Race(id="2026-HOUSE-DE-0", cycle_year=2026, office="H", state="DE", district=0))
+        db_session.flush()
+        assert readiness.load_recording("DE") is not None
+        assert await readiness.self_check(db_session, None, "DE", DAY) is None
+
     async def test_a_reader_that_stops_reading_its_recording_fails(self, db_session, monkeypatch):
         _house_races(db_session, "MT", 2)
         from app.pipeline.fetch import state_candidates_totalvote as tv

@@ -280,6 +280,7 @@ def _readers() -> dict:
     from app.pipeline.fetch import (
         state_candidates_clarity,
         state_candidates_ct,
+        state_candidates_de,
         state_candidates_enhanced_voting,
         state_candidates_fl_enight,
         state_candidates_hi,
@@ -309,6 +310,7 @@ def _readers() -> dict:
         "hi_summary": state_candidates_hi.fetch_general_results,
         "nc_enr": state_candidates_nc_enr.fetch_general_results,
         "ct_enr": state_candidates_ct.fetch_general_results,
+        "de_enr": state_candidates_de.fetch_general_results,
     }
 
 

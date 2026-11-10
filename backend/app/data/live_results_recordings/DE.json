@@ -1,0 +1,23 @@
+{
+ "_source": "Bundled first-install recording (live_results/readiness.py): the Delaware Department of Elections' results index and statewide results file for its 2026-11-03 general, read through the live reader on 2026-11-10 (earlier generals' files are not kept: GE2024's answered 404). The index is cut to its links to election pages and the results file to its federal contests.",
+ "state": "DE",
+ "election_day": "2026-11-03",
+ "responses": {
+  "https://elections.delaware.gov/results/": {
+   "status": 200,
+   "headers": {
+    "content-type": "text/html; charset=UTF-8",
+    "last-modified": "Fri, 30 Oct 2026 18:31:07 GMT"
+   },
+   "body": "<html><body><a href=\"/results/enr/GE2026.html\">results</a><a href=\"/results/enr/PR2026.html\">results</a></body></html>"
+  },
+  "https://elections.delaware.gov/results/enr/Election_StatewideResults_ID_GE2026.json": {
+   "status": 200,
+   "headers": {
+    "content-type": "application/json",
+    "last-modified": "Wed, 04 Nov 2026 08:08:30 GMT"
+   },
+   "body": "[{\"Election Id\": \"GE2026\", \"Election Name\": \"2026 General Election\", \"Election Date\": \"2026-11-03\", \"Results Type\": \"UNOFFICIAL RESULTS\", \"Total Precincts\": 530, \"Precincts Reported\": 530, \"Party Id\": 9, \"Party Name\": \"Democratic Party\", \"Contest Sorting Order\": 200, \"Contest Title\": \"U.S. Senator\", \"Candidate Id\": 13804, \"Candidate Name\": \"CHRIS COONS\", \"Pos\": 1, \"Machine Votes\": \"140,652\", \"Absentee Votes\": \"15,884\", \"Early Voting Votes\": \"83,811\", \"Total Votes\": \"240,347\", \"Percentage\": 63.57, \"ReportTime\": \"2026-11-04T03:03:18.364-05:00\"}, {\"Election Id\": \"GE2026\", \"Election Name\": \"2026 General Election\", \"Election Date\": \"2026-11-03\", \"Results Type\": \"UNOFFICIAL RESULTS\", \"Total Precincts\": 530, \"Precincts Reported\": 530, \"Party Id\": 10, \"Party Name\": \"Republican Party\", \"Contest Sorting Order\": 200, \"Contest Title\": \"U.S. Senator\", \"Candidate Id\": 27597, \"Candidate Name\": \"MICHAEL \\\"DR. MIKE\\\" KATZ\", \"Pos\": 2, \"Machine Votes\": \"89,191\", \"Absentee Votes\": \"4,435\", \"Early Voting Votes\": \"44,138\", \"Total Votes\": \"137,764\", \"Percentage\": 36.43, \"ReportTime\": \"2026-11-04T03:03:18.364-05:00\"}, {\"Election Id\": \"GE2026\", \"Election Name\": \"2026 General Election\", \"Election Date\": \"2026-11-03\", \"Results Type\": \"UNOFFICIAL RESULTS\", \"Total Precincts\": 530, \"Precincts Reported\": 530, \"Party Id\": 9, \"Party Name\": \"Democratic Party\", \"Contest Sorting Order\": 300, \"Contest Title\": \"Representative In Congress\", \"Candidate Id\": 88611, \"Candidate Name\": \"SARAH MCBRIDE\", \"Pos\": 1, \"Machine Votes\": \"142,513\", \"Absentee Votes\": \"16,045\", \"Early Voting Votes\": \"84,909\", \"Total Votes\": \"243,467\", \"Percentage\": 64.34, \"ReportTime\": \"2026-11-04T03:03:18.364-05:00\"}, {\"Election Id\": \"GE2026\", \"Election Name\": \"2026 General Election\", \"Election Date\": \"2026-11-03\", \"Results Type\": \"UNOFFICIAL RESULTS\", \"Total Precincts\": 530, \"Precincts Reported\": 530, \"Party Id\": 10, \"Party Name\": \"Republican Party\", \"Contest Sorting Order\": 300, \"Contest Title\": \"Representative In Congress\", \"Candidate Id\": 102404, \"Candidate Name\": \"JOSEPH \\\"DR. JOE\\\" ARMINIO\", \"Pos\": 2, \"Machine Votes\": \"87,127\", \"Absentee Votes\": \"4,402\", \"Early Voting Votes\": \"43,437\", \"Total Votes\": \"134,966\", \"Percentage\": 35.66, \"ReportTime\": \"2026-11-04T03:03:18.364-05:00\"}]"
+  }
+ }
+}
