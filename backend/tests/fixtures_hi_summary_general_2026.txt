@@ -1,0 +1,10 @@
+#FormatVersion 1																				
+#Contest ID	Contest Title	Contest Seq Nbr	Contest Type	Contest Party	Mail Blank Votes	In-Person Blank Votes	Mail Over Votes	In-Person Over Votes	Mail Invalid Votes	In-Person Invalid Votes	Registered Voters	Total Precincts	Counted Precincts	Candidate ID	Candidate Name	Candidate Seq Nbr	Candidate Party	Mail Votes	In-Person Votes	Total Votes
+30	"U.S. Representative, Dist I"	1	OF		9333	189	382	13	0	0	853399	223	112	4	"(D) CASE, Ed"	2		123016	3006	126022
+30	"U.S. Representative, Dist I"	1	OF		9333	189	382	13	0	0	853399	223	112	3	"(R) LAM, Adriel C."	4		37162	3073	40235
+30	"U.S. Representative, Dist I"	1	OF		9333	189	382	13	0	0	853399	223	112	1	"(G) CONLEY, Jordan S."	3		6589	388	6977
+30	"U.S. Representative, Dist I"	1	OF		9333	189	382	13	0	0	853399	223	112	2	"(N) BERNING, Nathan M."	1		2176	165	2341
+5	"U.S. Representative, Dist II"	2	OF		10357	393	288	4	0	0	853399	273	137	1	"(D) TOKUDA, Jill N."	2		125159	4369	129528
+5	"U.S. Representative, Dist II"	2	OF		10357	393	288	4	0	0	853399	273	137	2	"(R) AWA, Brenton"	1		59279	5910	65189
+6	"State Senator, Dist 2"	4	OF		832	73	15	0	0	0	853399	18	9	1	"(D) SAN BUENAVENTURA, Joy"	2		10402	430	10832
+6	"State Senator, Dist 2"	4	OF		832	73	15	0	0	0	853399	18	9	2	"(L) FOGEL, Frederick F."	1		2541	352	2893

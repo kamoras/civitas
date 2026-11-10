@@ -121,8 +121,8 @@ import pdfplumber
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     DiscoveryFailed,
-    clean_display_name,
     federal_record,
+    first_last,
     normalize_party,
     parse_office,
     parse_statewide_office,
@@ -293,17 +293,6 @@ def _municipality_choices(rows: list[dict]) -> list[tuple[str, int]]:
     return list(totals.items())
 
 
-def _first_last(name: str) -> str:
-    """Maine's "LAST, FIRST MIDDLE[, SUFFIX]" ("Doe, Jane M.", "Roe,
-    John, III") in reading order ("Jane M. Doe", "John Roe III"),
-    otherwise verbatim — the whole printed name a statewide nominee is
-    shown under, where a federal one only needs the surname."""
-    parts = [p.strip() for p in (name or "").split(",")]
-    if len(parts) < 2:
-        return clean_display_name(name)
-    return clean_display_name(" ".join([parts[1], parts[0], *parts[2:]]))
-
-
 def _pdf_text(content: bytes) -> str:
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
@@ -391,7 +380,7 @@ async def fetch_confirmed_candidates(
                 else:
                     # A statewide nominee has no FEC row to match, so the
                     # whole name is kept, as the tabulation printed it.
-                    name = _first_last(winner)
+                    name = first_last(winner)
                     record = {"office": office, "district": district, "party": party,
                               "last_name": name} if name else None
                 if record:
@@ -408,5 +397,5 @@ async def fetch_confirmed_candidates(
     )
     # A two-candidate (or one-candidate) statewide primary is posted as a
     # plain count, like the federal ones: same tie-safe pick, whole name.
-    results.extend(resolve_confirmed_nominees(statewide_by_seat, None, name_transform=_first_last))
+    results.extend(resolve_confirmed_nominees(statewide_by_seat, None, name_transform=first_last))
     return results

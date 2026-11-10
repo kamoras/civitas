@@ -289,10 +289,10 @@ class TestGovernorRcvWinners:
         assert me._parse_rcv_summary(me._pdf_text(GOV_REP_PDF)) == "Charles, Robert B."
 
     def test_names_are_put_in_reading_order(self):
-        assert me._first_last("Pingree, Hannah M.") == "Hannah M. Pingree"
-        assert me._first_last("King, Angus, III") == "Angus King III"
-        assert me._first_last("PINGREE, HANNAH M") == "HANNAH M PINGREE"
-        assert me._first_last("Plain Name") == "Plain Name"
+        assert me.first_last("Pingree, Hannah M.") == "Hannah M. Pingree"
+        assert me.first_last("King, Angus, III") == "Angus King III"
+        assert me.first_last("PINGREE, HANNAH M") == "HANNAH M PINGREE"
+        assert me.first_last("Plain Name") == "Plain Name"
 
 
 class TestFetchWithStatewideOffices:
