@@ -1,0 +1,333 @@
+{
+ "ElectionDates.htm": {
+  "Dates": {
+   "DefaultElectionDate": "11/03/2026",
+   "Date": [
+    {
+     "PKElectionID": "344",
+     "ElectionDate": "11/03/2026",
+     "Order": "1",
+     "ResultsOfficial": "0",
+     "PostElectionStatsAvailable": "0",
+     "DisplayTurnoutStats": "1",
+     "RaceStatsExist": "1",
+     "PWPStatsExist": "1",
+     "CONG_MapName": "CONG_2011",
+     "SEN_MapName": "SEN_2011",
+     "REP_MapName": "REP_2011"
+    },
+    {
+     "PKElectionID": "343",
+     "ElectionDate": "06/27/2026",
+     "Order": "2",
+     "ResultsOfficial": "1",
+     "PostElectionStatsAvailable": "1",
+     "DisplayTurnoutStats": "0",
+     "RaceStatsExist": "1",
+     "PWPStatsExist": "1",
+     "CONG_MapName": "CONG_2011",
+     "SEN_MapName": "SEN_2011",
+     "REP_MapName": "REP_2011"
+    }
+   ]
+  }
+ },
+ "20261103/RacesCandidates_Multiparish.htm": {
+  "Races": {
+   "WriteTime": "2026-11-09T09:59:20.137",
+   "Race": [
+    {
+     "ID": "67997",
+     "SpecificTitle": "U. S. Senator",
+     "GeneralTitle": "U.S. Senator",
+     "OfficeLevel": "140",
+     "IsPresidentialNominee": "0",
+     "IsMultiParish": "1",
+     "NumberToBeElected": "1",
+     "SummaryText": null,
+     "FullText": null,
+     "IsClosedParty": "0",
+     "CanHaveRunoff": "0",
+     "Choice": [
+      {
+       "Color": "0x8970cb",
+       "ID": "124654",
+       "Desc": "\"Jamie\" Davis (DEM)"
+      },
+      {
+       "Color": "0xb6dc6b",
+       "ID": "124655",
+       "Desc": "Julia Letlow (REP)"
+      }
+     ]
+    },
+    {
+     "ID": "70195",
+     "SpecificTitle": "U. S. Representative -- 1st Congressional District",
+     "GeneralTitle": "U.S. Representative",
+     "OfficeLevel": "145",
+     "IsPresidentialNominee": "0",
+     "IsMultiParish": "1",
+     "NumberToBeElected": "1",
+     "SummaryText": null,
+     "FullText": null,
+     "IsClosedParty": "0",
+     "CanHaveRunoff": "1",
+     "Choice": [
+      {
+       "Color": "0x8970cb",
+       "ID": "124838",
+       "Desc": "Randall Arrington (REP)"
+      },
+      {
+       "Color": "0xb6dc6b",
+       "ID": "128364",
+       "Desc": "E. \"Liddy\" Glass (NOPTY)"
+      },
+      {
+       "Color": "0xffec6c",
+       "ID": "124814",
+       "Desc": "Lauren Jewett (DEM)"
+      },
+      {
+       "Color": "0xff836b",
+       "ID": "128488",
+       "Desc": "Steve Scalise (REP)"
+      }
+     ]
+    },
+    {
+     "ID": "70199",
+     "SpecificTitle": "U. S. Representative -- 5th Congressional District",
+     "GeneralTitle": "U.S. Representative",
+     "OfficeLevel": "145",
+     "IsPresidentialNominee": "0",
+     "IsMultiParish": "1",
+     "NumberToBeElected": "1",
+     "SummaryText": null,
+     "FullText": null,
+     "IsClosedParty": "0",
+     "CanHaveRunoff": "1",
+     "Choice": [
+      {
+       "Color": "0x8970cb",
+       "ID": "125294",
+       "Desc": "Stewart Cathey, Jr. (REP)"
+      },
+      {
+       "Color": "0xb6dc6b",
+       "ID": "127858",
+       "Desc": "Misti Cordell (REP)"
+      },
+      {
+       "Color": "0xffec6c",
+       "ID": "127807",
+       "Desc": "Oscar \"Omar\" Dantzler (REP)"
+      },
+      {
+       "Color": "0xff836b",
+       "ID": "124686",
+       "Desc": "Michael Echols (REP)"
+      },
+      {
+       "Color": "0xa20017",
+       "ID": "125503",
+       "Desc": "\"Gabe\" Firment (REP)"
+      },
+      {
+       "Color": "0x81b1d5",
+       "ID": "126355",
+       "Desc": "Austin Magee (REP)"
+      },
+      {
+       "Color": "0x009899",
+       "ID": "125791",
+       "Desc": "Dan McKay (DEM)"
+      },
+      {
+       "Color": "0xed1b24",
+       "ID": "128703",
+       "Desc": "Patricia \"Pat\" Moore (DEM)"
+      },
+      {
+       "Color": "0x2db04a",
+       "ID": "128161",
+       "Desc": "Antonio Wilson (DEM)"
+      }
+     ]
+    },
+    {
+     "ID": "67989",
+     "SpecificTitle": "PSC -- District 1",
+     "GeneralTitle": "Public Service Commission Member",
+     "OfficeLevel": "160",
+     "IsPresidentialNominee": "0",
+     "IsMultiParish": "1",
+     "NumberToBeElected": "1",
+     "SummaryText": null,
+     "FullText": null,
+     "IsClosedParty": "0",
+     "CanHaveRunoff": "0",
+     "Choice": [
+      {
+       "Color": "0x8970cb",
+       "ID": "124653",
+       "Desc": "Stephanie Hilferty (REP)"
+      },
+      {
+       "Color": "0xb6dc6b",
+       "ID": "124524",
+       "Desc": "Christopher \"Chris\" Justin (NOPTY)"
+      },
+      {
+       "Color": "0xffec6c",
+       "ID": "124641",
+       "Desc": "Connie Norris (DEM)"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "20261103/Votes_Multiparish.htm": {
+  "Races": {
+   "VersionDateTime": "1900-01-01T00:00:00",
+   "Race": [
+    {
+     "ID": "67997",
+     "PrecinctsReporting": "3722",
+     "PrecinctsExpected": "3722",
+     "NumAbsenteeReporting": "64",
+     "NumAbsenteeExpected": "64",
+     "VoterCountQualified": "2975700",
+     "VoterCountVoted": "0",
+     "Choice": [
+      {
+       "ID": "124654",
+       "VoteTotal": "720150",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "124655",
+       "VoteTotal": "746000",
+       "Outcome": "Elected"
+      }
+     ]
+    },
+    {
+     "ID": "70195",
+     "PrecinctsReporting": "522",
+     "PrecinctsExpected": "522",
+     "NumAbsenteeReporting": "8",
+     "NumAbsenteeExpected": "8",
+     "VoterCountQualified": "514970",
+     "VoterCountVoted": "0",
+     "Choice": [
+      {
+       "ID": "124838",
+       "VoteTotal": "9776",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "128364",
+       "VoteTotal": "4279",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "124814",
+       "VoteTotal": "89428",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "128488",
+       "VoteTotal": "159892",
+       "Outcome": "Elected"
+      }
+     ]
+    },
+    {
+     "ID": "70199",
+     "PrecinctsReporting": "791",
+     "PrecinctsExpected": "791",
+     "NumAbsenteeReporting": "24",
+     "NumAbsenteeExpected": "24",
+     "VoterCountQualified": "483703",
+     "VoterCountVoted": "0",
+     "Choice": [
+      {
+       "ID": "125294",
+       "VoteTotal": "28168",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "127858",
+       "VoteTotal": "33371",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "127807",
+       "VoteTotal": "2233",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "124686",
+       "VoteTotal": "32905",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "125503",
+       "VoteTotal": "39126",
+       "Outcome": "Runoff"
+      },
+      {
+       "ID": "126355",
+       "VoteTotal": "7910",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "125791",
+       "VoteTotal": "16051",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "128703",
+       "VoteTotal": "40786",
+       "Outcome": "Runoff"
+      },
+      {
+       "ID": "128161",
+       "VoteTotal": "27371",
+       "Outcome": "Defeated"
+      }
+     ]
+    },
+    {
+     "ID": "67989",
+     "PrecinctsReporting": "608",
+     "PrecinctsExpected": "608",
+     "NumAbsenteeReporting": "10",
+     "NumAbsenteeExpected": "10",
+     "VoterCountQualified": "602571",
+     "VoterCountVoted": "0",
+     "Choice": [
+      {
+       "ID": "124641",
+       "VoteTotal": "83259",
+       "Outcome": "Defeated"
+      },
+      {
+       "ID": "124653",
+       "VoteTotal": "176505",
+       "Outcome": "Elected"
+      },
+      {
+       "ID": "124524",
+       "VoteTotal": "39984",
+       "Outcome": "Defeated"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
