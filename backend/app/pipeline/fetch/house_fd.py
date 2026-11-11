@@ -46,6 +46,7 @@ from app.pipeline.fetch.fd_common import (
     until_deadline,
 )
 from app.pipeline.fetch.house_ptr import download_pdf, fetch_filing_index
+from app.pipeline.fetch.pdf_lines import group_lines
 from app.pipeline.fetch.ptr_common import owner_from_cell
 
 logger = logging.getLogger(__name__)
@@ -93,13 +94,7 @@ _LINE_TOLERANCE = 2.0
 
 
 def _group_lines(words: list[dict]) -> list[list[dict]]:
-    lines: list[list[dict]] = []
-    for word in sorted(words, key=lambda w: (w["top"], w["x0"])):
-        if lines and abs(word["top"] - lines[-1][0]["top"]) <= _LINE_TOLERANCE:
-            lines[-1].append(word)
-        else:
-            lines.append([word])
-    return [sorted(line, key=lambda w: w["x0"]) for line in lines]
+    return group_lines(words, _LINE_TOLERANCE)
 
 
 class _OpenRow:

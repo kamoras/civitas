@@ -77,6 +77,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked, join_lines
+from app.pipeline.fetch.pdf_lines import group_lines
 from app.pipeline.fetch.ballot_measures_state_common import (
     election_day,
     get_bytes,
@@ -170,13 +171,7 @@ def find_booklet_url(page_html: str, year: int) -> tuple[str | None, bool]:
 
 
 def _lines(words: list[dict]) -> list[list[dict]]:
-    lines: list[list[dict]] = []
-    for w in sorted(words, key=lambda w: (w["top"], w["x0"])):
-        if lines and abs(lines[-1][0]["top"] - w["top"]) <= _LINE_TOL:
-            lines[-1].append(w)
-        else:
-            lines.append([w])
-    return [sorted(line, key=lambda w: w["x0"]) for line in lines]
+    return group_lines(words, _LINE_TOL)
 
 
 def column_lines(page: dict) -> list[tuple[float, list[dict]]] | None:

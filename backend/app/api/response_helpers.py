@@ -121,7 +121,9 @@ PRESIDENT_DIMENSION_LABELS = {
 }
 
 
-def _facts(stored: str | None) -> dict | None:
+def snapshot_facts(stored: str | None) -> dict | None:
+    """A snapshot's measures (models.ScoreSnapshot.facts), or None for one
+    recorded before they were kept."""
     try:
         facts = json.loads(stored or "null")
     except (TypeError, ValueError):
@@ -169,7 +171,7 @@ def score_history_json(
                 },
                 # The measures' figures on the day (app/measures.py), or
                 # None for a snapshot recorded before they were kept.
-                "facts": _facts(s.facts),
+                "facts": snapshot_facts(s.facts),
             }
             for s in snapshots
         ]

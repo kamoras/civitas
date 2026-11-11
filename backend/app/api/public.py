@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session
 
 from app.api.rate_limit import PUBLIC_READ_LIMIT, PublicReadLimit
 from app.api.response_helpers import (
+    snapshot_facts,
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
@@ -432,16 +433,6 @@ def _method(snapshot: ScoreSnapshot | None) -> dict:
     return {"algorithmVersion": m["algorithm_version"], "scoredOn": m["scored_on"]}
 
 
-def _snapshot_facts(stored: str | None) -> dict | None:
-    """A snapshot's measures (models.ScoreSnapshot.facts), or None for one
-    recorded before they were kept."""
-    try:
-        facts = json.loads(stored or "null")
-    except (TypeError, ValueError):
-        return None
-    return facts if isinstance(facts, dict) else None
-
-
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
     member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
@@ -466,7 +457,7 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
                     "fundingDiversity": round(s.score_4, 1),
                     "legislativeEffectiveness": round(s.score_5, 1),
                     "algorithmVersion": s.algorithm_version,
-                    "facts": _snapshot_facts(s.facts),
+                    "facts": snapshot_facts(s.facts),
                 }
                 for s in snapshots
             ],

@@ -78,7 +78,6 @@ CACHE_TTL_S = 20 * 3600
 _answers: dict[str, tuple[float, list[dict]]] = {}
 # The same answers on the database, so a restart (a deploy) doesn't ask again.
 ANSWER_TIER = "google_civic_voterinfo"
-SOURCE_NAME = "the Voting Information Project (Google Civic Information API)"
 # A state whose first few placed points carry no contests has no VIP ballot
 # loaded. A point Google fails to place ("Failed to parse address", about
 # half of them, measured 2026-10-29) is no answer and doesn't count: three
