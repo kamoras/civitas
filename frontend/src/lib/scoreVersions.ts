@@ -35,7 +35,7 @@ export interface ScoreVersion {
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.39",
-    date: "2026-11-10",
+    date: "2026-11-11",
     title: "Senate leadership weights a cosponsorship by whether the bill became law",
     tldr: "Leadership counts how a member's bills draw cosponsors, with a bill that never moved counting less. How much less had no source. It is now fitted on six Congresses of bills: in the Senate a bill that became law counts far more than one that didn't, which better predicts whose legislation moves next Congress; the House's weights stay as they were.",
     changes: [
