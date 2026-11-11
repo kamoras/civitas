@@ -5,9 +5,6 @@ import math
 import pytest
 
 from app.pipeline.analyze.sponsorship_analysis import (
-    ADVANCED_EDGE_WEIGHT,
-    ENACTED_EDGE_WEIGHT,
-    STALLED_EDGE_WEIGHT,
     _build_cosponsorship_matrix,
     _cosponsorship_edge_weight,
     _edge_weight_fn,
@@ -16,8 +13,13 @@ from app.pipeline.analyze.sponsorship_analysis import (
     compute_ideology_scores,
     compute_leadership_scores,
     describe_senator_position,
+    edge_weights,
     party_ideology_bounds,
 )
+
+# Weights to test the tiers with, apart from the fitted ones in use.
+WEIGHTS = (1.0, 0.6, 0.3)
+ENACTED_EDGE_WEIGHT, ADVANCED_EDGE_WEIGHT, STALLED_EDGE_WEIGHT = WEIGHTS
 
 
 # ---------- helpers ----------
@@ -64,7 +66,7 @@ class TestCosponsorshipEdgeWeight:
     )
     def test_edge_weight(self, is_law, latest_action, expected):
         bill = {"isLaw": is_law, "latestAction": latest_action}
-        assert _cosponsorship_edge_weight(bill) == expected
+        assert _cosponsorship_edge_weight(bill, WEIGHTS) == expected
 
     def test_unknown_outcome_gets_the_mean_known_weight_not_the_maximum(self):
         """A bill with no outcome data used to count as ENACTED — the
@@ -75,14 +77,15 @@ class TestCosponsorshipEdgeWeight:
             {"isLaw": False, "latestAction": "Referred to the Committee on Finance."},
             {"isLaw": False, "latestAction": None},
         ]
-        weight = _edge_weight_fn(bills)
-        assert weight(bills[2]) == pytest.approx((ENACTED_EDGE_WEIGHT + STALLED_EDGE_WEIGHT) / 2)
-        assert weight(bills[0]) == ENACTED_EDGE_WEIGHT
-        assert weight(bills[1]) == STALLED_EDGE_WEIGHT
+        enacted, _, stalled = edge_weights("senate")
+        weight = _edge_weight_fn(bills, "senate")
+        assert weight(bills[2]) == pytest.approx((enacted + stalled) / 2)
+        assert weight(bills[0]) == enacted
+        assert weight(bills[1]) == stalled
 
     def test_all_unknown_is_a_uniform_weight(self):
-        weight = _edge_weight_fn([{"latestAction": None}, {"latestAction": None}])
-        assert weight({"latestAction": None}) == ENACTED_EDGE_WEIGHT
+        weight = _edge_weight_fn([{"latestAction": None}, {"latestAction": None}], "house")
+        assert weight({"latestAction": None}) == edge_weights("house")[0]
 
     def test_known_accepted_false_positive_pattern(self):
         """O7 disclosed exception: real production measurement (1366
@@ -100,7 +103,7 @@ class TestCosponsorshipEdgeWeight:
                 "225) agreed to in Senate by Yea-Nay Vote. 50 - 49."
             ),
         }
-        assert _cosponsorship_edge_weight(bill) == ADVANCED_EDGE_WEIGHT
+        assert _cosponsorship_edge_weight(bill, WEIGHTS) == ADVANCED_EDGE_WEIGHT
 
 
 # ---------- matrix construction ----------
@@ -139,7 +142,7 @@ class TestBuildCosponsorshipMatrix:
         bills[0]["latestAction"] = "Referred to the Committee on Finance."
         id_to_row, n, P = _build_cosponsorship_matrix(
             bills, cosponsors, {"A001", "B002"},
-            weight_fn=_cosponsorship_edge_weight,
+            weight_fn=lambda bill: _cosponsorship_edge_weight(bill, WEIGHTS),
         )
         sponsor_row = id_to_row["A001"]
         cosponsor_row = id_to_row["B002"]
@@ -197,7 +200,7 @@ class TestLeadership:
     def test_too_few_senators(self):
         bills, cosponsors = _make_bills_and_cosponsors({"A001": ["B002"]})
         result = compute_leadership_scores(
-            bills, cosponsors, {"A001", "B002"},
+            bills, cosponsors, {"A001", "B002"}, chamber="senate",
         )
         assert result == {}
 
@@ -213,7 +216,7 @@ class TestLeadership:
             if s != leader:
                 sponsor_map[s] = []
         bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
-        result = compute_leadership_scores(bills, cosponsors, senators)
+        result = compute_leadership_scores(bills, cosponsors, senators, chamber="senate")
         assert len(result) == 10
         assert result[leader] > 0.5
 
@@ -222,7 +225,7 @@ class TestLeadership:
         sponsor_map = {s: [] for s in senators}
         sponsor_map["S000"] = ["S001", "S002"]
         bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
-        result = compute_leadership_scores(bills, cosponsors, senators)
+        result = compute_leadership_scores(bills, cosponsors, senators, chamber="senate")
         assert set(result.keys()) == senators
 
     def test_advancing_bills_outrank_message_bills_at_equal_cosponsor_count(self):
@@ -253,7 +256,7 @@ class TestLeadership:
             })
             cosponsors_map[stalled_id] = [{"bioguideId": c} for c in cosponsor_pool]
 
-        result = compute_leadership_scores(bills_data, cosponsors_map, senators)
+        result = compute_leadership_scores(bills_data, cosponsors_map, senators, chamber="senate")
         assert result["LAWMAKER"] > result["MESSENGER"]
 
 

@@ -34,6 +34,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.39",
+    date: "2026-11-10",
+    title: "Senate leadership weights a cosponsorship by whether the bill became law",
+    tldr: "Leadership counts how a member's bills draw cosponsors, with a bill that never moved counting less. How much less had no source. It is now fitted on six Congresses of bills: in the Senate a bill that became law counts far more than one that didn't, which better predicts whose legislation moves next Congress; the House's weights stay as they were.",
+    changes: [
+      "Weights are fitted per chamber by scripts/calibrate_sponsorship_edge_weights.py on GovInfo's bill records for the 113th to 118th Congresses, scored on how well a member's leadership ranks, within their party, the bills they get advanced in the next Congress (docs/methodology/member-score/v6.39.md).",
+      "Senate: enacted 1.0, advanced 0.1, stalled 0.05 (were 1.0, 0.6 and 0.3), better on each of three held-out Congresses (rank correlation +0.045, SE 0.012). House: no fit did better (+0.000, SE 0.002), so it keeps 1.0, 0.6 and 0.3.",
+      "On the 118th Congress's network the Senate's leadership rankings under the old and new weights correlate 0.94; the median senator moves 3 places. Leadership is one part of Legislative Effectiveness, so scores move less.",
+    ],
+  },
+  {
     version: "President v12",
     date: "2026-10-22",
     title: "The peer economies are the OECD's members before 1994, by rule",

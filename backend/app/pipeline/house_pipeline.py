@@ -756,7 +756,7 @@ async def run_house_pipeline() -> dict:
                     if r.get("bioguideId")
                 }
                 leadership_scores = compute_leadership_scores(
-                    all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+                    all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map, chamber="house",
                 )
                 bipartisanship_scores = compute_bipartisanship_scores(
                     all_bills_for_analysis, cosponsors_map, rep_party_map,

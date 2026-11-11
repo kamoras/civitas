@@ -138,7 +138,12 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
   // count's own tag, which only ever says "leads".
   const tag = won
     ? {
-        text: won.status === "sworn_in" ? "Sworn in" : "Certified winner",
+        text:
+          won.status === "sworn_in"
+            ? "Sworn in"
+            : won.status === "unopposed"
+              ? "Elected unopposed"
+              : "Certified winner",
         className: "border-white/40 text-ink-hi",
       }
     : r

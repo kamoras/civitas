@@ -926,6 +926,36 @@ def _position_confidence_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# Leadership's cosponsorship edge weights (scripts/calibrate_sponsorship_
+# edge_weights.py): refit once a Congress has ended past the newest one the
+# fit scored (its next-Congress outcomes are then complete), and installed
+# only when the refit beats the weights in use forward in time
+# (held_out_beats_in_use). A changed weight is a scoring revision.
+def _edge_weights_due(ctx: Context) -> bool:
+    through = ctx.doc.get("calibrated_through")
+    return isinstance(through, int) and settings.CURRENT_CONGRESS - 1 > through and not ctx.tried_within(30)
+
+
+def _edge_weights_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    for chamber in ("house", "senate"):
+        w = (new.get("chambers") or {}).get(chamber) or {}
+        try:
+            enacted, advanced, stalled = float(w["enacted"]), float(w["advanced"]), float(w["stalled"])
+        except (KeyError, TypeError, ValueError):
+            failures.append(f"{chamber} weights {w!r}")
+            continue
+        if not (enacted == 1.0 and 0.0 <= stalled <= advanced <= enacted):
+            failures.append(f"{chamber} weights {enacted}/{advanced}/{stalled} are not 1 >= advanced >= stalled >= 0")
+        got = len(((new.get("fit") or {}).get(chamber) or {}).get("transitions") or [])
+        had = len(((old.get("fit") or {}).get(chamber) or {}).get("transitions") or [])
+        if got < had:
+            failures.append(f"{chamber}: {got} transitions scored against {had}")
+    if (new.get("calibrated_through") or 0) < (old.get("calibrated_through") or 0):
+        failures.append(f"calibrated through {new.get('calibrated_through')} against {old.get('calibrated_through')}")
+    return failures
+
+
 def _position_inputs(doc: dict) -> object:
     return (doc.get("structure"), {c: v.get("n0") for c, v in (doc.get("chambers") or {}).items()},
             doc.get("reference_votes"), doc.get("uncounted_weight"), doc.get("prior_until_votes"))
@@ -1822,6 +1852,11 @@ DATA_FILES: list[DataFile] = [
                                   "--in-use", "{in_use}", "--out", "{out}"],
              due=_position_confidence_due, gate=_position_confidence_gate, scoring_inputs=_position_inputs,
              heavy=True, timeout_s=6 * 3600),
+    DataFile("sponsorship_edge_weights.json",
+             command=lambda ctx: [PY, _script("calibrate_sponsorship_edge_weights.py"), "--cache", "{tmp}",
+                                  "--in-use", "{in_use}", "--out", "{out}"],
+             due=_edge_weights_due, gate=_edge_weights_gate, accept=held_out_beats_in_use,
+             scoring_inputs=lambda doc: doc.get("chambers"), heavy=True, timeout_s=3 * 3600),
     DataFile("commemorative_calibration.json",
              command=lambda ctx: [PY, _script("calibrate_commemorative.py"), "--cache", "{tmp}", "--in-use",
                                   "{in_use}", "--output", "{out}"],

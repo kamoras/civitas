@@ -1354,3 +1354,9 @@ async def test_state_offices_the_vip_ballot_certified_stay_when_it_cannot_answer
     await sc.sync_confirmed_candidates(db_session, None, 2026)
 
     assert sorted(r.display_name for r in db_session.query(StatewideNominee)) == before
+
+
+def test_florida_list_marks_who_it_lists_as_unopposed():
+    unopposed = {(r["district"], r["display_name"]) for r in parse_canlist(FL_PAGE) if r["unopposed"]}
+    # Valimont's "Unopposed" is her primary's column, not her status.
+    assert unopposed == {(10, "Maxwell Alejandro Frost")}

@@ -681,6 +681,15 @@ export function describeUpdate(event: ResultEvent): UpdateText {
     case "certified_winner": {
       const c = event.detail as unknown as RaceCertification;
       const letter = partyLetter(c.winner?.party);
+      if (c.basis === "unopposed")
+        return {
+          tag: "Unopposed",
+          tone: "official",
+          text: sentence(
+            `Elected unopposed: ${c.winner?.name ?? ""}${letter ? ` (${letter})` : ""}`,
+            "No contest was on the ballot under state law"
+          ),
+        };
       return {
         tag: "Certified",
         tone: "official",
@@ -1097,6 +1106,10 @@ export function certificationText(c: RaceCertification, stateName: string): stri
   switch (c.status) {
     case "sworn_in":
       return `${who} was sworn in for the seat, per the member roster.`;
+    case "unopposed":
+      return `${who} was elected unopposed: ${stateName} law keeps an unopposed candidate off the ballot${
+        c.statute ? ` (${c.statute})` : ""
+      }, so there is no count.`;
     case "certified":
       return `Certified winner: ${who}. ${certified}, and no runoff or recount is pending under state law.`;
     case "runoff":

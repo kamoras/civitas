@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { HouseResultRow, RaceResultCard, statusTag } from "./RaceResult";
-import type { LiveRaceResult } from "@/types/election";
+import {
+  HouseNoCountRow,
+  HouseResultRow,
+  RaceResultCard,
+  SenateNoCountCard,
+  statusTag,
+} from "./RaceResult";
+import type { LiveRaceResult, RaceCertification } from "@/types/election";
 
 afterEach(cleanup);
 
@@ -365,5 +371,59 @@ describe("the count's own words", () => {
     expect(shown.find((el) => el.className.includes("sm:hidden"))!.className).not.toMatch(
       /(^|\s)hidden(\s|$)/
     );
+  });
+});
+
+describe("a seat with a winner on record and no count", () => {
+  const unopposed: RaceCertification = {
+    basis: "unopposed",
+    status: "unopposed",
+    certifiedOn: null,
+    recountUntil: null,
+    statute: "Fla. Stat. 101.151(7)",
+    sourceName: "Florida Division of Elections (candidate list for the general election)",
+    sourceUrl: "https://dos.elections.myflorida.com/candidates/canlist.asp",
+    votesCounted: null,
+    winner: { name: "Maxwell Frost", party: "DEM", candidateId: null },
+    candidates: [],
+  };
+
+  it("names the winner and the law in the House row, tagged unopposed", () => {
+    render(
+      <ol>
+        <HouseNoCountRow
+          raceId="2026-HOUSE-FL-10"
+          state="FL"
+          district={10}
+          certification={unopposed}
+        />
+      </ol>
+    );
+    expect(screen.getByText("Maxwell Frost")).toBeInTheDocument();
+    expect(screen.getByText("Unopposed")).toBeInTheDocument();
+    expect(screen.getByText(/elected unopposed: Florida law/)).toBeInTheDocument();
+    expect(screen.queryByText("No count shown here")).toBeNull();
+  });
+
+  it("keeps the plain no-count row without one", () => {
+    render(
+      <ol>
+        <HouseNoCountRow raceId="2026-HOUSE-FL-11" state="FL" district={11} />
+      </ol>
+    );
+    expect(screen.getByText("No count shown here")).toBeInTheDocument();
+  });
+
+  it("puts a sworn-in member in the Senate card", () => {
+    render(
+      <SenateNoCountCard
+        raceId="2026-SEN-OH"
+        state="OH"
+        isSpecial={false}
+        certification={{ ...unopposed, basis: "sworn_in", status: "sworn_in", statute: null }}
+      />
+    );
+    expect(screen.getByText("Sworn in")).toBeInTheDocument();
+    expect(screen.getByText(/was sworn in for the seat/)).toBeInTheDocument();
   });
 });

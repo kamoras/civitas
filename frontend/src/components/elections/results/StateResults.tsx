@@ -118,6 +118,12 @@ export default function StateResults({
         rows.push({ key: r.raceId, district: r.district ?? 0, raceId: r.raceId, result: r });
     return rows.sort((a, b) => a.district - b.district);
   }, [ballot.houseRaces, byDistrict, house]);
+  // Winners on record with no count (elected unopposed, or sworn in),
+  // by race: shown in place of the race's "no count" line.
+  const certifiedByRace = useMemo(
+    () => new Map((results?.certifiedRaces ?? []).map((r) => [r.raceId, r.certification])),
+    [results]
+  );
   const isLive = !!results?.liveStates.includes(ballot.state);
   const stateName = ballot.stateName ?? ballot.state;
   // Either response can say so; an older backend sends neither.
@@ -356,8 +362,10 @@ export default function StateResults({
           <SenateNoCountCard
             key={row.raceId}
             raceId={row.raceId}
+            state={ballot.state}
             isSpecial={row.isSpecial}
             headingLevel={2}
+            certification={certifiedByRace.get(row.raceId)}
           />
         )
       )}
@@ -394,6 +402,7 @@ export default function StateResults({
                     raceId={row.raceId}
                     state={ballot.state}
                     district={row.district}
+                    certification={certifiedByRace.get(row.raceId)}
                   />
                 )
               )}
