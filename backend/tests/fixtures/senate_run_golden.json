@@ -1,0 +1,1720 @@
+{
+ "donors": [
+  {
+   "committee_type": null,
+   "id": 1,
+   "industry": "LABOR_UNIONS",
+   "name": "National Nurses United PAC",
+   "pac_analysis": null,
+   "pac_industry": null,
+   "pac_sponsor": null,
+   "rank": 1,
+   "senator_id": "alice-adams",
+   "total": 5000.0,
+   "type": "PAC"
+  },
+  {
+   "committee_type": null,
+   "id": 2,
+   "industry": "POLITICAL",
+   "name": "ACME Widgets Inc PAC",
+   "pac_analysis": null,
+   "pac_industry": null,
+   "pac_sponsor": null,
+   "rank": 2,
+   "senator_id": "alice-adams",
+   "total": 2500.0,
+   "type": "PAC"
+  }
+ ],
+ "industry_donations": [
+  {
+   "id": 1,
+   "industry": "LARGE_INDIVIDUAL",
+   "name": "LARGE INDIVIDUAL",
+   "percentage": 56.0,
+   "senator_id": "alice-adams",
+   "total": 500000.0
+  },
+  {
+   "id": 2,
+   "industry": "SMALL_DONORS",
+   "name": "SMALL DONORS",
+   "percentage": 22.0,
+   "senator_id": "alice-adams",
+   "total": 200000.0
+  },
+  {
+   "id": 3,
+   "industry": "UNCLASSIFIED",
+   "name": "UNCLASSIFIED",
+   "percentage": 21.0,
+   "senator_id": "alice-adams",
+   "total": 192500.0
+  },
+  {
+   "id": 4,
+   "industry": "LABOR_UNIONS",
+   "name": "LABOR UNIONS",
+   "percentage": 1.0,
+   "senator_id": "alice-adams",
+   "total": 5000.0
+  },
+  {
+   "id": 5,
+   "industry": "POLITICAL",
+   "name": "POLITICAL",
+   "percentage": 0.0,
+   "senator_id": "alice-adams",
+   "total": 2500.0
+  }
+ ],
+ "key_votes": [
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 12,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "bob-brown",
+   "stance": "nomination",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 18,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "carol-clark",
+   "stance": "nomination",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 24,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "dan-davis",
+   "stance": "nomination",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 30,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "erin-evans",
+   "stance": "nomination",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 36,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "frank-foster",
+   "stance": "nomination",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "PN12",
+   "bill_name": "Jane Roe, of Virginia, to be a Judge",
+   "date": "2025-06-05",
+   "description": "Jane Roe, of Virginia, to be a Judge \u2014 On the Nomination",
+   "id": 6,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.95,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-12",
+   "senator_id": "alice-adams",
+   "stance": "nomination",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 10,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "bob-brown",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 16,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "carol-clark",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 22,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "dan-davis",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 28,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "erin-evans",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 34,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "frank-foster",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 10",
+   "bill_name": "Energy Grid Modernization Act",
+   "date": "2025-06-03",
+   "description": "Energy Grid Modernization Act \u2014 On the Cloture Motion",
+   "id": 4,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.56933,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-10",
+   "senator_id": "alice-adams",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 11,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "bob-brown",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 17,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "carol-clark",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 23,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "dan-davis",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 29,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "erin-evans",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 35,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "frank-foster",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S. 11",
+   "bill_name": "Farm Credit Expansion Act",
+   "date": "2025-06-04",
+   "description": "Farm Credit Expansion Act \u2014 On Passage of the Bill",
+   "id": 5,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.121314,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-11",
+   "senator_id": "alice-adams",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "recent",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 1,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "alice-adams",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 13,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "carol-clark",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 19,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "dan-davis",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 25,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "erin-evans",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 31,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "frank-foster",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.1",
+   "bill_name": "Clean Water Infrastructure Act",
+   "date": "2025-03-01",
+   "description": "A bill to fund water treatment and drinking water systems.",
+   "id": 7,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.315387,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-1",
+   "senator_id": "bob-brown",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 14,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "carol-clark",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 2,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "alice-adams",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": false
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 20,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "dan-davis",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 26,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "erin-evans",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 32,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "frank-foster",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.2",
+   "bill_name": "Border Security Enforcement Act",
+   "date": "2025-03-02",
+   "description": "A bill to increase border patrol staffing and enforcement.",
+   "id": 8,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "R",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.424065,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-2",
+   "senator_id": "bob-brown",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 15,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "carol-clark",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 21,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "dan-davis",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 27,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "erin-evans",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 3,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "alice-adams",
+   "stance": "neutral",
+   "vote": "Yea",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 33,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "frank-foster",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  },
+  {
+   "bill_id": "S.3",
+   "bill_name": "Veterans Health Access Act",
+   "date": "2025-03-03",
+   "description": "A bill to expand health care access for veterans.",
+   "id": 9,
+   "party_alignment_weight": 0.0,
+   "party_leaning": "D",
+   "policy_area": "PROCEDURAL",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.307101,
+     "party": "bipartisan"
+    }
+   ],
+   "roll_call": "senate-119-1-3",
+   "senator_id": "bob-brown",
+   "stance": "neutral",
+   "vote": "Nay",
+   "vote_category": "key",
+   "voted_with_party": true
+  }
+ ],
+ "learned_classifications": [
+  {
+   "confidence": 0.100053,
+   "entity_name": "S.4",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.1,
+    "text_prefix": "Small Business Tax Relief Act A bill numbered 4 to improve public services Taxation A bill to reduce taxes on small businesses."
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.121314,
+   "entity_name": "S. 11",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.121,
+    "text_prefix": "Farm Credit Expansion Act"
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.307101,
+   "entity_name": "S.3",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.307,
+    "text_prefix": "Veterans Health Access Act A bill numbered 3 to improve public services Armed Forces and National Security A bill to expand health care access for veterans."
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.315387,
+   "entity_name": "S.1",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.315,
+    "text_prefix": "Clean Water Infrastructure Act A bill numbered 1 to improve public services Environmental Protection A bill to fund water treatment and drinking water systems."
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.424065,
+   "entity_name": "S.2",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.424,
+    "text_prefix": "Border Security Enforcement Act A bill numbered 2 to improve public services Immigration A bill to increase border patrol staffing and enforcement."
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.56933,
+   "entity_name": "S. 10",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.569,
+    "text_prefix": "Energy Grid Modernization Act"
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 0.9,
+   "entity_name": "ACME WIDGETS INC PAC",
+   "entity_type": "industry",
+   "match_metadata": null,
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "POLITICAL"
+  },
+  {
+   "confidence": 0.9,
+   "entity_name": "NATIONAL NURSES UNITED PAC",
+   "entity_type": "industry",
+   "match_metadata": null,
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "LABOR_UNIONS"
+  },
+  {
+   "confidence": 0.95,
+   "entity_name": "PN12",
+   "entity_type": "bill_policy",
+   "match_metadata": {
+    "confidence": 0.95,
+    "text_prefix": "Jane Roe, of Virginia, to be a Judge"
+   },
+   "model_version": "arctic-xs",
+   "source": "embedding",
+   "value": "PROCEDURAL"
+  },
+  {
+   "confidence": 1.0,
+   "entity_name": "ACME WIDGETS INC PAC",
+   "entity_type": "donor_type",
+   "match_metadata": null,
+   "model_version": null,
+   "source": "fec",
+   "value": "PAC"
+  },
+  {
+   "confidence": 1.0,
+   "entity_name": "NATIONAL NURSES UNITED PAC",
+   "entity_type": "donor_type",
+   "match_metadata": null,
+   "model_version": null,
+   "source": "fec",
+   "value": "PAC"
+  }
+ ],
+ "score_snapshots": [
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "alice-adams",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 1,
+   "overall_score": 48.79,
+   "score_1": 40.0,
+   "score_2": 50.0,
+   "score_3": 45.0,
+   "score_4": 53.0,
+   "score_5": 61.0
+  },
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "bob-brown",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 2,
+   "overall_score": 46.21,
+   "score_1": 50.0,
+   "score_2": 50.0,
+   "score_3": 55.0,
+   "score_4": 50.0,
+   "score_5": 34.0
+  },
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "carol-clark",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 3,
+   "overall_score": 52.33,
+   "score_1": 50.0,
+   "score_2": 50.0,
+   "score_3": 55.0,
+   "score_4": 50.0,
+   "score_5": 52.0
+  },
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "dan-davis",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 4,
+   "overall_score": 46.89,
+   "score_1": 50.0,
+   "score_2": 50.0,
+   "score_3": 55.0,
+   "score_4": 50.0,
+   "score_5": 36.0
+  },
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "erin-evans",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 5,
+   "overall_score": 43.15,
+   "score_1": 50.0,
+   "score_2": 50.0,
+   "score_3": 55.0,
+   "score_4": 50.0,
+   "score_5": 25.0
+  },
+  {
+   "algorithm_version": "v6.39",
+   "date": "2025-07-01",
+   "entity_id": "frank-foster",
+   "entity_type": "senator",
+   "facts": null,
+   "id": 6,
+   "overall_score": 41.45,
+   "score_1": 50.0,
+   "score_2": 50.0,
+   "score_3": 55.0,
+   "score_4": 50.0,
+   "score_5": 20.0
+  }
+ ],
+ "senators": [
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "A000001",
+   "bipartisanship_score": null,
+   "caucus_party": "D",
+   "committees": [],
+   "contact_form_url": "https://www.adams.senate.gov/contact",
+   "funding_election_year": 2024,
+   "id": "alice-adams",
+   "ideology_score": null,
+   "initials": "AA",
+   "is_current": true,
+   "leadership_score": 1.0,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Alice Adams",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "D",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "D",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "medium",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 53.0,
+   "score_funding_independence": 40.0,
+   "score_held": null,
+   "score_independent_voting": 45.0,
+   "score_legislative_effectiveness": 61.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 22.0,
+   "sponsorship_description": "",
+   "state": "CA",
+   "total_contributions": 900000.0,
+   "total_from_pacs": 200000.0,
+   "total_raised": 1000000.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.adams.senate.gov",
+   "years_in_office": 6
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "B000002",
+   "bipartisanship_score": null,
+   "caucus_party": "R",
+   "committees": [],
+   "contact_form_url": "https://www.brown.senate.gov/contact",
+   "funding_election_year": null,
+   "id": "bob-brown",
+   "ideology_score": null,
+   "initials": "BB",
+   "is_current": true,
+   "leadership_score": 0.4788,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Bob Brown",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "R",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "R",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "low",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 55.0,
+   "score_legislative_effectiveness": 34.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "TX",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.brown.senate.gov",
+   "years_in_office": 6
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "C000003",
+   "bipartisanship_score": null,
+   "caucus_party": "D",
+   "committees": [],
+   "contact_form_url": "https://www.clark.senate.gov/contact",
+   "funding_election_year": null,
+   "id": "carol-clark",
+   "ideology_score": null,
+   "initials": "CC",
+   "is_current": true,
+   "leadership_score": 0.9039,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Carol Clark",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "D",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "D",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "low",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 55.0,
+   "score_legislative_effectiveness": 52.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "NY",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.clark.senate.gov",
+   "years_in_office": 6
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "D000004",
+   "bipartisanship_score": null,
+   "caucus_party": "R",
+   "committees": [],
+   "contact_form_url": "https://www.davis.senate.gov/contact",
+   "funding_election_year": null,
+   "id": "dan-davis",
+   "ideology_score": null,
+   "initials": "DD",
+   "is_current": true,
+   "leadership_score": 0.52,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Dan Davis",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "R",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "R",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "low",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 55.0,
+   "score_legislative_effectiveness": 36.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "FL",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.davis.senate.gov",
+   "years_in_office": 6
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "E000005",
+   "bipartisanship_score": null,
+   "caucus_party": "D",
+   "committees": [],
+   "contact_form_url": "https://www.evans.senate.gov/contact",
+   "funding_election_year": null,
+   "id": "erin-evans",
+   "ideology_score": null,
+   "initials": "EE",
+   "is_current": true,
+   "leadership_score": 0.0,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Erin Evans",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "D",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "D",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "low",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 55.0,
+   "score_legislative_effectiveness": 25.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "IL",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.evans.senate.gov",
+   "years_in_office": 6
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "F000006",
+   "bipartisanship_score": null,
+   "caucus_party": "R",
+   "committees": [],
+   "contact_form_url": "https://www.foster.senate.gov/contact",
+   "funding_election_year": null,
+   "id": "frank-foster",
+   "ideology_score": null,
+   "initials": "FF",
+   "is_current": true,
+   "leadership_score": 0.0,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Frank Foster",
+   "office_address": "1 Senate Office Building",
+   "office_phone": "(202) 224-0000",
+   "partisan_depth": {
+    "crossPartyCount": 0,
+    "depth": "centrist",
+    "evalParty": "R",
+    "overallLean": 0.0,
+    "overallParty": "centrist",
+    "policyBreakdown": [],
+    "totalPositions": 0
+   },
+   "party": "R",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {
+    "constituentAlignment": "low",
+    "constituentAlignmentVotePart": "shrunk-neutral:0.30",
+    "fundingDiversity": "low",
+    "fundingIndependence": "low",
+    "legislativeEffectiveness": "medium",
+    "legislativeEffectivenessBills": "fetched:2025-07-01",
+    "promisePersistence": "low"
+   },
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 55.0,
+   "score_legislative_effectiveness": 20.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "OH",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "https://www.foster.senate.gov",
+   "years_in_office": 6
+  }
+ ],
+ "sponsored_bills": [
+  {
+   "bill_id": "S.100",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 1,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.20732,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "alice-adams",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 0"
+  },
+  {
+   "bill_id": "S.101",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 3,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.247189,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "bob-brown",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 1"
+  },
+  {
+   "bill_id": "S.102",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 5,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.18046,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "carol-clark",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 2"
+  },
+  {
+   "bill_id": "S.103",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 7,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.1971,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "dan-davis",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 3"
+  },
+  {
+   "bill_id": "S.104",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 9,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.192357,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "erin-evans",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 4"
+  },
+  {
+   "bill_id": "S.105",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 11,
+   "introduced_date": "2025-02-10",
+   "is_law": false,
+   "latest_action": "Read twice and referred to the Committee on Finance.",
+   "latest_action_date": "2025-02-10",
+   "party_leaning": "bipartisan",
+   "policy_area": "HEALTH",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.21074,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "frank-foster",
+   "stage": "INTRODUCED",
+   "title": "Rural Hospital Support Act 5"
+  },
+  {
+   "bill_id": "S.200",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 2,
+   "introduced_date": "2025-03-01",
+   "is_law": true,
+   "latest_action": "Became Public Law No: 119-12.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.234884,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "alice-adams",
+   "stage": "ENACTED",
+   "title": "Highway Safety Improvement Act of 2025 number 0"
+  },
+  {
+   "bill_id": "S.201",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 4,
+   "introduced_date": "2025-03-01",
+   "is_law": false,
+   "latest_action": "Passed Senate without amendment by Unanimous Consent.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.182489,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "bob-brown",
+   "stage": "INTRODUCED",
+   "title": "Highway Safety Improvement Act of 2025 number 1"
+  },
+  {
+   "bill_id": "S.202",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 6,
+   "introduced_date": "2025-03-01",
+   "is_law": false,
+   "latest_action": "Passed Senate without amendment by Unanimous Consent.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.207913,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "carol-clark",
+   "stage": "INTRODUCED",
+   "title": "Highway Safety Improvement Act of 2025 number 2"
+  },
+  {
+   "bill_id": "S.203",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 8,
+   "introduced_date": "2025-03-01",
+   "is_law": false,
+   "latest_action": "Passed Senate without amendment by Unanimous Consent.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.185755,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "dan-davis",
+   "stage": "INTRODUCED",
+   "title": "Highway Safety Improvement Act of 2025 number 3"
+  },
+  {
+   "bill_id": "S.204",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 10,
+   "introduced_date": "2025-03-01",
+   "is_law": false,
+   "latest_action": "Passed Senate without amendment by Unanimous Consent.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.174166,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "erin-evans",
+   "stage": "INTRODUCED",
+   "title": "Highway Safety Improvement Act of 2025 number 4"
+  },
+  {
+   "bill_id": "S.205",
+   "bill_type": "S",
+   "commemorative": false,
+   "congress": 119,
+   "id": 12,
+   "introduced_date": "2025-03-01",
+   "is_law": false,
+   "latest_action": "Passed Senate without amendment by Unanimous Consent.",
+   "latest_action_date": "2025-05-01",
+   "party_leaning": "bipartisan",
+   "policy_area": "TRANSPORTATION_AND_PUBLIC_WORKS",
+   "policy_areas": [
+    {
+     "area": "PROCEDURAL",
+     "confidence": 0.200965,
+     "party": "bipartisan"
+    }
+   ],
+   "senator_id": "frank-foster",
+   "stage": "INTRODUCED",
+   "title": "Highway Safety Improvement Act of 2025 number 5"
+  }
+ ]
+}
