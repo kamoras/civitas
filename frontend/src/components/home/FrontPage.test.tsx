@@ -187,11 +187,37 @@ describe("FrontPageView", () => {
       "/action?tab=monitors&monitor=a-story"
     );
     expect(screen.getByText(/Tue, Oct 20 · also Mon, Oct 19/)).toBeTruthy();
-    expect(screen.getByText("No other record votes, laws or confirmations to show.")).toBeTruthy();
+    expect(
+      screen.getByText("No other record votes, laws, bills passed or confirmations to show.")
+    ).toBeTruthy();
     expect(screen.getByRole("link", { name: /The week in Congress/ })).toHaveAttribute(
       "href",
       "/congress/week/2026-10-12"
     );
+  });
+
+  it("lists a bill a chamber passed, linked to the bill and credited to the Daily Digest", () => {
+    const passed = {
+      kind: "passed" as const,
+      column: "congress" as const,
+      date: "2026-10-14",
+      headline: "Example Relief Act passed the House",
+      dek: "H.R. 11 · goes to the Senate",
+      chamber: "house" as const,
+      throughBoth: false,
+      billId: "HR.11",
+      billLabel: "H.R. 11",
+      congress: 119,
+      figure: null,
+      source: { type: "record" as const, publisher: "Congressional Record, Daily Digest" },
+    };
+    render(<FrontPageView data={{ ...data, columns: { ...data.columns, congress: [passed] } }} />);
+    expect(
+      screen.getByRole("link", { name: "Example Relief Act passed the House" })
+    ).toHaveAttribute("href", "/congress/bills/HR.11?congress=119");
+    expect(screen.getByText(/goes to the Senate/)).toBeTruthy();
+    expect(screen.getByText(/Wed, Oct 14 · House/)).toBeTruthy();
+    expect(screen.queryByText(/No other record votes/)).toBeNull();
   });
 
   it("labels every item with where it came from, and quotes a newsroom's headline", () => {

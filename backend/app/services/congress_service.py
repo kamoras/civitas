@@ -690,17 +690,29 @@ def became_law(db: Session, start: date, end: date) -> list[dict]:
     return sorted(seen.values(), key=lambda b: (b["date"], b["billId"]))
 
 
-def period_report(db: Session, start: date, end: date) -> dict:
-    p = _period(db, start, end)
-    totals = {c: _totals(p, c) for c in CHAMBERS}
-    passed = sorted((e for e in p["events"] if e.kind == "passed"), key=lambda e: (e.date, e.seq))
+def _passed_bills(events: list[CongressEvent]) -> tuple[list[dict], list[dict]]:
+    """(measures that have now passed both chambers, bills that passed one)
+    among the period's Digest events, each in the order the Digest gives
+    them. A bill that passed its first chamber and then its second in the
+    same period is listed once, as through both."""
+    passed = sorted((e for e in events if e.kind == "passed"), key=lambda e: (e.date, e.seq))
     both = [_event(e) for e in passed if passed_both_chambers(e.bill_id, e.chamber, e.text)]
-    # A bill that passed its first chamber and then its second in the same
-    # period is listed once, as through both.
     cleared = {b["billId"] for b in both}
     one = [_event(e) for e in passed
            if not is_resolution(e.bill_id) and e.bill_id and e.bill_id not in cleared
            and not passed_both_chambers(e.bill_id, e.chamber, e.text)]
+    return both, one
+
+
+def passed_bills(db: Session, start: date, end: date) -> tuple[list[dict], list[dict]]:
+    """period_report's passedBothChambers and passedOneChamber, alone."""
+    return _passed_bills(_period(db, start, end)["events"])
+
+
+def period_report(db: Session, start: date, end: date) -> dict:
+    p = _period(db, start, end)
+    totals = {c: _totals(p, c) for c in CHAMBERS}
+    both, one = _passed_bills(p["events"])
     decided = [v for v in p["votes"] if v.yeas + v.nays > 0]
     shaped = shapes(db, p["votes"])
     closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
