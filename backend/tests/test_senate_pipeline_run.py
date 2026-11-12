@@ -12,59 +12,15 @@ results stay what they were (a summary pinned below), so a change to how
 the run is organised can be shown to change nothing."""
 
 import asyncio
-import hashlib
 import json
 import pathlib
-import re
 from datetime import datetime
 
-import os
-
-import numpy as np
 import pytest
 
-from app.config import settings
 from app.models import PipelineRun, PipelineStatus, ScoreSnapshot, Senator
 from app.pipeline import senate_pipeline as sp
-from app.pipeline import vector_store
-
-_DIM = 384
-
-
-class _HashedWords:
-    """A stand-in sentence-transformer: each word hashed into a fixed
-    vector, summed and normalised, so texts sharing words are near."""
-
-    max_seq_length = 512
-
-    def __init__(self, name=None, *args, **kwargs):
-        self.name = name
-
-        class _Tok:
-            def num_special_tokens_to_add(self, *a, **k):
-                return 0
-
-            def __call__(self, text, *a, **k):
-                return {"input_ids": list(range(len(str(text).split())))}
-
-        self.tokenizer = _Tok()
-
-    def get_sentence_embedding_dimension(self):
-        return _DIM
-
-    def _one(self, text: str) -> np.ndarray:
-        v = np.zeros(_DIM)
-        for word in re.findall(r"[a-z0-9]+", str(text).lower()):
-            seed = int.from_bytes(hashlib.sha256(word.encode()).digest()[:8], "little")
-            v += np.random.default_rng(seed).standard_normal(_DIM)
-        n = np.linalg.norm(v)
-        return v / n if n else v
-
-    def encode(self, texts, *args, normalize_embeddings=False, convert_to_numpy=True, **kwargs):
-        if isinstance(texts, str):
-            return self._one(texts)
-        return np.array([self._one(t) for t in texts]) if len(texts) else np.zeros((0, _DIM))
-
+from tests.pipeline_run_helpers import matches_golden, run_on_test_database
 
 # ── The chamber ────────────────────────────────────────────────────
 
@@ -195,17 +151,7 @@ def _fec(senator):
 
 @pytest.fixture
 def chamber(db_session, monkeypatch):
-    from app import database
-
-    monkeypatch.setattr(sp, "SessionLocal", lambda: db_session)
-    monkeypatch.setattr(db_session, "close", lambda: None)
-    # The modules that open their own session (ops alerts, the score
-    # calibration check) reach the same in-memory database.
-    monkeypatch.setitem(database.SessionLocal.kw, "bind", db_session.get_bind())
-    monkeypatch.setattr(settings, "DATA_GOV_API_KEY", "test-key")
-    monkeypatch.setattr(vector_store, "SentenceTransformer", _HashedWords)
-    monkeypatch.setattr(vector_store, "_model", None)
-    monkeypatch.setattr(vector_store, "_similarity_model", None)
+    run_on_test_database(monkeypatch, db_session, sp)
 
     async def ret(value):
         return value
@@ -252,43 +198,6 @@ def chamber(db_session, monkeypatch):
 
 
 GOLDEN = pathlib.Path(__file__).parent / "fixtures" / "senate_run_golden.json"
-# Bookkeeping about the run itself, not what it stored about the chamber.
-_NOT_STORED_RESULTS = {"pipeline_runs", "api_cache", "pipeline_progress", "source_read_stats",
-                       "pipeline_phase_timings"}
-
-
-def _plain(v):
-    if isinstance(v, float):
-        return round(v, 6)
-    if isinstance(v, str) and v[:1] in "[{":
-        try:
-            return _plain(json.loads(v))
-        except ValueError:
-            return v
-    if isinstance(v, dict):
-        return {k: _plain(x) for k, x in v.items()}
-    if isinstance(v, list):
-        return [_plain(x) for x in v]
-    return v
-
-
-def stored(db) -> dict:
-    """Every row of every table the run wrote, timestamps left out, in a
-    stable order: what a reorganised run must reproduce exactly."""
-    from datetime import date, datetime
-
-    from app.database import Base
-
-    out = {}
-    for table in Base.metadata.sorted_tables:
-        if table.name in _NOT_STORED_RESULTS:
-            continue
-        rows = []
-        for row in db.execute(table.select()).mappings():
-            rows.append({k: _plain(v) for k, v in row.items() if not isinstance(v, (datetime, date))})
-        if rows:
-            out[table.name] = sorted(rows, key=lambda r: json.dumps(r, sort_keys=True, default=str))
-    return json.loads(json.dumps(out, sort_keys=True, default=str))
 
 
 def test_the_whole_run_scores_and_stores_every_senator(chamber, freeze_utcnow):
@@ -302,12 +211,10 @@ def test_the_whole_run_scores_and_stores_every_senator(chamber, freeze_utcnow):
     assert chamber.query(ScoreSnapshot).count() == 6
     adams = chamber.query(Senator).filter_by(id="alice-adams").one()
     assert adams.score_funding_independence != 50.0  # her FEC record was read and scored
-    # Everything the run stored is what it stored before: regenerate with
-    # SENATE_RUN_GOLDEN=write only for a change meant to move the results.
-    got = stored(chamber)
-    if os.environ.get("SENATE_RUN_GOLDEN") == "write":
-        GOLDEN.write_text(json.dumps(got, indent=1, sort_keys=True) + "\n")
-    assert got == json.loads(GOLDEN.read_text())
+    # Everything the run stored is what it stored before
+    # (PIPELINE_RUN_GOLDEN=write regenerates it, for a change meant to
+    # move the results).
+    assert matches_golden(chamber, GOLDEN)
 
 
 def test_unread_sources_degrade_only_what_they_feed(chamber, monkeypatch, freeze_utcnow):
