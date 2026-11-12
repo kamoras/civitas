@@ -70,6 +70,7 @@ const KIND: Record<FrontPageEntry["kind"], { label: string; glyph: string; tone:
   closest: { label: "Closest vote", glyph: "=", tone: "record" },
   loneBreak: { label: "Lone break", glyph: "1", tone: "record" },
   law: { label: "Became law", glyph: "§", tone: "record" },
+  passed: { label: "Passed", glyph: "§", tone: "record" },
   confirmed: { label: "Confirmed", glyph: "✓", tone: "record" },
   comment: { label: "Comment deadline", glyph: "✎", tone: "done" },
   issue: { label: "In the news", glyph: "¶", tone: "neutral" },
@@ -131,7 +132,7 @@ function withRecordId(text: string, id: string | null | undefined): ReactNode {
 /** A newsroom's headline in its own words, quoted; a record's as written. */
 function headlineText(e: FrontPageEntry): ReactNode {
   if (e.source.type === "news") return <>&ldquo;{e.headline}&rdquo;</>;
-  return withRecordId(e.headline, e.kind === "law" ? e.billLabel : null);
+  return withRecordId(e.headline, e.kind === "law" || e.kind === "passed" ? e.billLabel : null);
 }
 
 /** Where an entry's headline goes. */
@@ -141,6 +142,7 @@ function primaryHref(e: FrontPageEntry): string {
     case "loneBreak":
       return rollCallHref(e.vote);
     case "law":
+    case "passed":
       return billHref(e.billId, e.congress);
     case "confirmed":
       return nominationHref(e);
@@ -181,6 +183,10 @@ function Dek({ entry, lead }: { entry: FrontPageEntry; lead: boolean }) {
           {withRecordId(entry.dek, entry.billLabel)} · {entry.action}
         </div>
       );
+    case "passed":
+      return entry.dek ? (
+        <div className={cls}>{withRecordId(entry.dek, entry.billLabel)}</div>
+      ) : null;
     case "confirmed":
       return entry.dek ? <div className={cls}>{entry.dek}</div> : null;
     case "comment":
@@ -269,7 +275,7 @@ function Links({ entry }: { entry: FrontPageEntry }) {
         </Link>
       );
   }
-  if (entry.kind === "law" && entry.billLabel)
+  if ((entry.kind === "law" || entry.kind === "passed") && entry.billLabel)
     items.push(
       <Link key="bill" href={billHref(entry.billId, entry.congress)} className={CHIP}>
         <RecordId>{entry.billLabel}</RecordId>
@@ -373,6 +379,8 @@ function itemMeta(e: FrontPageEntry): string {
       return `${shortDate(e.date)} · ${e.figure.caption}`;
     case "law":
       return `${shortDate(e.date)} · ${e.action}`;
+    case "passed":
+      return `${shortDate(e.date)} · ${CHAMBER[e.chamber]}`;
     case "confirmed":
       return [shortDate(e.date), e.figure?.type === "split" ? e.figure.caption : null, e.dek]
         .filter(Boolean)
@@ -397,9 +405,9 @@ function ColumnItem({ entry }: { entry: FrontPageEntry }) {
         <Source entry={entry} />
       </div>
       <Headline entry={entry} as="h4" className={`${TYPE.boxTitle} mb-1`} />
-      {entry.kind === "law" && (
+      {(entry.kind === "law" || (entry.kind === "passed" && entry.dek)) && (
         <div className="mt-0.5 text-small text-ink-lo">
-          {withRecordId(entry.dek, entry.billLabel)}
+          {withRecordId(entry.dek ?? "", entry.billLabel)}
         </div>
       )}
       <InlineRecordFigure f={entry.figure} />
@@ -425,7 +433,7 @@ const COLUMNS = [
     title: "Congress",
     glyph: "§",
     more: "The week in Congress",
-    none: "No other record votes, laws or confirmations to show.",
+    none: "No other record votes, laws, bills passed or confirmations to show.",
   },
   {
     key: "agencies",

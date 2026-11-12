@@ -491,7 +491,7 @@ export default function NewsChapter() {
         <Boxes>
           <Box
             title="What can be on it"
-            dek="Only records the site already keeps: the week's closest vote and lone party breaks, new laws and confirmations, open comment periods, and the day's news stories."
+            dek="Only records the site already keeps: the week's closest vote and lone party breaks, new laws, bills passed and confirmations, open comment periods, and the day's news stories."
             more="each kind of entry"
           >
             <P>
@@ -500,9 +500,12 @@ export default function NewsChapter() {
               simple-majority vote that week, and a lone break, the one member of a party who voted
               the other way from every other member of that party, at most one per party. Bills that
               became law and nominations the Senate confirmed count from the start of that week to
-              today. The agencies&apos; entries are open comment periods: the rule whose comments
-              close soonest, then the ones most read on the Federal Register, with paperwork notices
-              left out. The news is the Action Center&apos;s recent stories, one per story.
+              today. Bills either chamber passed that week, from the Congressional Record&apos;s
+              Daily Digest, come last: they never lead and have no figure, so they fill the column
+              only when the entries above have run out. The agencies&apos; entries are open comment
+              periods: the rule whose comments close soonest, then the ones most read on the Federal
+              Register, with paperwork notices left out. The news is the Action Center&apos;s recent
+              stories, one per story.
             </P>
           </Box>
           <Box
@@ -528,12 +531,13 @@ export default function NewsChapter() {
           >
             <P>
               A record&apos;s label (a solid border and &sect;) names who published it: the Senate
-              or House roll call, Congress.gov or the Federal Register. Its headline is a fixed
-              template around the record&apos;s figures, or the record&apos;s own words, such as a
-              law&apos;s title. A news label (a dashed border and &para;) names the newsroom, and
-              the headline is that newsroom&apos;s own, in quotation marks. Nothing on the page is
-              written by a model. The page is put together from the stored records every few
-              minutes; &ldquo;Updated&rdquo; gives the time, Eastern.
+              or House roll call, Congress.gov, the Congressional Record&apos;s Daily Digest or the
+              Federal Register. Its headline is a fixed template around the record&apos;s figures,
+              or the record&apos;s own words, such as a law&apos;s title. A news label (a dashed
+              border and &para;) names the newsroom, and the headline is that newsroom&apos;s own,
+              in quotation marks. Nothing on the page is written by a model. The page is put
+              together from the stored records every few minutes; &ldquo;Updated&rdquo; gives the
+              time, Eastern.
             </P>
           </Box>
         </Boxes>

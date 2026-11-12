@@ -12,8 +12,8 @@ from app.api import notable as nt
 from app.database import get_db
 from app.main import app
 from app.models import (
-    ActionIssue, CongressDay, ExploreDocument, FeedArticle, NationalMonitor, Nomination, RollCall, RollCallPosition,
-    Senator,
+    ActionIssue, CongressDay, CongressEvent, ExploreDocument, FeedArticle, NationalMonitor, Nomination, RollCall,
+    RollCallPosition, Senator,
 )
 
 _NUMBER = iter(range(1, 10_000))
@@ -377,3 +377,54 @@ def test_a_law_with_a_short_title_leads_with_its_name():
     # An official long title is not a name news uses: the number leads.
     long = {"name": "A bill to amend title 46 to improve example enforcement.", "billLabel": "H.R. 9", "billId": "HR.9"}
     assert nt._law_name(long) is None
+
+
+_SEQ = iter(range(1, 10_000))
+
+
+def _passed_event(db, day, chamber, bill_id, name, text="Passed."):
+    db.add(CongressEvent(chamber=chamber, date=day, kind="passed", seq=next(_SEQ), name=name, text=text,
+                         bill_id=bill_id, source="digest"))
+    db.flush()
+
+
+class TestPassedBills:
+    WEEK = (date(2026, 10, 19), date(2026, 10, 25))
+
+    def test_through_both_chambers_first_then_one_newest_first(self, db_session):
+        _passed_event(db_session, "2026-10-19", "house", "HR.10", "Older House Bill Act")
+        _passed_event(db_session, "2026-10-20", "house", "HR.11", "Newer House Bill Act")
+        _passed_event(db_session, "2026-10-19", "senate", "HR.12", "Cleared Both Act")  # a House bill, now the Senate's too
+        _passed_event(db_session, "2026-10-20", "senate", "SRES.5", "")  # a simple resolution is no bill
+        _passed_event(db_session, "2026-10-12", "house", "HR.13", "Last Week Act")  # outside the week
+        got = nt._passed(db_session, self.WEEK, enacted=set())
+        assert [e["headline"] for e in got] == [
+            "Cleared Both Act passed both chambers",
+            "Newer House Bill Act passed the House",
+            "Older House Bill Act passed the House",
+        ]
+        assert got[1]["dek"] == "H.R. 11 · goes to the Senate"
+        assert got[0]["dek"] == "H.R. 12" and got[0]["throughBoth"] is True
+        assert all(e["figure"] is None and e["column"] == "congress" for e in got)
+        assert nt.provenance(got[0]) == {"type": "record", "publisher": "Congressional Record, Daily Digest"}
+
+    def test_a_bill_that_became_law_is_left_to_its_law_entry(self, db_session):
+        _passed_event(db_session, "2026-10-20", "senate", "HR.12", "Cleared Both Act")
+        assert nt._passed(db_session, self.WEEK, enacted={"HR.12"}) == []
+
+    def test_an_unnamed_bill_leads_with_its_number(self, db_session):
+        _passed_event(db_session, "2026-10-20", "senate", "S.40", "")
+        got = nt._passed(db_session, self.WEEK, enacted=set())
+        assert got[0]["headline"] == "S. 40 passed the Senate" and got[0]["dek"] == "goes to the House"
+
+    def test_bills_passed_fill_the_column_the_votes_left_empty(self, db_session):
+        # The day's story leads and the tier takes the week's only vote.
+        _rc(db_session, "2026-10-20", 50, 49)
+        _issue(db_session, "2026-10-20", 1, "The day's top story")
+        _passed_event(db_session, "2026-10-20", "house", "HR.11", "Newer House Bill Act")
+        db_session.commit()
+        page = nt.front_page(db_session, TODAY)
+        assert page["lead"]["kind"] == "issue" and page["tier"][0]["kind"] == "closest"
+        assert [e["headline"] for e in page["columns"]["congress"]] == ["Newer House Bill Act passed the House"]
+        # Never the lead, and never the tier: it carries no figure.
+        assert all(e["kind"] != "passed" for e in page["tier"])

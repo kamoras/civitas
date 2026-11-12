@@ -73,6 +73,23 @@ export interface LawEntry extends EntryBase {
   congress: number;
 }
 
+/** A bill a chamber passed in the latest week of business, from the Daily
+ *  Digest: listed only where the votes, laws and confirmations have run
+ *  out, and never the lead. */
+export interface PassedEntry extends EntryBase {
+  kind: "passed";
+  /** The bill's number under a named headline, with where it goes next
+   *  ("H.R. 11 · goes to the Senate"); under a numbered one, only that. */
+  dek: string | null;
+  chamber: "senate" | "house";
+  /** It has now passed both chambers. */
+  throughBoth: boolean;
+  billId: string;
+  billLabel: string | null;
+  congress: number;
+  figure: null;
+}
+
 /** A nomination the Senate confirmed. */
 export interface ConfirmedEntry extends EntryBase {
   kind: "confirmed";
@@ -110,7 +127,13 @@ export interface IssueEntry extends EntryBase {
 }
 
 export type FrontPageEntry =
-  ClosestEntry | LoneBreakEntry | LawEntry | ConfirmedEntry | CommentEntry | IssueEntry;
+  | ClosestEntry
+  | LoneBreakEntry
+  | LawEntry
+  | PassedEntry
+  | ConfirmedEntry
+  | CommentEntry
+  | IssueEntry;
 
 export interface FrontPage {
   /** The Eastern date the page is for. */

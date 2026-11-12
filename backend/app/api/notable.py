@@ -23,6 +23,15 @@ Candidates:
   newest),
 - each bill that became law, and each nomination (not a list, not
   military) the Senate confirmed, from the start of that week to today,
+- each bill that passed a chamber in that week, from the Daily Digest
+  (congress_service.passed_bills, the week report's lists): those that have
+  now passed both chambers first, then those that passed one, newest
+  first, a bill that has since become law left to its law entry. They
+  never lead and carry no figure, so they fill the Congress column only
+  where the votes, laws and confirmations above have run out: on
+  2026-11-12 the lead and the tier took the week's two vote entries, no
+  law was on file yet, and the column read "no other record votes" in a
+  week the chambers passed 22 bills,
 - open comment periods: the proposed or final rule whose comments close
   soonest first, then the most salient others (comment_periods.salience,
   paperwork notices left out),
@@ -341,6 +350,33 @@ def _laws(db: Session, since: date, today: date) -> list[dict]:
     } for law in sorted(laws, key=lambda b: (b["date"], b["billId"]), reverse=True)]
 
 
+def _passed(db: Session, week: tuple[date, date] | None, enacted: set[str]) -> list[dict]:
+    if week is None:
+        return []
+    both, one = cs.passed_bills(db, *week)
+    out = []
+    for group, through_both in ((both, True), (one, False)):
+        for e in sorted(group, key=lambda e: e["date"], reverse=True):
+            if e["billId"] in enacted:
+                continue
+            label = e["billLabel"] or e["billId"]
+            name = " ".join((e["name"] or "").split()).rstrip(".")
+            where = "both chambers" if through_both else f"the {_CHAMBER_NAME[e['chamber']]}"
+            next_step = ("" if through_both
+                         else f" · goes to the {_CHAMBER_NAME[e['nextStep']]}" if e["nextStep"] in _CHAMBER_NAME else "")
+            out.append({
+                "kind": "passed", "column": "congress", "date": e["date"],
+                "headline": f"{name or label} passed {where}",
+                # The bill's number beneath a named headline; beneath a
+                # numbered one, the chamber it goes to next, if any.
+                "dek": (f"{label}{next_step}" if name else next_step.removeprefix(" · ") or None),
+                "chamber": e["chamber"], "throughBoth": through_both,
+                "billId": e["billId"], "billLabel": e["billLabel"], "congress": e["congress"],
+                "figure": None,
+            })
+    return out
+
+
 def _confirmations(db: Session, since: date, today: date) -> list[dict]:
     rows = (db.query(Nomination)
             .filter(Nomination.status == "confirmed", Nomination.is_list.is_(False),
@@ -446,6 +482,8 @@ def provenance(e: dict) -> dict:
             return {"type": "record", "publisher": f"{_CHAMBER_NAME[v['chamber']]} roll call {v['number']}"}
         case "law" | "confirmed":
             return {"type": "record", "publisher": "Congress.gov"}
+        case "passed":
+            return {"type": "record", "publisher": "Congressional Record, Daily Digest"}
         case "comment":
             return {"type": "record", "publisher": "Federal Register"}
     if e["outlet"] is None and e.get("sourceType") in RECORD_PUBLISHER:
@@ -544,8 +582,9 @@ def front_page(db: Session, today: date | None = None) -> dict:
     simple = _simple_majority(votes)
     closest = _closest(simple, median_margin(db, simple[0].congress) if simple else None)
     since = week[0] if week else today
-    congress = (([closest] if closest else []) + _laws(db, since, today) + _confirmations(db, since, today)
-                + _lone_breaks(db, votes))
+    laws = _laws(db, since, today)
+    congress = (([closest] if closest else []) + laws + _confirmations(db, since, today)
+                + _lone_breaks(db, votes) + _passed(db, week, {law["billId"] for law in laws}))
     latest = cs.latest_day(db)
     recess = cs.recess(db, cs.day_report(db, latest)) if latest else None
     page = arrange(congress, _comments(db, today), _news(db), congress_out=recess is not None)
