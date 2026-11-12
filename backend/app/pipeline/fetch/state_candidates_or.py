@@ -121,6 +121,7 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
+from app.pipeline.fetch.pdf_lines import group_lines
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -302,14 +303,7 @@ _LEGEND_RE = re.compile(r"^(?:\*+|WI)$")  # the "* Nominee / ** Elected / WI = W
 def _page_lines(page) -> list[list[dict]]:
     """The page's words grouped into visual lines, top to bottom, each
     line left to right."""
-    words = sorted(page.extract_words() or [], key=lambda w: (w["top"], w["x0"]))
-    lines: list[list[dict]] = []
-    for word in words:
-        if lines and abs(lines[-1][0]["top"] - word["top"]) <= _LINE_TOL:
-            lines[-1].append(word)
-        else:
-            lines.append([word])
-    return [sorted(line, key=lambda w: w["x0"]) for line in lines]
+    return group_lines(page.extract_words() or [], _LINE_TOL)
 
 
 def _line_text(line: list[dict]) -> str:

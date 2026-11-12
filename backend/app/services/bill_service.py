@@ -26,7 +26,7 @@ from app.photos import bioguide_photo, members_without_photo
 from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.congress_activity import eastern_today
 from app.services.bill_record import bill_number_matches, canonical_bill_id, typed_bill_number
-from app.services.word_search import build_index, ranked, search
+from app.services.word_search import build_index, search
 from app.schemas import (
     BillDetailSchema,
     BillInFlightSchema,
@@ -460,24 +460,6 @@ def _word_matches(q: str) -> set[str]:
     with _word_index_lock:
         conn = _current_word_index()
         return search(conn, q) if conn is not None else set()
-
-
-def bills_matching(db: Session, q: str, limit: int) -> tuple[int, list[BillInFlightSchema]]:
-    """(how many bills match, the best `limit` of them) for Explore's Bills
-    group: the bill a whole bill number names ("S. 2079", "HR 1"), then the
-    bills whose title or short title holds every word of `q`, best first by
-    BM25. Titles only, unlike the bills list: a member's name is the Members
-    group's, and matching sponsors put a member's every bill beside a search
-    for the member (measured: on all 150 surname probes). Read from the same
-    cached snapshot as the bills list, never the embedding model."""
-    rows = {(_row_key(r.bill.bill_id, r.bill.congress)): r.bill for r in _collect_bills(db)}
-    whole = canonical_bill_id(q.strip())
-    named = [b for b in rows.values() if whole and b.bill_id.upper() == whole]
-    with _word_index_lock:
-        conn = _current_word_index()
-        keys = ranked(conn, q, (1.0, 1.0, 1.0), columns=(0, 1)) if conn is not None and not whole else []
-    found = named + [rows[k] for k in keys if k in rows]
-    return len(found), found[:limit]
 
 
 def get_bills_in_flight(

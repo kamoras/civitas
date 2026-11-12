@@ -288,12 +288,6 @@ async def state_status(
     return "ready", None
 
 
-async def state_readiness(db: Session, client: httpx.AsyncClient | None, state: str, election_day: date) -> str | None:
-    """Why `state`'s feed isn't ready for election night, or None (ready,
-    or not staged yet with a reader that passes its self-check)."""
-    return (await state_status(db, client, state, election_day))[1]
-
-
 async def check_feed_readiness(
     db: Session, client: httpx.AsyncClient | None, election_day: date, today: date,
 ) -> dict[str, str]:
