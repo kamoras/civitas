@@ -1567,7 +1567,7 @@ async def run_senate_pipeline(
                     if titles is None:
                         # Classified from its short title this run.
                         unread_bills.append(f"{bid} ({cg}) titles")
-                    official = extract_official_title(titles)
+                    official = extract_official_title(titles or [])
                     if official:
                         official_titles_map[bid] = official
                     progress.update("fetch_official_titles", done=ot_idx + 1)
