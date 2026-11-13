@@ -32,7 +32,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Iterator, NamedTuple
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -5523,7 +5523,8 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     """
 
     snapshot = action_metrics.snapshot()
-    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
+    run_at = utcnow().replace(tzinfo=timezone.utc).astimezone(_US_EAST)
+    action_metrics.persist(db, f"run-{run_at.strftime('%Y-%m-%d-%H%M')}")
     if snapshot:
         logger.info("Validator counters this run: %s", snapshot)
     return snapshot
@@ -5746,7 +5747,7 @@ def _run_refresh(db: Session) -> int:
     # do we re-match ordinary news" tuning knob, and decoupling the two
     # means a longer confirmation_deadline later doesn't silently need a
     # matching change here too.
-    _lookback = (datetime.now(_US_EAST) - timedelta(days=REMATCH_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    _lookback = (eastern_date(utcnow()) - timedelta(days=REMATCH_WINDOW_DAYS)).isoformat()
     # A retired election-results issue (the count reverted, or the refresh
     # retired it) is left out: promoted, it came back as current news.
     _recent_issues: list[ActionIssue] = (
