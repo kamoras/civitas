@@ -22,7 +22,7 @@ import json
 import logging
 import re
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 
 import httpx
 from sqlalchemy import func as sa_func, or_
@@ -435,7 +435,7 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
                 if not body_text:
                     continue  # leave body_fetched_at NULL so this retries
                 fetched += 1
-                d.body_fetched_at = datetime.now(UTC)
+                d.body_fetched_at = utcnow().replace(tzinfo=UTC)
                 if body_text != d.body:
                     d.body = body_text
                     filled.append(d.id)

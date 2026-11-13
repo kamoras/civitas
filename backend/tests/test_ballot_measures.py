@@ -1058,9 +1058,10 @@ async def test_sync_pdf_measures_marks_ingest_failed_on_fetch_failure(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_sync_ballot_measures_reads_registered_states_directly(monkeypatch, db_session):
+async def test_sync_ballot_measures_reads_registered_states_directly(monkeypatch, db_session, freeze_utcnow):
     """The state's own office is the only source: a registered state is
     read and written with no other key or service involved."""
+    freeze_utcnow(datetime(2026, 10, 21, 12))  # a 2026-cycle fixture
     from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 
     monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
@@ -1236,9 +1237,10 @@ async def test_a_confirmed_none_also_retires_the_superseded_source(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_direct_source_failures_alert(monkeypatch, db_session):
+async def test_direct_source_failures_alert(monkeypatch, db_session, freeze_utcnow):
     """A broken direct reader pages: _sync_ballot_measures must reach its
     alert whatever else the run found."""
+    freeze_utcnow(datetime(2026, 10, 21, 12))  # a 2026-cycle fixture
     import app.ops_alerts as ops_alerts
 
     _direct_source(monkeypatch, [None, None])
@@ -1252,10 +1254,11 @@ async def test_direct_source_failures_alert(monkeypatch, db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_passing_failure_is_read_again_in_the_same_run_and_not_alerted(monkeypatch, db_session):
+async def test_a_passing_failure_is_read_again_in_the_same_run_and_not_alerted(monkeypatch, db_session, freeze_utcnow):
     """Texas's library answered one request with a 503 (2026-10-21): the
     state is read again at the end of the pass, and a clean second read is
     stored with no alert."""
+    freeze_utcnow(datetime(2026, 10, 21, 12))  # a 2026-cycle fixture
     import app.ops_alerts as ops_alerts
 
     _direct_source(monkeypatch, [None, ["1"]])

@@ -29,10 +29,10 @@ from collections import Counter
 from functools import lru_cache
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator, NamedTuple
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -5523,7 +5523,8 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     """
 
     snapshot = action_metrics.snapshot()
-    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
+    run_at = utcnow().replace(tzinfo=timezone.utc).astimezone(_US_EAST)
+    action_metrics.persist(db, f"run-{run_at.strftime('%Y-%m-%d-%H%M')}")
     if snapshot:
         logger.info("Validator counters this run: %s", snapshot)
     return snapshot
@@ -5592,19 +5593,49 @@ def _commit_stage(db: Session, stage: str) -> None:
         db.rollback()
 
 
-def _run_refresh(db: Session) -> int:
-    t0 = time.perf_counter()
-    today = eastern_date(utcnow()).isoformat()
+def _end_without_issues(db: Session) -> int:
+    """A refresh with nothing to judge (no articles, none relevant) still
+    runs the periodic posts and records its counters."""
+    _run_periodic_bluesky_posts(db)
+    _persist_metrics(db)
+    _set_refresh_state(is_running=False, stage=None)
+    return 0
 
-    logger.info("Action center refresh starting for %s", today)
-    action_metrics.reset()
-    # The election whose races an issue's ballot links name (ballot_links).
-    ballot_cycle = active_election(db).cycle
-    _set_refresh_state(
-        is_running=True, stage="primary_source_signals", stage_detail=None,
-        started_at=utcnow(),
-    )
 
+@dataclass
+class _Refresh:
+    """One Action Center refresh: its session, its Eastern day and the
+    election its ballot links name, and what each step of _run_refresh
+    hands the steps after it (each step's docstring says which)."""
+
+    db: Session
+    today: str
+    ballot_cycle: int
+    # _filter_policy_relevant (in _run_refresh): (article, embedding)
+    relevant: list[tuple[NewsArticle, np.ndarray]] = field(default_factory=list)
+    # _rank_candidates
+    day_title_mean: "np.ndarray | None" = None
+    failed: set[frozenset[str]] = field(default_factory=set)  # today's set in _failed_clusters
+    published_clusters: list[int] = field(default_factory=list)
+    top_clusters: list = field(default_factory=list)
+    # _load_recent_issues
+    recent_issues: list[ActionIssue] = field(default_factory=list)
+    recent_embs: "np.ndarray | None" = None
+    matched_issue_ids: set[int] = field(default_factory=set)  # existing ids touched this run
+    new_issues: list[ActionIssue] = field(default_factory=list)  # rows inserted (no id yet)
+    issues_created: int = 0
+    new_topics: int = 0
+    stories_built: int = 0
+    # (title, embedding) of each issue this run, for the duplicate-title check
+    generated_title_embs: list[tuple[str, np.ndarray]] = field(default_factory=list)
+    bill_short_titles: dict[str, set[str]] = field(default_factory=dict)
+    bill_titles: dict[str, list[str]] = field(default_factory=dict)
+    # _retire_and_rerank
+    n_retired: int = 0
+
+
+def _primary_source_stages(run: _Refresh) -> None:
+    """The stages that read no news: drafts from roll calls and Federal Register rules ahead of coverage (early_signal), the open comment periods' reader counts, and expiring and retiring developing issues. Each guarded on its own and committed before the next one's fetch."""
     # 0. Check primary-source signals (Senate/House roll-call votes, Federal
     # Register significant rules) for anything notable enough to draft
     # ahead of press coverage — see early_signal.py. Independent of the
@@ -5618,106 +5649,81 @@ def _run_refresh(db: Session) -> int:
     # write lock through the Federal Register and reader-count requests
     # after it, and the nightly chain runs beside this refresh.
     try:
-        check_roll_call_signals(db, today)
+        check_roll_call_signals(run.db, run.today)
     except Exception:
         logger.exception("check_roll_call_signals failed (non-fatal)")
-    _commit_stage(db, "roll-call signals")
+    _commit_stage(run.db, "roll-call signals")
     try:
-        check_federal_register_signals(db, today)
+        check_federal_register_signals(run.db, run.today)
     except Exception:
         logger.exception("check_federal_register_signals failed (non-fatal)")
-    _commit_stage(db, "Federal Register signals")
+    _commit_stage(run.db, "Federal Register signals")
     try:
-        _refresh_open_comment_views(db)
+        _refresh_open_comment_views(run.db)
     except Exception:
         logger.exception("Open comment period reader counts failed (non-fatal)")
-        db.rollback()
+        run.db.rollback()
     # Expiry must run on every exit path (mirrors _persist_metrics's own
     # "called on every exit path" discipline below) — a quiet news day
     # still needs to retire developing issues whose deadline has passed,
     # not just the runs that make it to the main flush/retire stage.
     try:
-        expire_stale_developing_issues(db, utcnow())
-        retire_stale_vote_drafts(db, today)
-        retire_covered_developing_issues(db)
-        reword_retired_drafts(db)
+        expire_stale_developing_issues(run.db, utcnow())
+        retire_stale_vote_drafts(run.db, run.today)
+        retire_covered_developing_issues(run.db)
+        reword_retired_drafts(run.db)
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")
     # Committed whichever call above raised: the two early-abort paths
     # below commit nothing of their own, and refresh_action_issues'
     # finally: db.close() would discard it.
-    _commit_stage(db, "developing-issue expiry")
+    _commit_stage(run.db, "developing-issue expiry")
 
-    # 1. Fetch articles
-    _set_refresh_state(stage="fetch")
-    articles = fetch_news_articles()
-    if not articles:
-        logger.warning("No articles fetched — skipping action center refresh")
-        action_metrics.increment("refresh_aborted_no_articles")
-        _run_periodic_bluesky_posts(db)
-        _persist_metrics(db)
-        _set_refresh_state(is_running=False, stage=None)
-        return 0
-    # Volume counters, recorded on every run so "quiet day" is a number
-    # that can be compared against yesterday's, not an inference drawn
-    # from the absence of posts.
-    action_metrics.increment("articles_fetched", len(articles))
 
+def _refit_daily(run: _Refresh) -> None:
+    """The day's refits, before any claim is composed or article clustered: the actor tier's threshold (post_composer.refit_actor_threshold) and the clustering and restatement cuts (refit_cuts). A failed refit leaves the stored fit standing; each is committed before the next embedding pass."""
     # The actor tier's threshold, refit once a day from the recorded claim
     # calls before any claim is composed (post_composer.refit_actor_threshold).
     try:
-        refit_actor_threshold(db)
+        refit_actor_threshold(run.db)
     except Exception:
         logger.warning("Actor threshold refit failed; the stored one stands", exc_info=True)
     # Each refit stores its fit (api_cache_set, uncommitted); the next
     # refit and the relevance filter are embedding passes it must not stay
     # open through.
-    _commit_stage(db, "actor threshold refit")
+    _commit_stage(run.db, "actor threshold refit")
 
     # The clustering and restatement cuts, refit once a day from the stored
     # articles and issues before either is used (refit_cuts).
     try:
-        refit_cuts(db)
+        refit_cuts(run.db)
     except Exception:
         logger.warning("Cut refit failed; the stored cuts stand", exc_info=True)
-    _commit_stage(db, "cut refit")
+    _commit_stage(run.db, "cut refit")
 
-    # 2. Filter for policy relevance
-    _set_refresh_state(stage="filter")
-    relevant = _filter_policy_relevant(db, articles)
-    # The judged articles' upsert (policy_relevance._store) opened the write
-    # transaction; the trending fetch and the embedding passes after it are
-    # slow work it must not stay open through.
-    _commit_stage(db, "relevance filter")
-    if not relevant:
-        logger.warning("No policy-relevant articles found")
-        action_metrics.increment("refresh_aborted_no_relevant_articles")
-        _run_periodic_bluesky_posts(db)
-        _persist_metrics(db)
-        _set_refresh_state(is_running=False, stage=None)
-        return 0
-    action_metrics.increment("articles_policy_relevant", len(relevant))
 
+def _rank_candidates(run: _Refresh) -> None:
+    """Steps 3 to 5b: the trending topics, the relevant articles clustered and ranked, the clusters that failed the claims gates earlier today passed over, and the candidates in rank order (lazily skipping one on a story already published this run). Reads relevant; sets day_title_mean, failed, published_clusters and top_clusters."""
     # 3. Fetch trending topics from social media
     trending = fetch_trending_topics()
 
     # 4. Cluster by topic
     _set_refresh_state(stage="cluster")
-    clusters = _cluster_articles(relevant)
+    clusters = _cluster_articles(run.relevant)
     # The day's mean title embedding: the "generic news headline" direction.
     # Every per-cluster check below measures in that day-centered title
     # space (see the coherence filter for why not the cluster's own mean).
-    title_embs = _embed_texts([a.title for a, _ in relevant])
-    day_title_mean = title_embs.mean(axis=0)
+    title_embs = _embed_texts([a.title for a, _ in run.relevant])
+    run.day_title_mean = title_embs.mean(axis=0)
 
     # 5. Rank clusters (outlets, officials, civic documents, trending)
     _set_refresh_state(stage="rank")
-    ranked_clusters, ranked_signals = _rank_clusters(clusters, trending, db)
+    ranked_clusters, ranked_signals = _rank_clusters(clusters, trending, run.db)
     # A cluster that already failed the claims gates today is passed over,
     # so the candidate pool reaches the clusters ranked below it
     # (_failed_today).
-    failed = _failed_today(today)
-    tryable = [i for i, c in enumerate(ranked_clusters) if _cluster_signature(c) not in failed]
+    run.failed = _failed_today(run.today)
+    tryable = [i for i, c in enumerate(ranked_clusters) if _cluster_signature(c) not in run.failed]
     if len(tryable) < len(ranked_clusters):
         action_metrics.increment("clusters_skipped_failed_today", len(ranked_clusters) - len(tryable))
         logger.info("Passing over %d cluster(s) that failed the claims gates earlier today",
@@ -5729,14 +5735,15 @@ def _run_refresh(db: Session) -> int:
     # one already published this run (e.g., "Tariff hikes" and "Market
     # fallout from tariffs"). Lazy: `published_clusters` is filled below as
     # clusters publish, and only those count (_deduplicate_top_clusters).
-    published_clusters: list[int] = []
-    top_clusters = _deduplicate_top_clusters(
-        ranked_clusters, ranked_signals, CANDIDATE_POOL, published_clusters,
+    run.published_clusters = []
+    run.top_clusters = _deduplicate_top_clusters(
+        ranked_clusters, ranked_signals, CANDIDATE_POOL, run.published_clusters,
     )
     _set_refresh_state(stage="issues", stage_detail=f"0/{CANDIDATE_POOL}")
 
-    # 6. Generate analysis for each via LLM
 
+def _load_recent_issues(run: _Refresh) -> None:
+    """Step 6's setup: the issues a cluster may update (the rematch window's, every developing one, never a retired election-results issue) with their title embeddings, and the Congress's bills by short title and by id (_resolve_bills). Sets recent_issues, recent_embs, bill_short_titles and bill_titles (the counters start at zero on _Refresh)."""
     # Pre-load recent issues for topic-keyed matching.
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
     # always maps to the same DB row regardless of rank or whether it briefly
@@ -5746,13 +5753,13 @@ def _run_refresh(db: Session) -> int:
     # do we re-match ordinary news" tuning knob, and decoupling the two
     # means a longer confirmation_deadline later doesn't silently need a
     # matching change here too.
-    _lookback = (datetime.now(_US_EAST) - timedelta(days=REMATCH_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    lookback = (eastern_date(utcnow()) - timedelta(days=REMATCH_WINDOW_DAYS)).isoformat()
     # A retired election-results issue (the count reverted, or the refresh
     # retired it) is left out: promoted, it came back as current news.
-    _recent_issues: list[ActionIssue] = (
-        db.query(ActionIssue)
+    run.recent_issues = (
+        run.db.query(ActionIssue)
         .filter(or_(
-            ActionIssue.date >= _lookback,
+            ActionIssue.date >= lookback,
             ActionIssue.status == ActionIssueStatus.DEVELOPING,
         ))
         .filter(or_(
@@ -5762,522 +5769,518 @@ def _run_refresh(db: Session) -> int:
         ))
         .all()
     )
-    _recent_embs: "np.ndarray | None" = (
-        np.array(_embed_texts_sim([i.title for i in _recent_issues]))
-        if _recent_issues else None
+    run.recent_embs = (
+        np.array(_embed_texts_sim([i.title for i in run.recent_issues]))
+        if run.recent_issues else None
     )
-    _matched_issue_ids: set[int] = set()  # existing IDs touched this run
-    _new_issues: list[ActionIssue] = []   # newly inserted rows (no ID yet)
-
-    issues_created = 0
-    new_topics = 0
-    stories_built = 0
-    # (title, embedding) pairs for post-LLM dedup within a single run
-    generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
     # The Congress's bills by short title and by id, read once per run
     # (_resolve_bills).
-    bill_short_titles = short_title_index(db)
-    bill_titles = bill_title_lists(db)
-    for rank, (cluster_index, cluster) in enumerate(top_clusters, start=1):
-        action_metrics.increment("clusters_attempted")
-        _set_refresh_state(stage_detail=f"{rank}/{CANDIDATE_POOL}")
-        # Filter the cluster to articles that are genuinely on-topic using
-        # centered embeddings — the same space the clustering used. Raw cosine
-        # similarity is useless here because every news headline sits in the
-        # same high-similarity region; centering removes that bias so only
-        # articles that share the cluster's specific topic score highly.
-        #
-        # Centered on the DAY's mean, never the cluster's own. Subtracting a
-        # coherent cluster's own mean subtracts the very topic its articles
-        # share, leaving near-zero-sum residuals: the centroid of those is
-        # whichever article is noisiest, which then scores 1.00 against it
-        # while its siblings score negative. Live logs showed exactly that
-        # ("1/5 articles on-topic (sims: 1.00, -0.11, -0.15, -0.25, -0.27)"),
-        # and a since-removed topic split broke one Missouri-map cluster into fragments
-        # and kept two of eight same-story articles. Measured on the
-        # 2026-09-27 feed (9 clusters of 3+): the filter kept 28 articles
-        # cluster-centered, 48 day-centered, and every coherent cluster's
-        # articles scored 0.47-0.91 instead of one high and the rest negative.
-        cluster_titles = [a.title for a in cluster]
-        centered_normed = _center_titles(_embed_texts(cluster_titles), day_title_mean)
+    run.bill_short_titles = short_title_index(run.db)
+    run.bill_titles = bill_title_lists(run.db)
 
-        c_centroid = centered_normed.mean(axis=0)
-        c_norm = float(np.linalg.norm(c_centroid))
-        c_centroid = c_centroid / c_norm if c_norm > 0 else c_centroid
-        centered_sims = centered_normed @ c_centroid
 
-        # Keep only articles that score above 0.25 similarity to the centroid
-        # in centered space. 0.0 (above-average) is too loose when the cluster
-        # contains articles about different sub-topics that share one broad
-        # dimension (e.g. "Varga administration") — they all score positive.
-        # 0.25 requires a meaningful alignment with the cluster's specific topic.
-        #
-        # MEASURED (7,045 observations over 1,039 persisted runs) — but in
-        # the cluster-centered space fixed above (2026-09-27), whose "4,294
-        # observations below 0.20" were largely that centering's artifact,
-        # not unrelated articles. Day-centered, same-topic articles score
-        # 0.47-0.91, so 0.25 still separates them from a stray; the
-        # source_coherence_*_sim_bucket counters now record the new space
-        # and are what a re-measurement reads.
-        #
-        # Otsu's method on the same histogram returns 0.35, and that is
-        # NOT adopted: Otsu assumes two comparable classes and is pulled
-        # upward here by the broad on-topic hump, so it would discard the
-        # 0.25-0.35 band — several hundred genuinely on-topic articles per
-        # the kept counters — and cluster size is already what limits
-        # claim yield. Deriving a number is not a reason to adopt it; the
-        # measurement's job here was to confirm the boundary, and it did.
-        SOURCE_SIM_FLOOR = 0.25
-        for s in centered_sims:
-            outcome = "kept" if float(s) >= SOURCE_SIM_FLOOR else "dropped"
-            action_metrics.increment_bucket(f"source_coherence_{outcome}_sim_bucket", float(s))
-        on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
+def _publish_cluster(run: _Refresh, rank: int, cluster_index: int, cluster: list) -> None:
+    """Step 6 for one candidate cluster: its on-topic articles, its claims located and verified, the composed issue checked against its sources, its bills, documents, members and actions, then the issue written (a new row, or the recent one it updates) with its full story. Returns without an issue when a gate refuses the cluster (counted in action_metrics; a claims failure is remembered in failed for the rest of the day)."""
+    action_metrics.increment("clusters_attempted")
+    _set_refresh_state(stage_detail=f"{rank}/{CANDIDATE_POOL}")
+    # Filter the cluster to articles that are genuinely on-topic using
+    # centered embeddings — the same space the clustering used. Raw cosine
+    # similarity is useless here because every news headline sits in the
+    # same high-similarity region; centering removes that bias so only
+    # articles that share the cluster's specific topic score highly.
+    #
+    # Centered on the DAY's mean, never the cluster's own. Subtracting a
+    # coherent cluster's own mean subtracts the very topic its articles
+    # share, leaving near-zero-sum residuals: the centroid of those is
+    # whichever article is noisiest, which then scores 1.00 against it
+    # while its siblings score negative. Live logs showed exactly that
+    # ("1/5 articles on-topic (sims: 1.00, -0.11, -0.15, -0.25, -0.27)"),
+    # and a since-removed topic split broke one Missouri-map cluster into fragments
+    # and kept two of eight same-story articles. Measured on the
+    # 2026-09-27 feed (9 clusters of 3+): the filter kept 28 articles
+    # cluster-centered, 48 day-centered, and every coherent cluster's
+    # articles scored 0.47-0.91 instead of one high and the rest negative.
+    cluster_titles = [a.title for a in cluster]
+    centered_normed = _center_titles(_embed_texts(cluster_titles), run.day_title_mean)
+
+    c_centroid = centered_normed.mean(axis=0)
+    c_norm = float(np.linalg.norm(c_centroid))
+    c_centroid = c_centroid / c_norm if c_norm > 0 else c_centroid
+    centered_sims = centered_normed @ c_centroid
+
+    # Keep only articles that score above 0.25 similarity to the centroid
+    # in centered space. 0.0 (above-average) is too loose when the cluster
+    # contains articles about different sub-topics that share one broad
+    # dimension (e.g. "Varga administration") — they all score positive.
+    # 0.25 requires a meaningful alignment with the cluster's specific topic.
+    #
+    # MEASURED (7,045 observations over 1,039 persisted runs) — but in
+    # the cluster-centered space fixed above (2026-09-27), whose "4,294
+    # observations below 0.20" were largely that centering's artifact,
+    # not unrelated articles. Day-centered, same-topic articles score
+    # 0.47-0.91, so 0.25 still separates them from a stray; the
+    # source_coherence_*_sim_bucket counters now record the new space
+    # and are what a re-measurement reads.
+    #
+    # Otsu's method on the same histogram returns 0.35, and that is
+    # NOT adopted: Otsu assumes two comparable classes and is pulled
+    # upward here by the broad on-topic hump, so it would discard the
+    # 0.25-0.35 band — several hundred genuinely on-topic articles per
+    # the kept counters — and cluster size is already what limits
+    # claim yield. Deriving a number is not a reason to adopt it; the
+    # measurement's job here was to confirm the boundary, and it did.
+    SOURCE_SIM_FLOOR = 0.25
+    for s in centered_sims:
+        outcome = "kept" if float(s) >= SOURCE_SIM_FLOOR else "dropped"
+        action_metrics.increment_bucket(f"source_coherence_{outcome}_sim_bucket", float(s))
+    on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
+    if not on_topic:
+        on_topic = [(cluster[0], 1.0)]
+
+    # A livestream announcement neither titles the issue nor supplies
+    # its facts or sources: its headline is an invitation to watch, and
+    # what it "claims" ("The president speaks at a midterm rally") is an event
+    # that hasn't happened yet when it is published. A cluster of
+    # nothing else waits for a report to join it. Replayed on the
+    # stored clusters of 2026-10-12/13: "Watch live: The president heads
+    # to a state as its Senate race heats up" takes the outlet's report of
+    # the trip; a rally covered only by two livestream pages publishes
+    # nothing.
+    live = announces_broadcast([a.title for a, _ in on_topic], run.db)
+    if any(live):
+        action_metrics.increment("articles_dropped_broadcast", sum(live))
+        on_topic = [pair for pair, is_live in zip(on_topic, live) if not is_live]
         if not on_topic:
-            on_topic = [(cluster[0], 1.0)]
+            logger.info("Rank %d: only livestream announcements, no issue until a report joins", rank)
+            action_metrics.increment("clusters_only_broadcast")
+            return
 
-        # A livestream announcement neither titles the issue nor supplies
-        # its facts or sources: its headline is an invitation to watch, and
-        # what it "claims" ("The president speaks at a midterm rally") is an event
-        # that hasn't happened yet when it is published. A cluster of
-        # nothing else waits for a report to join it. Replayed on the
-        # stored clusters of 2026-10-12/13: "Watch live: The president heads
-        # to a state as its Senate race heats up" takes the outlet's report of
-        # the trip; a rally covered only by two livestream pages publishes
-        # nothing.
-        live = announces_broadcast([a.title for a, _ in on_topic], db)
-        if any(live):
-            action_metrics.increment("articles_dropped_broadcast", sum(live))
-            on_topic = [pair for pair, is_live in zip(on_topic, live) if not is_live]
-            if not on_topic:
-                logger.info("Rank %d: only livestream announcements, no issue until a report joins", rank)
-                action_metrics.increment("clusters_only_broadcast")
-                continue
+    filtered_cluster = [a for a, _ in on_topic]
+    # The headline of the top-ranked real article (below) that is not
+    # a live blog's headline listing several stories
+    # (_multi_story_headline): issue 806 (2026-10-16) was titled by a
+    # live blog's "Live updates: <a press secretary's exit>; <a campaign
+    # rally>" over a PBS report of the exit alone, brought the rally
+    # onto the page, and agreed too little with the PBS-titled issue
+    # 805 to be matched to it. A cluster of
+    # nothing else waits for a single story's report to join it.
+    title = next((a.title for a in filtered_cluster if not _multi_story_headline(a.title)), None)
+    if title is None:
+        logger.info("Rank %d: only live blogs listing several stories, no issue until a report joins", rank)
+        action_metrics.increment("clusters_only_multi_story")
+        return
+    logger.info(
+        "Rank %d coherence filter: %d/%d articles on-topic (sims: %s)",
+        rank, len(filtered_cluster), len(cluster),
+        ", ".join("%.2f" % s for _, s in sorted([(a, float(s)) for a, s in zip(cluster, centered_sims)], key=lambda x: -x[1])[:6]),
+    )
 
-        filtered_cluster = [a for a, _ in on_topic]
-        # The headline of the top-ranked real article (below) that is not
-        # a live blog's headline listing several stories
-        # (_multi_story_headline): issue 806 (2026-10-16) was titled by a
-        # live blog's "Live updates: <a press secretary's exit>; <a campaign
-        # rally>" over a PBS report of the exit alone, brought the rally
-        # onto the page, and agreed too little with the PBS-titled issue
-        # 805 to be matched to it. A cluster of
-        # nothing else waits for a single story's report to join it.
-        title = next((a.title for a in filtered_cluster if not _multi_story_headline(a.title)), None)
-        if title is None:
-            logger.info("Rank %d: only live blogs listing several stories, no issue until a report joins", rank)
-            action_metrics.increment("clusters_only_multi_story")
-            continue
+    resolved_urls: dict[str, str] = {}
+
+    def _url_of(url: str) -> str:
+        if url not in resolved_urls:
+            resolved_urls[url] = _resolve_url(url)
+        return resolved_urls[url]
+
+    seen_sources: dict[str, str] = {}
+    for a, _ in on_topic:
+        if a.source_name not in seen_sources:
+            seen_sources[a.source_name] = _url_of(a.url)
+    source_names = list(seen_sources.keys())
+    source_urls = list(seen_sources.values())
+
+    # Only ever set from an article whose feed explicitly granted
+    # redistribution rights (see news_feeds._rights_cleared_image) —
+    # first one found in cluster order, None if none qualify. alt/credit
+    # come from that SAME article, not independently searched.
+    image_article = next((a for a in filtered_cluster if a.image_url), None)
+    image_url = image_article.image_url if image_article else None
+    image_alt = image_article.image_alt if image_article else ""
+    image_credit = image_article.image_credit if image_article else ""
+
+    # --- Claims, not prose -------------------------------------
+    # The model locates assertions; claims.py verifies each is
+    # verbatim AND asserted of its actor, then renders it. See
+    # claims.py and post_composer.py for the three published
+    # failures that made free-form generation untenable, and for
+    # what this shape makes impossible rather than merely
+    # detectable.
+    # The SAME articles extraction reads. These diverged when
+    # extraction moved to the full cluster and this did not: a claim
+    # taken from an article outside the coherent subset was then
+    # checked against a source text that excluded its own article,
+    # and the backstop rejected real issues with "numbers not in
+    # source: 1, 11". Any grounding check is only as correct as its
+    # definition of "the source".
+    issue_source_text = " ".join(
+        f"{a.title} {a.summary}" for a in cluster
+    )
+
+    def _locate(source_material: str, _rank: int = rank) -> dict | None:
+        return locate_claim(source_material, db=run.db, today=run.today, rank=_rank)
+
+    # Extract from the WHOLE cluster, not the coherence-filtered
+    # subset. SOURCE_SIM_FLOOR exists to keep a free-writing model on
+    # topic by removing stray articles before it sees them; the claim
+    # layer now does that job better and at the right granularity, by
+    # checking each extracted CLAIM against the cluster.
+    #
+    # Keeping both compounded: the first production run of this
+    # redesign published ZERO issues. Its counters show the coherence
+    # filter had cut both top clusters to 5 articles between them, and
+    # at the measured ~39% per-article yield that is about one claim
+    # per cluster against a two-claim substance gate. Two filters each
+    # reasonable alone, multiplying into nothing.
+    #
+    # filtered_cluster still supplies the title and the source list —
+    # those should come from the coherent core.
+    # Headline claims first: they lead (build_lede takes the first),
+    # and an earlier article is the better-sourced account. Then the
+    # second claim each article's summary holds (extract_body_claims,
+    # the same prompt and verification, and the call _build_full_story
+    # makes anyway, so the model's answer is cached for it). Since
+    # complete linkage, most clusters are one or two articles; with
+    # one claim per article, a one-article story could never reach the
+    # two-claim gate below however much it said (2026-10-01: 78 of 300
+    # clusters in three days skipped as too few facts).
+    # Deduped together, so a summary claim that only restates a
+    # headline one (or contains it) can't make one fact count as two.
+    # Claims come from the on-topic articles only: one from an article
+    # the coherence filter dropped was published with a source the
+    # issue doesn't list (2026-10-08).
+    # A live blog's headline lists several stories, so its headline
+    # claim may be another story's; its body still contributes, and
+    # on_topic judges that.
+    headline_claims = claim_layer.extract_claims(
+        [a for a in filtered_cluster if not _multi_story_headline(a.title)], _locate,
+    )
+    kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
+    ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
+    cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
+    # One fact told twice is one fact: a headline and its own lede, or
+    # two outlets' wordings, would otherwise pass the two-claim gate
+    # below and fill the facts with the summary again (distinct_claims).
+    cluster_claims = claim_layer.distinct_claims(cluster_claims)
+    if not cluster_claims:
+        # A cluster with no attributable fact produces NO ISSUE.
+        # Measured on a live run, roughly one top cluster in four is
+        # like this, so MAX_ISSUES is a ceiling rather than a quota.
+        # Publishing anyway is what produced "This coverage tracks
+        # the race and related developments."
+        logger.info("No verifiable claim in cluster rank %d — no issue", rank)
+        action_metrics.increment("clusters_without_claims")
+        run.failed.add(_cluster_signature(cluster))
+        return
+
+    # The headline of the top-ranked real article. A real outlet's
+    # own headline cannot hallucinate, and this was already the
+    # proven-safe fallback whenever a generated title failed — it is
+    # now the only path.
+    summary = claim_layer.build_lede(cluster_claims)
+    # The lede is a quoted claim like the facts, so it carries its
+    # outlet too: without it, the outlet whose line became the summary
+    # appeared only in the source list, and a reader saw fewer outlets
+    # under "In the coverage" than under sources (2026-10-01).
+    summary_source, summary_source_url = cluster_claims[0].source_name, cluster_claims[0].source_url
+    # Facts are the SUPPORTING claims — the lede already states the
+    # headline one. Passing the whole list made the summary a
+    # verbatim duplicate of fact 1, which the first end-to-end run
+    # against live articles showed immediately (a summit story: the
+    # summary and the first key fact were the same sentence).
+    facts, fact_sources, fact_source_urls = claim_layer.build_facts(cluster_claims[1:])
+    # Every article a published line quotes is listed, under the same
+    # resolved URL. The list keeps one article per outlet, so a line
+    # from an outlet's second article, or one stored under its Google
+    # News redirect, linked to a source the issue didn't list
+    # (5 of 119 issues since 2026-09-01).
+    summary_source_url = _url_of(summary_source_url)
+    fact_source_urls = [_url_of(u) for u in fact_source_urls]
+    for quoted_name, quoted_url in [(summary_source, summary_source_url), *zip(fact_sources, fact_source_urls)]:
+        if quoted_url and quoted_url not in source_urls:
+            source_names.append(quoted_name)
+            source_urls.append(quoted_url)
+
+    # Backstop, not the primary defence. Every word here is either a
+    # verbatim span or a real outlet's headline, so this should
+    # always pass — which is exactly why it is worth running: it is
+    # what would catch a regression in compose() itself, and it keeps
+    # this path inside the one shared validation surface every other
+    # generator uses. Same posture as election_bluesky's composed
+    # post. Fail closed: a cluster that somehow produces ungrounded
+    # text publishes nothing rather than being retried into shape.
+    composed_text = f"{title} {summary} " + " ".join(facts)
+    reasons = grounding_violations(composed_text, issue_source_text)
+    reasons += hedge_and_editorializing_violations(composed_text)
+    # No model wrote this: it is composed from verified spans, so its
+    # input is the source text it was composed from and checked
+    # against. The calls that located the spans are recorded by
+    # locate_claim.
+    _record_generation_sample(
+        run.db, "action_center_issue", rank, 1, issue_source_text,
+        {"title": title, "summary": summary, "facts": facts},
+        passed=not reasons, violations=reasons or None,
+    )
+    if reasons:
+        logger.warning(
+            "Composed issue for rank %d failed the backstop (%s) — no issue",
+            rank, "; ".join(reasons)[:200],
+        )
+        action_metrics.increment("issues_skipped_grounding")
+        return
+
+    # _check_summary_roles is GONE from this path.
+    #
+    # It existed because a free-written summary could invert who did
+    # what to whom — issue #376 said "E. Jean Carroll was found
+    # guilty" when she was the plaintiff. The summary is now a
+    # verbatim span the source asserts OF its actor, adjacency
+    # checked (see post_composer._asserted_together), so that
+    # inversion is unreachable rather than merely unlikely.
+    #
+    # Keeping it was costing real issues. It is a 1.2B model judging
+    # another model's work, and on "Senate Republican seeks to
+    # fast-track AI whistleblower bill" — a verbatim headline — it
+    # objected that the summary "attributes the billing and legal
+    # consequences to entities not mentioned". It was fail-open by
+    # design for exactly that unreliability; I had made it fail
+    # closed, which turned one bad judgement into a deleted issue.
+    #
+    # A check that cannot catch anything the shape already prevents,
+    # and does reject correct content, is not defence in depth.
+
+    _log_summary_source_consistency(summary, issue_source_text)
+    log_intensifier_usage(
+        "action_center_issue", summary + " " + " ".join(facts), issue_source_text,
+    )
+
+    # Minimum-substance gate (2026-07 audit): an issue resting on a
+    # single piece of evidence isn't a publishable issue — observed
+    # live as issues of pure filler ("Congressional scheduling
+    # adjustments": no name, no number, no bill anywhere).
+    #
+    # Counted in CLAIMS rather than facts since the redesign: the
+    # lede is itself a claim, so two claims means a headline fact
+    # plus one corroborating fact — the same "at least two pieces of
+    # evidence" bar the original gate set, now that `facts` holds
+    # only the supporting ones.
+    if len(cluster_claims) < 2:
         logger.info(
-            "Rank %d coherence filter: %d/%d articles on-topic (sims: %s)",
-            rank, len(filtered_cluster), len(cluster),
-            ", ".join("%.2f" % s for _, s in sorted([(a, float(s)) for a, s in zip(cluster, centered_sims)], key=lambda x: -x[1])[:6]),
+            "Skipping rank %d — only %d claim(s) survived: '%s'",
+            rank, len(cluster_claims), title[:60],
         )
+        action_metrics.increment("issues_skipped_too_few_facts")
+        run.failed.add(_cluster_signature(cluster))
+        return
 
-        resolved_urls: dict[str, str] = {}
-
-        def _url_of(url: str) -> str:
-            if url not in resolved_urls:
-                resolved_urls[url] = _resolve_url(url)
-            return resolved_urls[url]
-
-        seen_sources: dict[str, str] = {}
-        for a, _ in on_topic:
-            if a.source_name not in seen_sources:
-                seen_sources[a.source_name] = _url_of(a.url)
-        source_names = list(seen_sources.keys())
-        source_urls = list(seen_sources.values())
-
-        # Only ever set from an article whose feed explicitly granted
-        # redistribution rights (see news_feeds._rights_cleared_image) —
-        # first one found in cluster order, None if none qualify. alt/credit
-        # come from that SAME article, not independently searched.
-        image_article = next((a for a in filtered_cluster if a.image_url), None)
-        image_url = image_article.image_url if image_article else None
-        image_alt = image_article.image_alt if image_article else ""
-        image_credit = image_article.image_credit if image_article else ""
-
-        # --- Claims, not prose -------------------------------------
-        # The model locates assertions; claims.py verifies each is
-        # verbatim AND asserted of its actor, then renders it. See
-        # claims.py and post_composer.py for the three published
-        # failures that made free-form generation untenable, and for
-        # what this shape makes impossible rather than merely
-        # detectable.
-        # The SAME articles extraction reads. These diverged when
-        # extraction moved to the full cluster and this did not: a claim
-        # taken from an article outside the coherent subset was then
-        # checked against a source text that excluded its own article,
-        # and the backstop rejected real issues with "numbers not in
-        # source: 1, 11". Any grounding check is only as correct as its
-        # definition of "the source".
-        issue_source_text = " ".join(
-            f"{a.title} {a.summary}" for a in cluster
+    # Post-LLM title dedup: skip if this LLM-generated title is too
+    # similar to one already selected this run. Catches cases where two
+    # article clusters were distinct enough to pass pre-LLM embedding
+    # dedup (threshold 0.50) but the LLM distills them to the same headline.
+    title_emb = _embed_texts_sim([title])[0]
+    # 0.60 measured under the similarity model (2026-07-22): a
+    # reworded same headline scores 0.823, different stories 0.251.
+    # (Was 0.92 on the retrieval model's compressed scale.)
+    if any(float(title_emb @ prev_emb) >= 0.60 for _, prev_emb in run.generated_title_embs):
+        logger.info(
+            "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
+            rank, title[:80],
         )
+        action_metrics.increment("issues_skipped_duplicate_title")
+        return
+    run.generated_title_embs.append((title, title_emb))
 
-        def _locate(source_material: str, _rank: int = rank) -> dict | None:
-            return locate_claim(source_material, db=db, today=today, rank=_rank)
+    if not isinstance(facts, list):
+        facts = []
+    policy_areas = _classify_issue_policy_areas(title, summary)
 
-        # Extract from the WHOLE cluster, not the coherence-filtered
-        # subset. SOURCE_SIM_FLOOR exists to keep a free-writing model on
-        # topic by removing stray articles before it sees them; the claim
-        # layer now does that job better and at the right granularity, by
-        # checking each extracted CLAIM against the cluster.
-        #
-        # Keeping both compounded: the first production run of this
-        # redesign published ZERO issues. Its counters show the coherence
-        # filter had cut both top clusters to 5 articles between them, and
-        # at the measured ~39% per-article yield that is about one claim
-        # per cluster against a two-claim substance gate. Two filters each
-        # reasonable alone, multiplying into nothing.
-        #
-        # filtered_cluster still supplies the title and the source list —
-        # those should come from the coherent core.
-        # Headline claims first: they lead (build_lede takes the first),
-        # and an earlier article is the better-sourced account. Then the
-        # second claim each article's summary holds (extract_body_claims,
-        # the same prompt and verification, and the call _build_full_story
-        # makes anyway, so the model's answer is cached for it). Since
-        # complete linkage, most clusters are one or two articles; with
-        # one claim per article, a one-article story could never reach the
-        # two-claim gate below however much it said (2026-10-01: 78 of 300
-        # clusters in three days skipped as too few facts).
-        # Deduped together, so a summary claim that only restates a
-        # headline one (or contains it) can't make one fact count as two.
-        # Claims come from the on-topic articles only: one from an article
-        # the coherence filter dropped was published with a source the
-        # issue doesn't list (2026-10-08).
-        # A live blog's headline lists several stories, so its headline
-        # claim may be another story's; its body still contributes, and
-        # on_topic judges that.
-        headline_claims = claim_layer.extract_claims(
-            [a for a in filtered_cluster if not _multi_story_headline(a.title)], _locate,
+    # 7. The bills the articles themselves name (_resolve_bills).
+    article_texts = [f"{a.title} {a.summary}" for a in cluster]
+    resolved_bills = _resolve_bills(article_texts, run.bill_short_titles, run.bill_titles)
+    if resolved_bills:
+        logger.info("  Resolved %d bill(s): %s",
+                    len(resolved_bills),
+                    ", ".join(b["id"] for b in resolved_bills))
+
+    # 8. Find related explore documents
+    related_docs = _find_related_explore_docs(title, summary, policy_areas, run.db)
+    related_explore_ids = [d["id"] for d in related_docs]
+
+    # 9. Find senators/reps mentioned in this issue (backward compat field)
+    link_texts = [f"{a.title}. {a.summary}" for a in filtered_cluster]
+    related_senators = _find_related_senators(title, summary, facts, run.db, article_texts=link_texts)
+
+    # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
+    related_officials = _find_related_officials(title, summary, facts, run.db)
+
+    # Action-surface gate: an issue must connect to something a citizen
+    # can actually act on in platform data. Replaces the prototype-
+    # similarity civic gate, whose absolute cosine threshold (0.30) sat
+    # below the embedding model's same-register noise floor and never
+    # fired (2026-07 audit: celebrity-crime and music-performance
+    # stories passed). Derived entirely from what the platform has
+    # ingested, not from authored prototype text.
+    #
+    # Only HIGH-PRECISION anchors count (2026-07 audit tightening —
+    # a World Cup story published as a civic issue by clearing the old
+    # any-anchor version of this gate twice over): a resolved bill or a
+    # full-name-matched official is near-certain; a last-name-only
+    # official match is not (the story's anchor was soccer player
+    # Ferran Torres surname-matching two Reps. Torres), and a SINGLE
+    # explore-doc title match at the 0.75 similarity bar is not either
+    # (the same story's other anchor was a Puerto Rico PROMESA floor
+    # speech at that bar). Two independent explore docs agreeing
+    # remains a valid anchor; one alone doesn't publish an issue.
+    strong_officials = [
+        o for o in related_officials
+        if o.get("match_reason") == "named in coverage"
+    ]
+    if not (resolved_bills or strong_officials or len(related_explore_ids) >= 2):
+        logger.info(
+            "Skipping rank %d — no strong action surface (no bills, no "
+            "full-name officials, <2 civic documents): '%s'",
+            rank, title[:60],
         )
-        kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
-        ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
-        cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
-        # One fact told twice is one fact: a headline and its own lede, or
-        # two outlets' wordings, would otherwise pass the two-claim gate
-        # below and fill the facts with the summary again (distinct_claims).
-        cluster_claims = claim_layer.distinct_claims(cluster_claims)
-        if not cluster_claims:
-            # A cluster with no attributable fact produces NO ISSUE.
-            # Measured on a live run, roughly one top cluster in four is
-            # like this, so MAX_ISSUES is a ceiling rather than a quota.
-            # Publishing anyway is what produced "This coverage tracks
-            # the race and related developments."
-            logger.info("No verifiable claim in cluster rank %d — no issue", rank)
-            action_metrics.increment("clusters_without_claims")
-            failed.add(_cluster_signature(cluster))
-            continue
+        action_metrics.increment("issues_skipped_no_action_surface")
+        return
 
-        # The headline of the top-ranked real article. A real outlet's
-        # own headline cannot hallucinate, and this was already the
-        # proven-safe fallback whenever a generated title failed — it is
-        # now the only path.
-        summary = claim_layer.build_lede(cluster_claims)
-        # The lede is a quoted claim like the facts, so it carries its
-        # outlet too: without it, the outlet whose line became the summary
-        # appeared only in the source list, and a reader saw fewer outlets
-        # under "In the coverage" than under sources (2026-10-01).
-        summary_source, summary_source_url = cluster_claims[0].source_name, cluster_claims[0].source_url
-        # Facts are the SUPPORTING claims — the lede already states the
-        # headline one. Passing the whole list made the summary a
-        # verbatim duplicate of fact 1, which the first end-to-end run
-        # against live articles showed immediately (a summit story: the
-        # summary and the first key fact were the same sentence).
-        facts, fact_sources, fact_source_urls = claim_layer.build_facts(cluster_claims[1:])
-        # Every article a published line quotes is listed, under the same
-        # resolved URL. The list keeps one article per outlet, so a line
-        # from an outlet's second article, or one stored under its Google
-        # News redirect, linked to a source the issue didn't list
-        # (5 of 119 issues since 2026-09-01).
-        summary_source_url = _url_of(summary_source_url)
-        fact_source_urls = [_url_of(u) for u in fact_source_urls]
-        for quoted_name, quoted_url in [(summary_source, summary_source_url), *zip(fact_sources, fact_source_urls)]:
-            if quoted_url and quoted_url not in source_urls:
-                source_names.append(quoted_name)
-                source_urls.append(quoted_url)
+    # 10. Build data-driven actions (no LLM hallucinations). After the
+    # gate: a comment period or a committee is something to do about an
+    # issue, not evidence that it is one.
+    try:
+        comment_docs = _open_comment_docs(title, related_docs, run.db)
+    except Exception:
+        logger.exception("Open comment period lookup failed (non-fatal)")
+        comment_docs = []
+    related_explore_ids += [d["id"] for d in comment_docs if d["id"] not in related_explore_ids]
+    try:
+        committees = route_committees(title, summary)
+    except Exception:
+        logger.exception("Committee routing failed (non-fatal)")
+        committees = []
+    action_metrics.increment("issues_with_committee", bool(committees))
+    action_metrics.increment("issues_with_comment_period", bool(comment_docs))
+    actions = _build_actions_from_data(
+        title, resolved_bills, source_urls, source_names, related_senators, policy_areas,
+        committees=committees, comment_docs=comment_docs,
+    )
 
-        # Backstop, not the primary defence. Every word here is either a
-        # verbatim span or a real outlet's headline, so this should
-        # always pass — which is exactly why it is worth running: it is
-        # what would catch a regression in compose() itself, and it keeps
-        # this path inside the one shared validation surface every other
-        # generator uses. Same posture as election_bluesky's composed
-        # post. Fail closed: a cluster that somehow produces ungrounded
-        # text publishes nothing rather than being retried into shape.
-        composed_text = f"{title} {summary} " + " ".join(facts)
-        reasons = grounding_violations(composed_text, issue_source_text)
-        reasons += hedge_and_editorializing_violations(composed_text)
-        # No model wrote this: it is composed from verified spans, so its
-        # input is the source text it was composed from and checked
-        # against. The calls that located the spans are recorded by
-        # locate_claim.
-        _record_generation_sample(
-            db, "action_center_issue", rank, 1, issue_source_text,
-            {"title": title, "summary": summary, "facts": facts},
-            passed=not reasons, violations=reasons or None,
-        )
-        if reasons:
-            logger.warning(
-                "Composed issue for rank %d failed the backstop (%s) — no issue",
-                rank, "; ".join(reasons)[:200],
+    # Track the date of the newest article driving this cluster so the
+    # Bluesky poster can frame posts as "yesterday" or include the date
+    # when reporting on events that didn't happen today.
+    newest_pub = max(
+        (a.published for a in filtered_cluster if a.published is not None),
+        default=None,
+    )
+    primary_article_date = (
+        newest_pub.astimezone(_US_EAST).strftime("%Y-%m-%d")
+        if newest_pub is not None else run.today
+    )
+
+    # Who the issue is principally about (story_actor), for the admin's
+    # weekly actor concentration.
+    actor = _principal_actor(title, summary, related_officials)
+    # The states and races it names, for its ballot line (ballot_links).
+    issue_ballot_links = ballot_links(run.db, run.ballot_cycle, title, summary, facts)
+
+    # Find the matching existing issue across all recent issues (2-day
+    # lookback, any rank). Same STORY → same row, regardless of rank
+    # yo-yoing or a brief displacement — see _find_matching_issue's
+    # docstring for the matching rules and their history.
+    match = _find_matching_issue(
+        title, facts, run.recent_issues, run.recent_embs, title_emb, run.matched_issue_ids,
+        source_urls=source_urls, summary=summary, db=run.db,
+        source_titles={_url_of(a.url): a.title for a in filtered_cluster},
+    )
+
+    new_values: dict = {
+        "title": title[:500],
+        "summary": summary,
+        "facts": json.dumps(facts),
+        "actions": json.dumps(actions),
+        # Aligned with `facts` by index. Verbatim quoting without
+        # attribution reads as plagiarism; with it, it reads as
+        # evidence — and a reader can check any fact against the
+        # outlet that made it.
+        "fact_sources": json.dumps(fact_sources),
+        "fact_source_urls": json.dumps(fact_source_urls),
+        "summary_source": summary_source,
+        "summary_source_url": summary_source_url,
+        "source_urls": json.dumps(source_urls),
+        "source_names": json.dumps(source_names),
+        "policy_areas": json.dumps(policy_areas),
+        "related_bill_ids": json.dumps(resolved_bills),
+        "related_explore_ids": json.dumps(related_explore_ids),
+        # By permanent key too: the ids are rows, which get replaced.
+        "related_explore_keys": json.dumps(keys_for_ids(run.db, related_explore_ids)),
+        "related_senators": json.dumps(related_senators),
+        "related_officials": json.dumps(related_officials),
+        # The rule and the reporting the members were matched under, so
+        # a later rule can match them again (relink_issue_members).
+        "member_link_stamp": member_link_stamp(),
+        "member_link_texts": json.dumps(link_texts),
+        "ballot_links": json.dumps(issue_ballot_links),
+        "primary_article_date": primary_article_date,
+        "image_url": image_url,
+        "image_alt": image_alt,
+        "image_credit": image_credit,
+    }
+
+    # The slot this issue fills, not its candidate position: the third
+    # candidate publishing because the first two failed is issue #1.
+    slot = run.issues_created + 1
+    if match:
+        run.matched_issue_ids.add(match.id)
+        match.principal_actor = actor
+        if match.status == ActionIssueStatus.DEVELOPING:
+            _promote_developing_issue(
+                match, new_values, slot, run.today, primary_article_date, facts, title,
             )
-            action_metrics.increment("issues_skipped_grounding")
-            continue
-
-        # _check_summary_roles is GONE from this path.
-        #
-        # It existed because a free-written summary could invert who did
-        # what to whom — issue #376 said "E. Jean Carroll was found
-        # guilty" when she was the plaintiff. The summary is now a
-        # verbatim span the source asserts OF its actor, adjacency
-        # checked (see post_composer._asserted_together), so that
-        # inversion is unreachable rather than merely unlikely.
-        #
-        # Keeping it was costing real issues. It is a 1.2B model judging
-        # another model's work, and on "Senate Republican seeks to
-        # fast-track AI whistleblower bill" — a verbatim headline — it
-        # objected that the summary "attributes the billing and legal
-        # consequences to entities not mentioned". It was fail-open by
-        # design for exactly that unreliability; I had made it fail
-        # closed, which turned one bad judgement into a deleted issue.
-        #
-        # A check that cannot catch anything the shape already prevents,
-        # and does reject correct content, is not defence in depth.
-
-        _log_summary_source_consistency(summary, issue_source_text)
-        log_intensifier_usage(
-            "action_center_issue", summary + " " + " ".join(facts), issue_source_text,
-        )
-
-        # Minimum-substance gate (2026-07 audit): an issue resting on a
-        # single piece of evidence isn't a publishable issue — observed
-        # live as issues of pure filler ("Congressional scheduling
-        # adjustments": no name, no number, no bill anywhere).
-        #
-        # Counted in CLAIMS rather than facts since the redesign: the
-        # lede is itself a claim, so two claims means a headline fact
-        # plus one corroborating fact — the same "at least two pieces of
-        # evidence" bar the original gate set, now that `facts` holds
-        # only the supporting ones.
-        if len(cluster_claims) < 2:
-            logger.info(
-                "Skipping rank %d — only %d claim(s) survived: '%s'",
-                rank, len(cluster_claims), title[:60],
-            )
-            action_metrics.increment("issues_skipped_too_few_facts")
-            failed.add(_cluster_signature(cluster))
-            continue
-
-        # Post-LLM title dedup: skip if this LLM-generated title is too
-        # similar to one already selected this run. Catches cases where two
-        # article clusters were distinct enough to pass pre-LLM embedding
-        # dedup (threshold 0.50) but the LLM distills them to the same headline.
-        title_emb = _embed_texts_sim([title])[0]
-        # 0.60 measured under the similarity model (2026-07-22): a
-        # reworded same headline scores 0.823, different stories 0.251.
-        # (Was 0.92 on the retrieval model's compressed scale.)
-        if any(float(title_emb @ prev_emb) >= 0.60 for _, prev_emb in generated_title_embs):
-            logger.info(
-                "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
-                rank, title[:80],
-            )
-            action_metrics.increment("issues_skipped_duplicate_title")
-            continue
-        generated_title_embs.append((title, title_emb))
-
-        if not isinstance(facts, list):
-            facts = []
-        policy_areas = _classify_issue_policy_areas(title, summary)
-
-        # 7. The bills the articles themselves name (_resolve_bills).
-        article_texts = [f"{a.title} {a.summary}" for a in cluster]
-        resolved_bills = _resolve_bills(article_texts, bill_short_titles, bill_titles)
-        if resolved_bills:
-            logger.info("  Resolved %d bill(s): %s",
-                        len(resolved_bills),
-                        ", ".join(b["id"] for b in resolved_bills))
-
-        # 8. Find related explore documents
-        related_docs = _find_related_explore_docs(title, summary, policy_areas, db)
-        related_explore_ids = [d["id"] for d in related_docs]
-
-        # 9. Find senators/reps mentioned in this issue (backward compat field)
-        link_texts = [f"{a.title}. {a.summary}" for a in filtered_cluster]
-        related_senators = _find_related_senators(title, summary, facts, db, article_texts=link_texts)
-
-        # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
-        related_officials = _find_related_officials(title, summary, facts, db)
-
-        # Action-surface gate: an issue must connect to something a citizen
-        # can actually act on in platform data. Replaces the prototype-
-        # similarity civic gate, whose absolute cosine threshold (0.30) sat
-        # below the embedding model's same-register noise floor and never
-        # fired (2026-07 audit: celebrity-crime and music-performance
-        # stories passed). Derived entirely from what the platform has
-        # ingested, not from authored prototype text.
-        #
-        # Only HIGH-PRECISION anchors count (2026-07 audit tightening —
-        # a World Cup story published as a civic issue by clearing the old
-        # any-anchor version of this gate twice over): a resolved bill or a
-        # full-name-matched official is near-certain; a last-name-only
-        # official match is not (the story's anchor was soccer player
-        # Ferran Torres surname-matching two Reps. Torres), and a SINGLE
-        # explore-doc title match at the 0.75 similarity bar is not either
-        # (the same story's other anchor was a Puerto Rico PROMESA floor
-        # speech at that bar). Two independent explore docs agreeing
-        # remains a valid anchor; one alone doesn't publish an issue.
-        strong_officials = [
-            o for o in related_officials
-            if o.get("match_reason") == "named in coverage"
-        ]
-        if not (resolved_bills or strong_officials or len(related_explore_ids) >= 2):
-            logger.info(
-                "Skipping rank %d — no strong action surface (no bills, no "
-                "full-name officials, <2 civic documents): '%s'",
-                rank, title[:60],
-            )
-            action_metrics.increment("issues_skipped_no_action_surface")
-            continue
-
-        # 10. Build data-driven actions (no LLM hallucinations). After the
-        # gate: a comment period or a committee is something to do about an
-        # issue, not evidence that it is one.
-        try:
-            comment_docs = _open_comment_docs(title, related_docs, db)
-        except Exception:
-            logger.exception("Open comment period lookup failed (non-fatal)")
-            comment_docs = []
-        related_explore_ids += [d["id"] for d in comment_docs if d["id"] not in related_explore_ids]
-        try:
-            committees = route_committees(title, summary)
-        except Exception:
-            logger.exception("Committee routing failed (non-fatal)")
-            committees = []
-        action_metrics.increment("issues_with_committee", bool(committees))
-        action_metrics.increment("issues_with_comment_period", bool(comment_docs))
-        actions = _build_actions_from_data(
-            title, resolved_bills, source_urls, source_names, related_senators, policy_areas,
-            committees=committees, comment_docs=comment_docs,
-        )
-
-        # Track the date of the newest article driving this cluster so the
-        # Bluesky poster can frame posts as "yesterday" or include the date
-        # when reporting on events that didn't happen today.
-        newest_pub = max(
-            (a.published for a in filtered_cluster if a.published is not None),
-            default=None,
-        )
-        primary_article_date = (
-            newest_pub.astimezone(_US_EAST).strftime("%Y-%m-%d")
-            if newest_pub is not None else today
-        )
-
-        # Who the issue is principally about (story_actor), for the admin's
-        # weekly actor concentration.
-        actor = _principal_actor(title, summary, related_officials)
-        # The states and races it names, for its ballot line (ballot_links).
-        issue_ballot_links = ballot_links(db, ballot_cycle, title, summary, facts)
-
-        # Find the matching existing issue across all recent issues (2-day
-        # lookback, any rank). Same STORY → same row, regardless of rank
-        # yo-yoing or a brief displacement — see _find_matching_issue's
-        # docstring for the matching rules and their history.
-        match = _find_matching_issue(
-            title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
-            source_urls=source_urls, summary=summary, db=db,
-            source_titles={_url_of(a.url): a.title for a in filtered_cluster},
-        )
-
-        _new_values: dict = {
-            "title": title[:500],
-            "summary": summary,
-            "facts": json.dumps(facts),
-            "actions": json.dumps(actions),
-            # Aligned with `facts` by index. Verbatim quoting without
-            # attribution reads as plagiarism; with it, it reads as
-            # evidence — and a reader can check any fact against the
-            # outlet that made it.
-            "fact_sources": json.dumps(fact_sources),
-            "fact_source_urls": json.dumps(fact_source_urls),
-            "summary_source": summary_source,
-            "summary_source_url": summary_source_url,
-            "source_urls": json.dumps(source_urls),
-            "source_names": json.dumps(source_names),
-            "policy_areas": json.dumps(policy_areas),
-            "related_bill_ids": json.dumps(resolved_bills),
-            "related_explore_ids": json.dumps(related_explore_ids),
-            # By permanent key too: the ids are rows, which get replaced.
-            "related_explore_keys": json.dumps(keys_for_ids(db, related_explore_ids)),
-            "related_senators": json.dumps(related_senators),
-            "related_officials": json.dumps(related_officials),
-            # The rule and the reporting the members were matched under, so
-            # a later rule can match them again (relink_issue_members).
-            "member_link_stamp": member_link_stamp(),
-            "member_link_texts": json.dumps(link_texts),
-            "ballot_links": json.dumps(issue_ballot_links),
-            "primary_article_date": primary_article_date,
-            "image_url": image_url,
-            "image_alt": image_alt,
-            "image_credit": image_credit,
-        }
-
-        # The slot this issue fills, not its candidate position: the third
-        # candidate publishing because the first two failed is issue #1.
-        slot = issues_created + 1
-        if match:
-            _matched_issue_ids.add(match.id)
-            match.principal_actor = actor
-            if match.status == ActionIssueStatus.DEVELOPING:
-                _promote_developing_issue(
-                    match, _new_values, slot, today, primary_article_date, facts, title,
-                )
-            else:
-                _apply_matched_issue_update(
-                    match, _new_values, slot, today, primary_article_date, facts, title,
-                )
-            # Split from the new-topic case below: `issues_created` counts
-            # both, so a run that only ever re-matched yesterday's stories
-            # reported the same number as one that found four fresh ones.
-            # That distinction is the whole difference between "the news is
-            # quiet" and "new topics are being dropped by a gate".
-            action_metrics.increment("issues_matched_existing")
         else:
-            # Brand new topic — give it a permanent row and post to Bluesky.
-            new_row = ActionIssue(date=today, rank=slot, is_current=True, principal_actor=actor, **_new_values)
-            db.add(new_row)
-            _new_issues.append(new_row)
-            action_metrics.increment("issues_new_topic")
-            logger.info("Rank %d new topic: '%s'", rank, title[:60])
-
-        # Only a row without a story gets one: new, just promoted, or
-        # cleared because its title or facts changed. A developing draft
-        # has one primary source and no reporting to tell yet.
-        row = match or new_row
-        if row.full_story is None and row.status != ActionIssueStatus.DEVELOPING:
-            _set_refresh_state(stage_detail=f"story for rank {rank}")
-            row.full_story = _build_full_story(
-                filtered_cluster, cluster_claims, summary, facts,
-                issue_source_text, _locate,
+            _apply_matched_issue_update(
+                match, new_values, slot, run.today, primary_article_date, facts, title,
             )
-            if row.full_story:
-                stories_built += 1
+        # Split from the new-topic case below: `issues_created` counts
+        # both, so a run that only ever re-matched yesterday's stories
+        # reported the same number as one that found four fresh ones.
+        # That distinction is the whole difference between "the news is
+        # quiet" and "new topics are being dropped by a gate".
+        action_metrics.increment("issues_matched_existing")
+    else:
+        # Brand new topic — give it a permanent row and post to Bluesky.
+        new_row = ActionIssue(date=run.today, rank=slot, is_current=True, principal_actor=actor, **new_values)
+        run.db.add(new_row)
+        run.new_issues.append(new_row)
+        action_metrics.increment("issues_new_topic")
+        logger.info("Rank %d new topic: '%s'", rank, title[:60])
 
-        issues_created += 1
-        new_topics += match is None
-        published_clusters.append(cluster_index)
-        # Stop before asking for another candidate: the generator counts
-        # each one it yields as tried. Only new topics fill MAX_ISSUES
-        # (comment above it); an update still used one of the pool's tries.
-        if new_topics >= MAX_ISSUES:
-            break
+    # Only a row without a story gets one: new, just promoted, or
+    # cleared because its title or facts changed. A developing draft
+    # has one primary source and no reporting to tell yet.
+    row = match or new_row
+    if row.full_story is None and row.status != ActionIssueStatus.DEVELOPING:
+        _set_refresh_state(stage_detail=f"story for rank {rank}")
+        row.full_story = _build_full_story(
+            filtered_cluster, cluster_claims, summary, facts,
+            issue_source_text, _locate,
+        )
+        if row.full_story:
+            run.stories_built += 1
 
+    run.issues_created += 1
+    run.new_topics += match is None
+    run.published_clusters.append(cluster_index)
+    # Stop before asking for another candidate: the generator counts
+    # each one it yields as tried. Only new topics fill MAX_ISSUES
+    # (comment above it); an update still used one of the pool's tries.
+
+
+def _retire_and_rerank(run: _Refresh) -> None:
+    """After the candidates: the current issues no cluster touched this run retired (outside the grace period, _retire_untouched_issues), developing issues the coverage now carries retired, and the rest ranked again. Committed. Sets n_retired."""
     # Flush to assign IDs to newly inserted rows, then mark them as touched.
-    db.flush()
-    for ni in _new_issues:
-        _matched_issue_ids.add(ni.id)
+    run.db.flush()
+    for ni in run.new_issues:
+        run.matched_issue_ids.add(ni.id)
 
     # Retire issues not touched in this run, but only after a grace period.
     # 24h, not the original 90 minutes: reader feedback that issues "come
@@ -6292,19 +6295,19 @@ def _run_refresh(db: Session) -> int:
     # guaranteed full day in the record before it can be retired purely
     # for not re-matching, matching how a register reads: today's docket
     # doesn't quietly shrink hour to hour.
-    _grace_cutoff = utcnow() - timedelta(hours=_RETIREMENT_GRACE_HOURS)
+    grace_cutoff = utcnow() - timedelta(hours=_RETIREMENT_GRACE_HOURS)
     all_current = (
-        db.query(ActionIssue)
+        run.db.query(ActionIssue)
         .filter(ActionIssue.is_current == True)  # noqa: E712
         .all()
     )
-    n_retired, n_graced = _retire_untouched_issues(all_current, _matched_issue_ids, _grace_cutoff)
+    run.n_retired, n_graced = _retire_untouched_issues(all_current, run.matched_issue_ids, grace_cutoff)
     # A vote draft whose bill this run's reporting covers as its own issue
     # gives way to it now, not an hour from now (early_signal).
-    db.flush()
-    retire_covered_developing_issues(db)
-    if n_retired:
-        logger.info("Retired %d stale issues not in current clusters", n_retired)
+    run.db.flush()
+    retire_covered_developing_issues(run.db)
+    if run.n_retired:
+        logger.info("Retired %d stale issues not in current clusters", run.n_retired)
     if n_graced:
         logger.info("Spared %d recent issues from retirement (within grace period)", n_graced)
 
@@ -6314,107 +6317,167 @@ def _run_refresh(db: Session) -> int:
     # the public page (two simultaneous #4s, 2026-07 audit). Issues placed
     # by this run keep their relative order first; spared survivors follow.
     still_current = [r for r in all_current if r.is_current]
-    for new_rank, row in enumerate(_rank_ordered_issues(still_current, _matched_issue_ids), start=1):
+    for new_rank, row in enumerate(_rank_ordered_issues(still_current, run.matched_issue_ids), start=1):
         row.rank = new_rank
 
-    db.commit()
+    run.db.commit()
 
+
+def _monitors_and_timeline(run: _Refresh) -> None:
+    """The national monitors updated from today's issues (before the timeline, so the day's top issue carries its monitor slugs), and on a day with an issue, the timeline entry and the period summaries."""
     # Stage 2: Auto-detect and update national monitors (must run before
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
     _set_refresh_state(stage="monitors", stage_detail=None,
-                       last_issues_created=issues_created, last_issues_retired=n_retired)
+                       last_issues_created=run.issues_created, last_issues_retired=run.n_retired)
     # Every run, not only when issues were created: the lifecycle step ages
     # monitors toward watching and closed, and a run of quiet days used to
     # leave a monitor active for as long as they lasted.
-    _update_national_monitors(today, db)
+    _update_national_monitors(run.today, run.db)
 
     # Preserve today's #1 issue in the permanent timeline
     _set_refresh_state(stage="timeline")
-    if issues_created > 0:
-        _save_timeline_entry(today, db)
-        generate_period_summaries(today, db)
+    if run.issues_created > 0:
+        _save_timeline_entry(run.today, run.db)
+        generate_period_summaries(run.today, run.db)
 
+
+def _relink_issues(run: _Refresh) -> None:
+    """The passes over stored issues, each guarded on its own: ballot links, principal actors, members, the recent feed's duplicates, new facts and the related roll calls."""
     # Rows written before ballot links were matched get theirs here.
     try:
-        link_issue_ballots(db, ballot_cycle)
+        link_issue_ballots(run.db, run.ballot_cycle)
     except Exception:
         logger.exception("Linking issues to the ballot failed")
-        db.rollback()
+        run.db.rollback()
 
     # Rows published before principal actors were recorded get theirs here,
     # where the model is loaded; after the first run there are none left.
     try:
-        label_principal_actors(db)
+        label_principal_actors(run.db)
     except Exception:
         logger.exception("Labelling issues' principal actors failed")
-        db.rollback()
+        run.db.rollback()
 
     # Rows whose members were matched under an earlier rule are matched
     # again under this one, a bounded batch a run.
     try:
-        relink_issue_members(db)
+        relink_issue_members(run.db)
     except Exception:
         logger.exception("Re-matching issues' members failed")
-        db.rollback()
+        run.db.rollback()
 
     # The homepage feed's duplicates, marked here where the model is loaded
     # (mark_recent_duplicates). Every run, not only when issues were
     # created: a retirement or a re-rank changes which rows it reads.
     try:
-        mark_recent_duplicates(db)
+        mark_recent_duplicates(run.db)
     except Exception:
         logger.exception("Marking the recent feed's duplicates failed")
-        db.rollback()
+        run.db.rollback()
 
     # Rows written before ActionIssue.new_facts existed get it here, where
     # the model is loaded; the API reads the stored value and never diffs.
     try:
-        backfill_new_facts(db)
-        db.commit()
+        backfill_new_facts(run.db)
+        run.db.commit()
     except Exception:
         logger.exception("Backfilling issues' new facts failed")
-        db.rollback()
+        run.db.rollback()
 
     # Related votes in Congress (app/roll_call_links.py): matched here, where
     # both models are loaded, for the last week's issues and monitor updates
     # and a bounded batch of older ones never matched.
     try:
-        roll_call_links.refresh_links(db, today)
-        db.commit()
+        roll_call_links.refresh_links(run.db, run.today)
+        run.db.commit()
     except Exception:
         logger.exception("Matching issues to roll calls failed")
-        db.rollback()
+        run.db.rollback()
 
-    # Stage 4: Post new/surging issues to Bluesky.
-    # Deliberately runs BEFORE full-story generation below: posting only
-    # needs title/summary/facts, never full_story, but used to run after
-    # it anyway. A single full_story call can legitimately take up to 600s
-    # x 3 retries (see ollama_client.call_llm) — on a slow/degraded local
-    # LLM, that stage alone can run long enough to eat the entire hourly
-    # window, and posting never got a turn (confirmed live 2026-07-13:
-    # zero Bluesky posts for ~21h while story generation stalled every
-    # cycle). Posting first means a slow story backlog no longer blocks it.
+
+def _post(run: _Refresh) -> None:
+    """Posting: on a day with an issue, the day's eligible issues to Bluesky; then the periodic posts and the engagement pass."""
     _set_refresh_state(stage="bluesky", stage_detail=None)
-    if issues_created > 0:
+    if run.issues_created > 0:
         try:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
-            today_issues = _bluesky_eligible_issues(db, today)
-            bsky_posted = process_issues_for_bluesky(today_issues, db)
+            today_issues = _bluesky_eligible_issues(run.db, run.today)
+            bsky_posted = process_issues_for_bluesky(today_issues, run.db)
             _set_refresh_state(last_bsky_posted=bsky_posted or 0)
         except Exception:
             logger.exception("Bluesky posting failed (non-fatal)")
 
-    _set_refresh_state(last_stories_generated=stories_built)
+    _set_refresh_state(last_stories_generated=run.stories_built)
 
     # Stage 6: Daily senator score spotlight + weekly civic summary
-    _run_periodic_bluesky_posts(db)
+    _run_periodic_bluesky_posts(run.db)
 
     # Stage 7: Repost/like news outlet posts that match active issues
     try:
         from app.pipeline.analyze.bluesky_engagement import engage_with_news_posts
-        engage_with_news_posts(db)
+        engage_with_news_posts(run.db)
     except Exception:
         logger.exception("Bluesky engagement failed (non-fatal)")
+
+
+def _run_refresh(db: Session) -> int:
+    t0 = time.perf_counter()
+    today = eastern_date(utcnow()).isoformat()
+
+    logger.info("Action center refresh starting for %s", today)
+    action_metrics.reset()
+    # The election whose races an issue's ballot links name (ballot_links).
+    ballot_cycle = active_election(db).cycle
+    run = _Refresh(db, today, ballot_cycle)
+    _set_refresh_state(
+        is_running=True, stage="primary_source_signals", stage_detail=None,
+        started_at=utcnow(),
+    )
+
+    _primary_source_stages(run)
+
+    # 1. Fetch articles
+    _set_refresh_state(stage="fetch")
+    articles = fetch_news_articles()
+    if not articles:
+        logger.warning("No articles fetched — skipping action center refresh")
+        action_metrics.increment("refresh_aborted_no_articles")
+        return _end_without_issues(db)
+    # Volume counters, recorded on every run so "quiet day" is a number
+    # that can be compared against yesterday's, not an inference drawn
+    # from the absence of posts.
+    action_metrics.increment("articles_fetched", len(articles))
+
+    _refit_daily(run)
+
+    # 2. Filter for policy relevance
+    _set_refresh_state(stage="filter")
+    run.relevant = _filter_policy_relevant(db, articles)
+    # The judged articles' upsert (policy_relevance._store) opened the write
+    # transaction; the trending fetch and the embedding passes after it are
+    # slow work it must not stay open through.
+    _commit_stage(db, "relevance filter")
+    if not run.relevant:
+        logger.warning("No policy-relevant articles found")
+        action_metrics.increment("refresh_aborted_no_relevant_articles")
+        return _end_without_issues(db)
+    action_metrics.increment("articles_policy_relevant", len(run.relevant))
+
+    _rank_candidates(run)
+
+    _load_recent_issues(run)
+    for rank, (cluster_index, cluster) in enumerate(run.top_clusters, start=1):
+        _publish_cluster(run, rank, cluster_index, cluster)
+        if run.new_topics >= MAX_ISSUES:
+            break
+
+    _retire_and_rerank(run)
+
+    _monitors_and_timeline(run)
+
+    _relink_issues(run)
+
+    _post(run)
 
     _cleanup_old_unposted_issues(db)
     _prune_stale_api_cache(db)
@@ -6430,14 +6493,14 @@ def _run_refresh(db: Session) -> int:
         # Most published issues re-match an existing row: "2 issues
         # created" for two refreshed rows read as two new stories.
         "Action center refresh complete: %d issues published (%d new) in %.1fs",
-        issues_created, len(_new_issues), elapsed,
+        run.issues_created, len(run.new_issues), elapsed,
     )
     _set_refresh_state(
         is_running=False, stage=None, stage_detail=None,
         last_completed_at=utcnow(),
         last_elapsed=round(elapsed, 1),
     )
-    return issues_created
+    return run.issues_created
 
 
 def _principal_actor(title: str, summary: str, officials: list[dict]) -> str:
