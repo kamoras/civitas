@@ -172,8 +172,6 @@ def chamber(db_session, monkeypatch, freeze_utcnow):
     stub("fetch_significant_bills", lambda client, db, max_bills: ret([
         {"congress": CONGRESS, "type": "hr", "number": n, "name": BILLS[n][0],
          "sponsorBioguide": list(PARTY)[n - 1], "sponsorParty": BILLS[n][2]} for n in BILLS]))
-    stub("fetch_bill", lambda client, db, cg, t, n: ret(
-        {"title": BILLS[n][1], "policyArea": {"name": "Government Operations and Politics"}} if n in BILLS else None))
 
     async def actions(client, db, cg, t, n, *a, **k):
         if n in BILLS:
