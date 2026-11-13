@@ -282,7 +282,9 @@ def test_unreadable_clerk_roll_calls_fail_the_run_before_anyone_is_written(chamb
     monkeypatch.setattr(hp, "fetch_recent_house_roll_calls", none)
     result = asyncio.run(hp.run_house_pipeline())
     assert result["status"] == PipelineStatus.FAILED
-    assert "clerk.house.gov" in result["error"]
+    assert result["error"].startswith(
+        "fetch_bills_votes: RuntimeError: House roll calls could not be read from clerk.house.gov (",
+    )
     assert chamber.query(Representative).count() == 0
 
 
