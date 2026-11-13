@@ -82,7 +82,7 @@ import urllib.parse
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import date, timedelta
+from datetime import timedelta
 
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.census_lines import apportionment, census_year
@@ -96,6 +96,7 @@ from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.state_names import STATE_NAME_TO_CODE, STATE_NAMES
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +689,7 @@ def _payload(blocks: dict[str, dict], sitting_congress: int) -> dict:
         "_sign": _SIGN,
         "_window": sitting["_window"],
         "_lines": sitting["_lines"],
-        "_as_of": date.today().isoformat(),
+        "_as_of": utcnow().date().isoformat(),
         "congress": int(key),
         "districts": sitting["districts"],
         "congresses": blocks,
@@ -1975,7 +1976,7 @@ def _ensure_sitting_lines() -> str:
         f"reading whatever table the file holds (format: "
         f"{'pinned' if data.get('congresses') else 'missing or pre-pinning'}); the next House run tries "
         f"the refresh again.",
-        dedupe_key=f"district-pvi-no-sitting-{sitting}-{date.today():%Y-%m-%d}",
+        dedupe_key=f"district-pvi-no-sitting-{sitting}-{utcnow():%Y-%m-%d}",
     )
     return "refresh failed"
 

@@ -41,6 +41,7 @@ from app.ordinals import ordinal
 from app.services.bill_record import bill_label, party_breakdown
 from app.services.explore_keys import public_key
 from app.services.roll_call_shape import shape
+from app.time_utils import utcnow
 
 SITE_DOMAIN = settings.SITE_DOMAIN
 
@@ -108,7 +109,7 @@ def _sentence(text: str) -> str:
 
 
 def _as_of(moment: datetime | None) -> str:
-    return (moment or datetime.now()).date().isoformat()
+    return (moment or utcnow()).date().isoformat()
 
 
 def _count(row: dict, bucket: str) -> int:
