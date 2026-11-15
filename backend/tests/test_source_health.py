@@ -112,7 +112,9 @@ class TestMap:
         assert set(public["sources"][0]) == {"host", "publisher", "takes", "state", "stateLabel", "since",
                                              "lastGood", "line"}
 
-    def test_a_registry_wall_holds_until_the_host_answers(self, db_session, monkeypatch):
+    def test_a_registry_wall_holds_until_the_host_answers(self, db_session, monkeypatch, freeze_utcnow):
+        # After the registry's dated wall: an answer counts only past it.
+        freeze_utcnow(datetime(2026, 10, 30, 12))
         monkeypatch.setattr(crawler, "hosts", lambda: _hosts("www.ohiosos.gov"))
         monkeypatch.setattr(crawl_policy, "refusals", lambda: {})
         entry = source_health.build(db_session)["sources"][0]

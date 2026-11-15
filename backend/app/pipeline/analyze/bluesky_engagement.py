@@ -40,6 +40,7 @@ from app.config import settings
 from app.contact import USER_AGENT
 from app.models import ActionIssue, ApiCache
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.time_utils import utcnow
 from app.web_bot_auth import resign
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,7 @@ def engage_with_news_posts(db: Session) -> None:
     if not sources:
         return
 
-    cutoff = datetime.now(UTC) - timedelta(hours=POST_MAX_AGE_HOURS)
+    cutoff = utcnow().replace(tzinfo=UTC) - timedelta(hours=POST_MAX_AGE_HOURS)
 
     try:
         from atproto import Client

@@ -23,7 +23,6 @@ remain as the pre-first-successful-ingest fallback (see transform/
 committee_data.py) and as a manually-regenerable baseline for local dev.
 """
 
-import datetime
 import json
 import logging
 import pathlib
@@ -39,6 +38,7 @@ from app.pipeline.fetch.house_leadership import clerk_house_leadership
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_members import strip_accents
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +222,7 @@ async def fill_unlisted_members(
 
 
 def build_leadership_roles(legislators_raw: list[dict]) -> dict[str, str]:
-    today = datetime.date.today().isoformat()
+    today = utcnow().date().isoformat()
     result: dict[str, str] = {}
     for person in legislators_raw:
         bioguide = (person.get("id") or {}).get("bioguide")

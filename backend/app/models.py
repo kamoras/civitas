@@ -18,7 +18,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
 from app.measures import snapshot_facts_json
-from app.time_utils import utcnow
+from app import time_utils
+
+
+def _now():
+    """A row's timestamp default: the clock as time_utils reads it when the
+    row is written. A column given time_utils.utcnow itself keeps that one
+    function object, so a test that pins the clock (freeze_utcnow, which
+    rebinds the name) still had its rows stamped with the real time."""
+    return time_utils.utcnow()
 
 
 class PipelineStatus(StrEnum):
@@ -206,8 +214,8 @@ class Senator(Base):
     office_phone: Mapped[str] = mapped_column(String(20), default="")
     office_address: Mapped[str] = mapped_column(String, default="")
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     donors: Mapped[list["Donor"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     industry_donations: Mapped[list["IndustryDonation"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
@@ -503,8 +511,8 @@ class Representative(Base):
     vacancy_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     left_office_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     donors: Mapped[list["RepDonor"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     industry_donations: Mapped[list["RepIndustryDonation"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
@@ -723,7 +731,7 @@ class FinancialDisclosure(Base):
     # The fetch module's PARSER_VERSION that read this report; a newer one
     # re-reads it (holdings_pipeline._is_current).
     parser_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    ingested_at: Mapped[datetime] = mapped_column(default=utcnow)
+    ingested_at: Mapped[datetime] = mapped_column(default=_now)
 
     senator: Mapped["Senator"] = relationship(back_populates="financial_disclosures")
     representative: Mapped["Representative"] = relationship(back_populates="financial_disclosures")
@@ -866,8 +874,8 @@ class President(Base):
     # module docstring for the full account.)
     recent_avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     trades: Mapped[list["PresidentTrade"]] = relationship(
         back_populates="president", cascade="all, delete-orphan"
@@ -961,8 +969,8 @@ class Race(Base):
     # "00" convention for single-district states, stored as int).
     district: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_special: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     candidates: Mapped[list["Candidate"]] = relationship(
         back_populates="race", cascade="all, delete-orphan",
@@ -1077,8 +1085,8 @@ class Candidate(Base):
     candidate_loans: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_financials_sync: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     race: Mapped["Race"] = relationship(back_populates="candidates")
 
@@ -1112,7 +1120,7 @@ class RaceCoverageItem(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str | None] = mapped_column(String, nullable=True)  # Bluesky handle, if source_type="bluesky"
     published_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    fetched_at: Mapped[datetime] = mapped_column(default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(default=_now)
     # Which candidate's name matched this item, and on what evidence:
     # "full_name" (surname + first name both present in the text) or
     # "surname_context" (surname + state-name corroboration). Only
@@ -1225,11 +1233,11 @@ class RaceResult(Base):
     source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # When votes were first counted (the row's creation until then): the
     # clock a county-unit flip waits on (sync.COUNTY_FLIP_SETTLE).
-    first_reported_at: Mapped[datetime] = mapped_column(default=utcnow)
+    first_reported_at: Mapped[datetime] = mapped_column(default=_now)
     # When the vote totals last moved. The results page stays up until a
     # grace period after the latest of these (election_phase.py).
-    last_change_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
-    fetched_at: Mapped[datetime] = mapped_column(default=utcnow)
+    last_change_at: Mapped[datetime] = mapped_column(default=_now, index=True)
+    fetched_at: Mapped[datetime] = mapped_column(default=_now)
 
     race: Mapped["Race"] = relationship(back_populates="result")
 
@@ -1270,9 +1278,9 @@ class RaceCertification(Base):
     # Every vote cast for the office as certified (write-ins included where
     # the state counts them); null for "sworn_in".
     votes_counted: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    read_at: Mapped[datetime] = mapped_column(default=utcnow)
+    read_at: Mapped[datetime] = mapped_column(default=_now)
     # When the certified figures last changed (a recount's recertification).
-    changed_at: Mapped[datetime] = mapped_column(default=utcnow)
+    changed_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class ElectionResultEvent(Base):
@@ -1289,7 +1297,7 @@ class ElectionResultEvent(Base):
     election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     detail: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=_now, index=True)
     # Same pair as RaceCoverageItem's: considered for a Bluesky post
     # (live_results/bluesky.py), and actually published — the
     # hourly and election-wide budgets count only the second.
@@ -1334,7 +1342,7 @@ class LiveResultRead(Base):
     election_date: Mapped[str] = mapped_column(String(10), primary_key=True)
     # ok / polls_open / untrusted / unavailable / stale / failed
     status: Mapped[str] = mapped_column(String(20), nullable=False)
-    checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    checked_at: Mapped[datetime] = mapped_column(default=_now)
     # The last read that was stored — NULL until one is.
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # For a refused read: which kind of refusal (sync.refusal_kind), so an
@@ -1420,7 +1428,7 @@ class SeatVacancy(Base):
     # The chamber's own sentence ("Vacancy due to the resignation of ...").
     footnote: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, nullable=False)
-    read_at: Mapped[datetime] = mapped_column(default=utcnow)
+    read_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class FecReportingDeadline(Base):
@@ -1499,8 +1507,8 @@ class Justice(Base):
     agreement_matrix: Mapped[str] = mapped_column(Text, default="{}")  # JSON
     summary: Mapped[str] = mapped_column(Text, default="")
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
     votes = relationship("JusticeVote", back_populates="justice", cascade="all, delete-orphan")
 
@@ -1637,7 +1645,7 @@ class ExploreDocument(Base):
     authority: Mapped[float] = mapped_column(Float, default=0.0)
     cited_by_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class Agency(Base):
@@ -1755,7 +1763,7 @@ class ActionIssue(Base):
     # drop is listed under "Pending contract" in backend/migrations/README.md.
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
     full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
@@ -1878,7 +1886,7 @@ class ScoreSnapshot(Base):
     # fingerprint doesn't move. NULL for presidents, for a member whose run
     # kept no breakdown, and for snapshots from before the column.
     facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=_snapshot_facts)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class LearnedClassification(Base):
@@ -1898,7 +1906,7 @@ class LearnedClassification(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)  # "fec", "semantic", "embedding", "embedding_correction", "nn"
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
-    learned_at: Mapped[datetime] = mapped_column(default=utcnow)
+    learned_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class LlmGenerationSample(Base):
@@ -1934,7 +1942,7 @@ class LlmGenerationSample(Base):
     # (hedge_and_editorializing_violations, ungrounded_former_official_
     # claims, _check_summary_roles), not a separate judgment call.
     violations: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class FeedArticle(Base):
@@ -1969,7 +1977,7 @@ class FeedArticle(Base):
     embedding: Mapped[bytes] = mapped_column(LargeBinary)
     model: Mapped[str] = mapped_column(String)
     published: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 
 class TimelineEntry(Base):
@@ -1984,7 +1992,7 @@ class TimelineEntry(Base):
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     monitor_slug: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class WeekSummary(Base):
@@ -1999,7 +2007,7 @@ class WeekSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=_now)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
@@ -2013,7 +2021,7 @@ class MonthSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class YearSummary(Base):
@@ -2025,7 +2033,7 @@ class YearSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class NationalMonitor(Base):
@@ -2039,8 +2047,8 @@ class NationalMonitor(Base):
     category: Mapped[str] = mapped_column(String(50), default="general")
     status: Mapped[str] = mapped_column(String(20), default=MonitorStatus.ACTIVE, index=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
     last_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     updates = relationship("MonitorUpdate", back_populates="monitor",
@@ -2067,7 +2075,7 @@ class RollCallLinkLabel(Base):
     related: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     # JSON {ref: the vote's masked text} for every linkable vote in the window.
     candidates: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 
 class OutletPostLink(Base):
@@ -2092,7 +2100,7 @@ class OutletPostLink(Base):
     best_sim: Mapped[float] = mapped_column(Float, nullable=False)
     issue_id: Mapped[int] = mapped_column(Integer, nullable=False)
     live_issue_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class MonitorUpdate(Base):
@@ -2106,7 +2114,7 @@ class MonitorUpdate(Base):
     source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     article_title: Mapped[str] = mapped_column(String(500), default="")
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
     # Roll calls related to this update (app/roll_call_links.py), as JSON
     # refs; the monitor's "On the record" is their union. NULL: not matched.
     roll_call_refs: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
@@ -2120,7 +2128,7 @@ class ApiCache(Base):
     tier: Mapped[str] = mapped_column(String, primary_key=True)
     cache_key: Mapped[str] = mapped_column(String, primary_key=True)
     data_json: Mapped[str] = mapped_column(Text, nullable=False)
-    cached_at: Mapped[datetime] = mapped_column(default=utcnow)
+    cached_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class AnalysisCache(Base):
@@ -2129,14 +2137,14 @@ class AnalysisCache(Base):
     prompt_version: Mapped[str] = mapped_column(String, primary_key=True)
     input_hash: Mapped[str] = mapped_column(String, primary_key=True)
     result_json: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -2164,7 +2172,7 @@ class HousePipelineRun(Base):
     __tablename__ = "house_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     reps_processed: Mapped[int] = mapped_column(Integer, default=0)
@@ -2194,7 +2202,7 @@ class SupplementaryPipelineRun(Base):
     __tablename__ = "supplementary_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -2220,7 +2228,7 @@ class StockTradesPipelineRun(Base):
     __tablename__ = "stock_trades_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
@@ -2245,7 +2253,7 @@ class ElectionPipelineRun(Base):
     __tablename__ = "election_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -2370,10 +2378,10 @@ class BallotMeasure(Base):
     # election_pipeline._sync_ballot_measures): a measure absent from a
     # sync isn't deleted on the spot, because one truncated upstream
     # response would otherwise blank a state's ballot.
-    last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
-    as_of: Mapped[datetime] = mapped_column(default=utcnow)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(default=_now)
+    as_of: Mapped[datetime] = mapped_column(default=_now)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
 
 class MeasureCoverage(Base):
@@ -2408,7 +2416,7 @@ class MeasureCoverage(Base):
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     measure_count: Mapped[int] = mapped_column(Integer, default=0)
     # When a read was last ATTEMPTED — failures included.
-    checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    checked_at: Mapped[datetime] = mapped_column(default=_now)
     # When the status shown was last established by a read that worked.
     # Never advanced by an ingest failure, so a page still showing earlier
     # measures after a failed read can say how old they are.
@@ -2545,7 +2553,7 @@ class SourceReadStat(Base):
     # a step that got what it came for, from a 200 on the way to a refusal
     # (eFD's home page loads, then its terms agreement is refused).
     failed_on_host: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
     __table_args__ = (
         UniqueConstraint("run_kind", "run_id", "step_key", "host", name="uq_source_read_stat_run_step_host"),
@@ -2582,7 +2590,7 @@ class MemberIdAlias(Base):
     old_id: Mapped[str] = mapped_column(String, primary_key=True)
     new_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     bioguide_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    renamed_at: Mapped[datetime] = mapped_column(default=utcnow)
+    renamed_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class BskySenatorSpotlight(Base):
@@ -2603,7 +2611,7 @@ class BskySenatorSpotlight(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     senator_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     chamber: Mapped[str] = mapped_column(String(10), nullable=False, default="senate")
-    posted_at: Mapped[datetime] = mapped_column(default=utcnow)
+    posted_at: Mapped[datetime] = mapped_column(default=_now)
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -2640,7 +2648,7 @@ class BroadcastPost(Base):
     # Two-letter state the post is about, when it is about one (a race, a
     # member) — what the per-state feeds filter on.
     state: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
-    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow, index=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now, index=True)
     # off (no account configured when published) | pending | sending | sent | failed.
     bsky_status: Mapped[str] = mapped_column(String(10), nullable=False, default="off", server_default="off")
     bsky_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
@@ -2747,7 +2755,7 @@ class VisitsMigration(VisitsBase):
     __tablename__ = "visits_migrations"
 
     name: Mapped[str] = mapped_column(String(100), primary_key=True)
-    applied_at: Mapped[datetime] = mapped_column(default=utcnow)
+    applied_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class PageView(VisitsBase):
@@ -2967,7 +2975,7 @@ class StatewideNominee(Base):
     # has no FEC filing to match — this name is rendered, never joined on.
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class StateLegNominee(Base):
@@ -3032,7 +3040,7 @@ class StateLegNominee(Base):
     party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class JudicialNominee(Base):
@@ -3095,7 +3103,7 @@ class JudicialNominee(Base):
     party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class CongressDay(Base):
@@ -3131,7 +3139,7 @@ class CongressDay(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)  # "digest" | "floor_log"
     source_url: Mapped[str] = mapped_column(String(500), default="")
     is_final: Mapped[bool] = mapped_column(Boolean, default=False)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class CongressEvent(Base):
@@ -3194,7 +3202,7 @@ class RollCall(Base):
     tie_breaker_vote: Mapped[str | None] = mapped_column(String(12), nullable=True)
     bill_id: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
     source_url: Mapped[str] = mapped_column(String(300), default="")
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     # The amendment the vote was on, as the record numbers it ("S.Amdt.
     # 6805", "H.Amdt. 258"), and its purpose verbatim: the Senate's
     # <amendment_purpose>, Congress.gov's `purpose` for a House amendment
@@ -3276,7 +3284,7 @@ class Nomination(Base):
     fjc_judge_id: Mapped[str | None] = mapped_column(String(12), nullable=True)
     fjc_node_id: Mapped[str | None] = mapped_column(String(12), nullable=True)
     update_date: Mapped[str] = mapped_column(String(25), default="")  # Congress.gov's updateDate
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class PolicyStatement(Base):
@@ -3301,7 +3309,7 @@ class PolicyStatement(Base):
     position_sentence: Mapped[str] = mapped_column(Text, default="")
     parser_version: Mapped[int] = mapped_column(Integer, default=0)
     classifier_version: Mapped[int] = mapped_column(Integer, default=0)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class StatementRollCall(Base):
@@ -3341,7 +3349,7 @@ class PresidentialSupport(Base):
     with_president: Mapped[int] = mapped_column(Integer, nullable=False)
     votes: Mapped[int] = mapped_column(Integer, nullable=False)
     expected: Mapped[float | None] = mapped_column(Float, nullable=True)
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class MemberPhoto(Base):
@@ -3366,7 +3374,7 @@ class MemberPhoto(Base):
     # the hand labels uses only labels whose images are still the ones judged.
     bioguide_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     depiction_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 
 class TrendObservation(Base):
@@ -3407,8 +3415,8 @@ class TrendCandidate(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(32), default="")
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     relevance: Mapped[float] = mapped_column(Float, nullable=False)
     tragedy: Mapped[float] = mapped_column(Float, nullable=False)
@@ -3434,4 +3442,4 @@ class TrendCandidate(Base):
     decision: Mapped[str] = mapped_column(String(10), nullable=False)
     reason: Mapped[str] = mapped_column(Text, default="")
     broadcast_post_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    decided_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    decided_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)

@@ -194,6 +194,14 @@ def _no_failed_clusters_carried():
     module = sys.modules.get("app.pipeline.analyze.action_center")
     if module is not None:
         module._failed_clusters.clear()
+    yield
+    # member_link_stamp is cached once per process and hashes the module's
+    # live functions: computed while a test had one patched (the candidate
+    # pool's stand-in for _find_related_officials), it would hash nothing and
+    # stay that way for every later test in the worker.
+    module = sys.modules.get("app.pipeline.analyze.action_center")
+    if module is not None:
+        module.member_link_stamp.cache_clear()
 
 
 @pytest.fixture(autouse=True)

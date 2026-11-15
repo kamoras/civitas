@@ -30,6 +30,7 @@ from defusedxml import ElementTree as SafeET
 from app.http_client import conditional_get
 from app.ops_alerts import check_source_freshness
 from app.photos import photo_source_allowed
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -482,7 +483,7 @@ def _parse_rss_feed(
     ns = {"atom": "http://www.w3.org/2005/Atom"}
     cutoff = (
         datetime.min.replace(tzinfo=timezone.utc) if keep_old
-        else datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+        else utcnow().replace(tzinfo=timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
     )
 
     # RSS 2.0 items
@@ -598,7 +599,7 @@ def fetch_news_articles(
     # What each feed showed, for check_source_freshness: every item's date,
     # old ones included, or None when the fetch failed.
     observed: dict[str, tuple[str, list[datetime] | None]] = {}
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+    cutoff = utcnow().replace(tzinfo=timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
 
     for feed_info in feeds:
         name = feed_info["name"]

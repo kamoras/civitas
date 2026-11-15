@@ -8,7 +8,7 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
-from datetime import UTC as _UTC
+from datetime import date as _date
 from datetime import datetime, timedelta
 from typing import Annotated
 
@@ -17,6 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import background, database, net_stats, ops_alerts, pipeline_chain, source_failures, source_health
+from app.api import throttle
 from app.api.auth import configured_token
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
@@ -373,10 +374,12 @@ async def admin_system_stats():
     return _read_system_stats()
 
 
-def _window_dates(days: int) -> list[str]:
-    """The last `days` UTC calendar dates, oldest first, ending today."""
+def _window_dates(days: int, today: _date | None = None) -> list[str]:
+    """The last `days` UTC calendar dates, oldest first, ending `today`: by
+    default the visits store's day (throttle.utc_today), the clock its
+    visit, tap, timing and API counts are dated by."""
 
-    today = datetime.now(_UTC).date()
+    today = today or _date.fromisoformat(throttle.utc_today())
     return [(today - timedelta(days=offset)).isoformat() for offset in range(days - 1, -1, -1)]
 
 
@@ -683,7 +686,7 @@ def admin_visitor_breakdown(date: str | None = None, db: Session = Depends(get_v
     rows in the response, so this can't be used to profile a single visit.
     """
 
-    day = date or datetime.now(_UTC).date().isoformat()
+    day = date or throttle.utc_today()
 
     def _counts(column):
         # Rows written before this column existed default to '' (the
@@ -717,7 +720,7 @@ def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(get_vi
     normalized route template (e.g. "/politicians/[id]").
     """
 
-    cutoff = (datetime.now(_UTC).date() - timedelta(days=days - 1)).isoformat()
+    cutoff = _window_dates(days)[0]
     rows = (
         db.query(PageView.path, func.sum(PageView.count).label("total"))
         .filter(PageView.date >= cutoff)
@@ -1349,7 +1352,7 @@ async def admin_pipeline_trend(
     # dashboard buckets these by UTC date, and a rolling cutoff would count
     # runs from the afternoon of day -N in its totals that no day of the
     # chart shows.
-    cutoff = datetime.strptime(_window_dates(days)[0], "%Y-%m-%d")
+    cutoff = datetime.strptime(_window_dates(days, today=utcnow().date())[0], "%Y-%m-%d")
     runs = []
     for model, pipeline_type in (
         (PipelineRun, "senate"),
@@ -2061,7 +2064,7 @@ def admin_actor_concentration(
     acts (business, crime, a disaster...). Primary-source drafts (roll calls,
     rules) are left out: their subject is the record, not a story choice.
     """
-    today = datetime.now(_UTC).date()
+    today = utcnow().date()
     monday = today - timedelta(days=today.weekday())
     starts = [monday - timedelta(weeks=n) for n in range(weeks - 1, -1, -1)]
     rows = (

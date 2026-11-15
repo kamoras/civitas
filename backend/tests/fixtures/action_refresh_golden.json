@@ -1,0 +1,447 @@
+{
+ "action_issues": [
+  {
+   "actions": [],
+   "ballot_links": [],
+   "bsky_last_post_text": null,
+   "bsky_posted_at": null,
+   "bsky_posted_facts": null,
+   "bsky_posted_rank": null,
+   "concerned_count": 0,
+   "confirmation_deadline": null,
+   "confirmed_at": null,
+   "count_as_of": null,
+   "count_official": null,
+   "date": "2026-10-15",
+   "duplicate_of_id": null,
+   "fact_source_urls": [
+    "https://npr.example.org/parks-0"
+   ],
+   "fact_sources": [
+    "NPR"
+   ],
+   "facts": [
+    "Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog."
+   ],
+   "full_story": null,
+   "id": 1,
+   "image_alt": "",
+   "image_credit": "",
+   "image_url": null,
+   "is_current": true,
+   "member_link_stamp": "76132886f54d32a6",
+   "member_link_texts": [
+    "Senator Ron Roe proposes new funding for national parks maintenance backlog. Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Park Service put the backlog at more than 20 billion dollars.",
+    "Senator Ron Roe proposes funding for the national parks maintenance backlog. Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Parks Conservation Association welcomed the proposal.",
+    "Ron Roe proposes new funding for national parks maintenance backlog. Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. Interior Secretary Ann Park said the department would review the plan."
+   ],
+   "new_facts": [],
+   "not_priority_count": 0,
+   "policy_areas": [],
+   "previous_facts": [],
+   "primary_article_date": "2026-10-15",
+   "primary_source_url": null,
+   "principal_actor": "senate:ron-roe",
+   "rank": 1,
+   "related_bill_ids": [],
+   "related_explore_ids": [],
+   "related_explore_keys": [],
+   "related_monitor_slugs": [],
+   "related_officials": [
+    {
+     "branch": "senate",
+     "chamber": "senate",
+     "contact_form_url": "",
+     "id": "ron-roe",
+     "leadership_score": null,
+     "match_reason": "named in coverage",
+     "name": "Ron Roe",
+     "overall_score": 50.0,
+     "party": "R",
+     "state": "UT",
+     "website_url": ""
+    }
+   ],
+   "related_roll_call_refs": [],
+   "related_senators": [
+    {
+     "chamber": "senate",
+     "contact_form_url": "",
+     "id": "ron-roe",
+     "leadership_score": null,
+     "match_reason": "named in coverage",
+     "name": "Ron Roe",
+     "overall_score": 50.0,
+     "party": "R",
+     "state": "UT",
+     "website_url": ""
+    }
+   ],
+   "retired_reason": null,
+   "source_names": [
+    "NPR",
+    "Roll Call",
+    "Politico"
+   ],
+   "source_type": null,
+   "source_urls": [
+    "https://npr.example.org/parks-0",
+    "https://roll-call.example.org/parks-1",
+    "https://politico.example.org/parks-2"
+   ],
+   "status": "confirmed",
+   "summary": "Senator Ron Roe proposes new funding for national parks maintenance backlog.",
+   "summary_source": "NPR",
+   "summary_source_url": "https://npr.example.org/parks-0",
+   "title": "Senator Ron Roe proposes new funding for national parks maintenance backlog"
+  },
+  {
+   "actions": [],
+   "ballot_links": [],
+   "bsky_last_post_text": null,
+   "bsky_posted_at": null,
+   "bsky_posted_facts": null,
+   "bsky_posted_rank": null,
+   "concerned_count": 0,
+   "confirmation_deadline": null,
+   "confirmed_at": null,
+   "count_as_of": null,
+   "count_official": null,
+   "date": "2026-10-15",
+   "duplicate_of_id": null,
+   "fact_source_urls": [
+    "https://npr.example.org/stock-0"
+   ],
+   "fact_sources": [
+    "NPR"
+   ],
+   "facts": [
+    "Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks."
+   ],
+   "full_story": null,
+   "id": 2,
+   "image_alt": "",
+   "image_credit": "",
+   "image_url": null,
+   "is_current": true,
+   "member_link_stamp": "76132886f54d32a6",
+   "member_link_texts": [
+    "Senator Jane Doe introduces bill to bar members of Congress from trading stocks. Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. The Campaign Legal Center said the bill would close a loophole.",
+    "Senator Jane Doe introduces bill barring members of Congress from trading stocks. Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. Senator Mark Lee said he would sign on as a cosponsor."
+   ],
+   "new_facts": [],
+   "not_priority_count": 0,
+   "policy_areas": [],
+   "previous_facts": [],
+   "primary_article_date": "2026-10-15",
+   "primary_source_url": null,
+   "principal_actor": "senate:jane-doe",
+   "rank": 2,
+   "related_bill_ids": [],
+   "related_explore_ids": [],
+   "related_explore_keys": [],
+   "related_monitor_slugs": [],
+   "related_officials": [
+    {
+     "branch": "senate",
+     "chamber": "senate",
+     "contact_form_url": "",
+     "id": "jane-doe",
+     "leadership_score": null,
+     "match_reason": "named in coverage",
+     "name": "Jane Doe",
+     "overall_score": 50.0,
+     "party": "D",
+     "state": "OR",
+     "website_url": ""
+    }
+   ],
+   "related_roll_call_refs": [],
+   "related_senators": [
+    {
+     "chamber": "senate",
+     "contact_form_url": "",
+     "id": "jane-doe",
+     "leadership_score": null,
+     "match_reason": "named in coverage",
+     "name": "Jane Doe",
+     "overall_score": 50.0,
+     "party": "D",
+     "state": "OR",
+     "website_url": ""
+    }
+   ],
+   "retired_reason": null,
+   "source_names": [
+    "NPR",
+    "PBS"
+   ],
+   "source_type": null,
+   "source_urls": [
+    "https://npr.example.org/stock-0",
+    "https://pbs.example.org/stock-1"
+   ],
+   "status": "confirmed",
+   "summary": "Senator Jane Doe introduces bill barring members of Congress from trading stocks.",
+   "summary_source": "PBS",
+   "summary_source_url": "https://pbs.example.org/stock-1",
+   "title": "Senator Jane Doe introduces bill to bar members of Congress from trading stocks"
+  }
+ ],
+ "llm_generation_samples": [
+  {
+   "attempt": 1,
+   "id": 1,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Ron Roe proposes new funding for national parks maintenance backlog.\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Park Service put the backlog at more than 20 billion dollars.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Ron Roe",
+    "predicate": "proposes new funding for national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 10,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. The Campaign Legal Center said the bill would close a loophole.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Jane Doe",
+    "predicate": "introduced a bill on Wednesday that would bar members of Congress from trading individual stocks"
+   },
+   "passed": true,
+   "rank": 2,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 11,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. Senator Mark Lee said he would sign on as a cosponsor.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Jane Doe",
+    "predicate": "introduced a bill on Wednesday that would bar members of Congress from trading individual stocks"
+   },
+   "passed": true,
+   "rank": 2,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 12,
+   "input_text": "Senator Jane Doe introduces bill to bar members of Congress from trading stocks Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. The Campaign Legal Center said the bill would close a loophole. Senator Jane Doe introduces bill barring members of Congress from trading stocks Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. Senator Mark Lee said he would sign on as a cosponsor.",
+   "output_json": {
+    "facts": [
+     "Senator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks."
+    ],
+    "summary": "Senator Jane Doe introduces bill barring members of Congress from trading stocks.",
+    "title": "Senator Jane Doe introduces bill to bar members of Congress from trading stocks"
+   },
+   "passed": true,
+   "rank": 2,
+   "task": "action_center_issue",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 2,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Ron Roe proposes funding for the national parks maintenance backlog.\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Parks Conservation Association welcomed the proposal.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Ron Roe",
+    "predicate": "proposes funding for the national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 3,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nRon Roe proposes new funding for national parks maintenance backlog.\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. Interior Secretary Ann Park said the department would review the plan.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Ron Roe",
+    "predicate": "proposes new funding for national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 4,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Park Service put the backlog at more than 20 billion dollars.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Ron Roe",
+    "predicate": "proposed new funding on Wednesday to clear the national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 5,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Parks Conservation Association welcomed the proposal.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Ron Roe",
+    "predicate": "proposed new funding on Wednesday to clear the national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 6,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. Interior Secretary Ann Park said the department would review the plan.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Ron Roe",
+    "predicate": "proposed new funding on Wednesday to clear the national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 7,
+   "input_text": "Senator Ron Roe proposes new funding for national parks maintenance backlog Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Park Service put the backlog at more than 20 billion dollars. Senator Ron Roe proposes funding for the national parks maintenance backlog Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. The National Parks Conservation Association welcomed the proposal. Ron Roe proposes new funding for national parks maintenance backlog Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog. Interior Secretary Ann Park said the department would review the plan.",
+   "output_json": {
+    "facts": [
+     "Senator Ron Roe proposed new funding on Wednesday to clear the national parks maintenance backlog."
+    ],
+    "summary": "Senator Ron Roe proposes new funding for national parks maintenance backlog.",
+    "title": "Senator Ron Roe proposes new funding for national parks maintenance backlog"
+   },
+   "passed": true,
+   "rank": 1,
+   "task": "action_center_issue",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 8,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Jane Doe introduces bill to bar members of Congress from trading stocks.\nSenator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. The Campaign Legal Center said the bill would close a loophole.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Jane Doe",
+    "predicate": "introduces bill to bar members of Congress from trading stocks"
+   },
+   "passed": true,
+   "rank": 2,
+   "task": "action_center_claim",
+   "violations": null
+  },
+  {
+   "attempt": 1,
+   "id": 9,
+   "input_text": "Copy the single most newsworthy fact out of this article. Do NOT summarise it in your own words \u2014 locate it and copy it.\n\nEXAMPLE\nSource: \"DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) shifted the Florida governor's race to a toss-up on Tuesday.\"\nAnswer: {\"actor\": \"Decision Desk HQ (DDHQ)\", \"predicate\": \"shifted the Florida governor's race to a toss-up on Tuesday\"}\n\nNOW DO THIS ONE\nSource:\nSenator Jane Doe introduces bill barring members of Congress from trading stocks.\nSenator Jane Doe introduced a bill on Wednesday that would bar members of Congress from trading individual stocks. Senator Mark Lee said he would sign on as a cosponsor.\n\nRules:\n- Both spans COPIED EXACTLY from the Source, character for character.\n- \"actor\" is who did or said it: a named person, body or organisation.\n- \"predicate\" starts with the verb and runs to the END of the phrase, including its object.\n- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.\n- If the Source names no one doing anything, answer with two empty strings. That is a correct and common answer.\n\nReturn JSON: {\"actor\": \"<exact span>\", \"predicate\": \"<exact span>\"}",
+   "output_json": {
+    "actor": "Senator Jane Doe",
+    "predicate": "introduces bill barring members of Congress from trading stocks"
+   },
+   "passed": true,
+   "rank": 2,
+   "task": "action_center_claim",
+   "violations": null
+  }
+ ],
+ "senators": [
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "D000001",
+   "bipartisanship_score": null,
+   "caucus_party": null,
+   "committees": [],
+   "contact_form_url": "",
+   "funding_election_year": null,
+   "id": "jane-doe",
+   "ideology_score": null,
+   "initials": "",
+   "is_current": true,
+   "leadership_score": null,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Jane Doe",
+   "office_address": "",
+   "office_phone": "",
+   "partisan_depth": null,
+   "party": "D",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {},
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 50.0,
+   "score_legislative_effectiveness": 50.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "OR",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "",
+   "years_in_office": 0
+  },
+  {
+   "attracted_bipartisanship_score": null,
+   "bioguide_id": "R000001",
+   "bipartisanship_score": null,
+   "caucus_party": null,
+   "committees": [],
+   "contact_form_url": "",
+   "funding_election_year": null,
+   "id": "ron-roe",
+   "ideology_score": null,
+   "initials": "",
+   "is_current": true,
+   "leadership_score": null,
+   "leadership_title": null,
+   "left_office_date": null,
+   "name": "Ron Roe",
+   "office_address": "",
+   "office_phone": "",
+   "partisan_depth": null,
+   "party": "R",
+   "party_line_record": null,
+   "score_breakdown": null,
+   "score_confidence": {},
+   "score_funding_diversity": 50.0,
+   "score_funding_independence": 50.0,
+   "score_held": null,
+   "score_independent_voting": 50.0,
+   "score_legislative_effectiveness": 50.0,
+   "score_promise_persistence": 50.0,
+   "small_donor_percentage": 0.0,
+   "sponsorship_description": "",
+   "state": "UT",
+   "total_contributions": null,
+   "total_from_pacs": 0.0,
+   "total_raised": 0.0,
+   "vacancy_reason": null,
+   "website_url": "",
+   "years_in_office": 0
+  }
+ ],
+ "timeline_entries": [
+  {
+   "date": "2026-10-15",
+   "id": 1,
+   "monitor_slug": null,
+   "policy_areas": [],
+   "source_name": "NPR",
+   "source_url": "https://npr.example.org/parks-0",
+   "summary": "Senator Ron Roe proposes new funding for national parks maintenance backlog.",
+   "title": "Senator Ron Roe proposes new funding for national parks maintenance backlog"
+  }
+ ]
+}

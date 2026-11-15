@@ -16,7 +16,7 @@ format them for the explore document store.
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 import httpx
 from lxml import etree
@@ -24,6 +24,7 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.fetch.oyez_common import OYEZ_BASE, strip_html as _strip_html, unix_to_date as _unix_to_date
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ async def fetch_scotus_cases(
         politician_name, chamber.
     """
     if terms is None:
-        current_year = datetime.now(tz=UTC).year
+        current_year = utcnow().year
         terms = [str(y) for y in range(current_year, current_year - 3, -1)]
 
     results: list[dict] = []

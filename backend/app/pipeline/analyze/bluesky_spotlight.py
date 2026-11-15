@@ -30,7 +30,7 @@ outcome, not a member's record.
 import logging
 import random
 import statistics
-from datetime import datetime, UTC
+from datetime import UTC
 
 from sqlalchemy.orm import Session
 
@@ -223,7 +223,7 @@ def post_daily_spotlight(db: Session) -> None:
     db.add(BskySenatorSpotlight(
         senator_id=entity.id,
         chamber=chamber,
-        posted_at=datetime.now(UTC),
+        posted_at=utcnow().replace(tzinfo=UTC),
         post_text=text,
     ))
     _publish_spotlight(db, text, entity, chamber)

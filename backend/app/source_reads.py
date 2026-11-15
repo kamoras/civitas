@@ -26,10 +26,11 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import timezone
 
 import httpx
 
+from app import time_utils
 from app.atomic_write import runtime_data_path, write_text_atomic
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ _last_flush = 0.0
 
 def _now() -> str:
     # Microseconds: an answer and a failure in the same second stay ordered.
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    return time_utils.utcnow().replace(tzinfo=timezone.utc).isoformat(timespec="microseconds")
 
 
 def failure_of(status: int, challenge: bool) -> tuple[str, str] | None:
