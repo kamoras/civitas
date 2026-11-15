@@ -251,11 +251,16 @@ async def run_president_pipeline(db: Session) -> dict:
         # president's elapsed-time comparison reads predecessors' polls.
         approval_series: dict[str, list[tuple[date, float]]] = {}
         recent_avg_approval_data: dict[str, float] = {}
+        # The presidencies whose polls this run read: a recent average is
+        # cleared only for one of these (polls read, none recent), never for
+        # one whose source was down.
+        approval_read: set[str] = set()
         slugs = await approval_slugs(db, presidents)
         for pid, slug in slugs.items():
             polls = await fetch_president_approval_history(db, pid, slug)
             if not polls:
                 continue
+            approval_read.add(pid)
             values = [poll.approving for poll in polls if poll.approving is not None]
             if values:
                 approval_avg_data[pid] = sum(values) / len(values)
@@ -399,8 +404,10 @@ async def run_president_pipeline(db: Session) -> dict:
 
             # Informational only — not part of any scored dimension. NULL
             # (not stale) once a president leaves office and the recent-90-
-            # day window has no new polls to populate it.
-            president.recent_avg_approval = recent_avg_approval_data.get(president.id)
+            # day window has no new polls to populate it; kept as stored
+            # when this run couldn't read the president's polls.
+            if president.id in approval_read:
+                president.recent_avg_approval = recent_avg_approval_data.get(president.id)
 
             if president.id in historical_legacy_data:
                 president.historical_legacy_score = historical_legacy_data[president.id]
@@ -443,6 +450,7 @@ async def run_president_pipeline(db: Session) -> dict:
         }
         for p in presidents
     ])
+    previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     # A presidency shorter than a full term (the sitting one, or one cut
     # short) is compared with every other completed presidency over its own
     # number of days.
@@ -465,6 +473,16 @@ async def run_president_pipeline(db: Session) -> dict:
             ],
         ))
     }
+    # A short presidency whose polls this run couldn't read keeps the window
+    # stored for it. The windows carry no count for keep_fuller to compare,
+    # so without this an approval outage left the sitting president with no
+    # window and judged them against completed full terms instead.
+    for pid, window in (previous.get("term_windows") or {}).items():
+        if pid not in approval_read and any(
+            p.id == pid and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
+            for p in presidents
+        ):
+            measured["term_windows"].setdefault(pid, window)
     # A presidency shorter than a full term is judged on unemployment and
     # inflation against other postwar presidencies over the same number of
     # credited years.
@@ -487,7 +505,6 @@ async def run_president_pipeline(db: Session) -> dict:
                 if q.id != p.id and int(q.term_end[:4]) - int(q.term_start[:4]) >= macro["years"]
             ]))
         }
-    previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     reference = PRESIDENT_REFERENCE.with_live("presidents", keep_fuller(previous, measured)).get("presidents")
     logger.info("President reference: %s", reference)
 
