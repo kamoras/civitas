@@ -5,6 +5,7 @@ Offline: the generators here are tiny inline scripts or mocked."""
 
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import sys
@@ -69,7 +70,12 @@ def test_a_gated_candidate_is_installed_with_its_provenance(alerts):
     doc = json.loads(pathlib.Path(dr.runtime_data_path("t_ok.json")).read_text())
     assert doc["rows"] == [1, 2]
     assert doc["_refreshed"]["sha256"] == dr.content_sha256({"rows": [1, 2]})
-    assert doc["_refreshed"]["command"].startswith(sys.executable)
+    # The command is recorded with paths under the backend relative to it,
+    # the interpreter's too when the venv lives there (backend/.venv).
+    interpreter = sys.executable
+    if interpreter.startswith(str(dr.BACKEND)):
+        interpreter = os.path.relpath(interpreter, dr.BACKEND)
+    assert doc["_refreshed"]["command"].startswith(interpreter)
     alerts.resolve.assert_called_with("data-refresh-t-ok")
     # The same content again writes nothing.
     assert dr.refresh_one(spec, _ctx("t_ok.json", doc)) == "unchanged"
