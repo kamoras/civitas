@@ -26,6 +26,7 @@ from tests.pipeline_run_helpers import matches_golden, run_on_test_database
 
 GOLDEN = pathlib.Path(__file__).parent / "fixtures" / "action_refresh_golden.json"
 GOLDEN_NEXT_DAY = GOLDEN.with_name("action_refresh_next_day_golden.json")
+GOLDEN_GATES = GOLDEN.with_name("action_refresh_gates_golden.json")
 NOW = datetime(2026, 10, 15, 16, 0)
 PUBLISHED = datetime(2026, 10, 15, 13, 0, tzinfo=timezone.utc)
 
@@ -73,9 +74,9 @@ SENATORS = [
 ]
 
 
-def _articles():
+def _articles(stories=None):
     out = []
-    for story, tellings in STORIES:
+    for story, tellings in stories or STORIES:
         for i, (outlet, title, summary) in enumerate(tellings):
             slug = re.sub(r"[^a-z]+", "-", outlet.lower())
             out.append(NewsArticle(
@@ -181,3 +182,46 @@ def test_no_articles_publishes_nothing(refresh, monkeypatch):
     assert ac._run_refresh(refresh) == 0
     assert refresh.query(ActionIssue).count() == 0
     assert ac.action_metrics.snapshot()["refresh_aborted_no_articles"] == 1
+
+
+# Stories each built to stop at one of the gates a candidate passes
+# before it is published (action_center._publish_cluster).
+GATED = [
+    # Verifiable claims, but no official, bill or document to act on.
+    ("recall", [
+        ("NPR", "Acme Appliances recalls toaster ovens over fire risk",
+         "Acme Appliances recalled two million toaster ovens on Wednesday after reports of fires. "
+         "Consumer Safety Group said the recall came too late."),
+        ("PBS", "Acme Appliances recalls two million toaster ovens over fire risk",
+         "Acme Appliances recalled two million toaster ovens on Wednesday after reports of fires. "
+         "Retail Partners Inc said stores would take the ovens back."),
+    ]),
+    # One verifiable claim: a headline and nothing else that names an actor.
+    ("visit", [
+        ("NPR", "Senator Ron Roe visits flood damaged farms in the valley",
+         "the visit came after a week of heavy rain across the valley."),
+    ]),
+    # A live blog listing two stories, and nothing else.
+    ("liveblog", [
+        ("The Hill", "Live updates: Mayor Kim Ash resigns; Governor Lou Bay signs budget",
+         "Follow the day's developments as they happen."),
+    ]),
+]
+
+
+def test_each_gate_refuses_its_story_and_says_which(refresh, monkeypatch):
+    """With room for every candidate, each gated story is tried and refused
+    by its own gate, counted, while the two good stories still publish."""
+    monkeypatch.setattr(ac, "MAX_ISSUES", 10)
+    monkeypatch.setattr(ac, "CANDIDATE_POOL", 30)
+    monkeypatch.setattr(ac, "fetch_news_articles", lambda: _articles(STORIES + GATED))
+    assert ac._run_refresh(refresh) == 2
+    counts = ac.action_metrics.snapshot()
+    assert {k: counts.get(k, 0) for k in (
+        "clusters_attempted", "issues_new_topic", "clusters_without_claims", "issues_skipped_too_few_facts",
+        "issues_skipped_no_action_surface", "clusters_only_multi_story",
+    )} == {
+        "clusters_attempted": 8, "issues_new_topic": 2, "clusters_without_claims": 3,
+        "issues_skipped_too_few_facts": 1, "issues_skipped_no_action_surface": 1, "clusters_only_multi_story": 1,
+    }
+    assert matches_golden(refresh, GOLDEN_GATES)
