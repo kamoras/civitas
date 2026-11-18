@@ -31,6 +31,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import httpx
@@ -159,10 +160,6 @@ _ballot_tracker = PipelineRunTracker()
 
 
 ELECTION_HELD = "election held; its ballot stands as read"
-
-
-class _ElectionHeld(Exception):
-    """Leaves a ballot phase's try block once it is marked skipped."""
 
 
 def ballot_tracker() -> PipelineRunTracker:
@@ -1619,6 +1616,35 @@ def link_members(db: Session, cycle: int, crosswalk: dict[str, list[str]]) -> in
     return linked
 
 
+@dataclass
+class _ElectionNight:
+    """What every phase of one election run works with."""
+
+    db: Session
+    client: httpx.AsyncClient
+    cycle: int
+    run: ElectionPipelineRun
+    progress: ProgressTracker
+    # After election day the held election's ballot is final
+    # (election_is_held): no phase that places candidates on it
+    # re-reads its sources, which have moved on and would unwrite
+    # what was certified. FEC's roster in particular gives each
+    # candidate's LATEST district and incumbency, so a nominee who
+    # files for the next cycle elsewhere would move races.
+    # Financials still refresh: post-general reports are this
+    # election's money.
+    election_held: bool
+
+    def begin(self, phase: str, step: str | None = None, banner: str | None = None) -> None:
+        """Mark `phase` current on the run row and start its step."""
+        self.run.current_phase = phase
+        self.db.commit()
+        if banner:
+            logger.info("--- Election: %s ---", banner)
+        if step:
+            self.progress.begin(step)
+
+
 async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
@@ -1644,295 +1670,17 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
         logger.info("=== ELECTION PIPELINE START (cycle %d) ===", cycle)
 
         async with make_async_client() as client:
-            # After election day the held election's ballot is final
-            # (election_is_held): no phase that places candidates on it
-            # re-reads its sources, which have moved on and would unwrite
-            # what was certified. FEC's roster in particular gives each
-            # candidate's LATEST district and incumbency, so a nominee who
-            # files for the next cycle elsewhere would move races.
-            # Financials still refresh: post-general reports are this
-            # election's money.
-            election_held = election_is_held(active_election(db))
-
-            run.current_phase = "roster"
-            db.commit()
-            logger.info("--- Election: ROSTER SYNC ---")
-            progress.begin("roster_sync")
-            # Which states hold which Senate class, from the Senate's own
-            # list, before the roster is filtered by it. Best-effort: a
-            # failed read keeps what is stored (senate_classes.py).
-            await senate_classes.refresh_senate_classes(client)
-            # Specials, vacancies and the calendar, in every season: specials
-            # are held in any month, and the calendar page reads this
-            # whether or not a general is near. After the classes, which the
-            # Senate's vacancies are read against.
-            run.current_phase = "specials"
-            db.commit()
-            progress.begin("special_elections")
-            try:
-                specials = await refresh_special_elections(db, client, election_today(), cycle)
-                publish_new_specials(db, specials["new"])
-                report_file_problems(
-                    "Special elections or the election calendar not fully read",
-                    "What is stored stays shown; the next run retries.",
-                    specials["problems"], "special-elections-read",
-                )
-                progress.complete("special_elections", detail=f"{len(specials['new'])} new calendar rows")
-            except Exception:
-                db.rollback()
-                logger.exception("Special-election read failed — continuing")
-                progress.fail("special_elections")
-            run.current_phase = "roster"
-            db.commit()
-            try:
-                if election_held:
-                    progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
-                    raise _ElectionHeld
-                house_raw = await fetch_all_candidates(client, db, cycle, "H")
-                senate_raw = await fetch_all_candidates(client, db, cycle, "S")
-                # The presidential contest, in the cycles that hold one.
-                pres_raw = await fetch_all_candidates(client, db, cycle, "P") if is_presidential(cycle) else []
-                synced = _sync_roster(db, cycle, house_raw + senate_raw + pres_raw)
-                run.candidates_synced = synced
-                logger.info("Synced %d candidates", synced)
-                progress.complete("roster_sync", detail=f"{synced} candidates")
-            except _ElectionHeld:
-                pass
-            except Exception:
-                db.rollback()
-                logger.exception("Roster sync failed — continuing")
-                progress.fail("roster_sync")
-            try:
-                linked = link_members(db, cycle, await fetch_bioguide_to_fec_ids(client, db))
-                logger.info("Linked %d candidates to their member records", linked)
-            except Exception:
-                db.rollback()
-                logger.exception("Member linking failed — continuing")
-
-            run.current_phase = "financial"
-            db.commit()
-            logger.info("--- Election: FINANCIAL REFRESH ---")
-            progress.begin("financial_refresh")
-            try:
-                refreshed = await _refresh_financials(db, client, FINANCIALS_BATCH_SIZE)
-                run.financials_refreshed = refreshed
-                logger.info("Refreshed financials for %d candidates", refreshed)
-                progress.complete("financial_refresh", detail=f"{refreshed} refreshed")
-            except Exception:
-                db.rollback()
-                logger.exception("Financial refresh phase failed — continuing")
-                progress.fail("financial_refresh")
-
-            run.current_phase = "confirmed_candidates"
-            db.commit()
-            logger.info("--- Election: CONFIRMED CANDIDATES ---")
-            progress.begin("confirmed_candidates")
-            confirmed_open = True  # until the phase is marked done or skipped
-            try:
-                if election_held:
-                    progress.skip("confirmed_candidates", detail=f"skipped: {ELECTION_HELD}")
-                    confirmed_open = False
-                    raise _ElectionHeld
-                # Each state is crawled weekly — what the crawl looks for,
-                # a state standing up a results portal or a new cycle's file
-                # appearing, moves on the scale of weeks — but the crawl
-                # runs nightly over whichever states are due, so one that
-                # failed is retried the next night (crawl_for_new_sources).
-                # Runs BEFORE the sync so anything it proves out contributes
-                # the same night, and in its own try: a crawl that raises
-                # must not cost that night's sync.
-                adopted: dict[str, str] = {}
-                try:
-                    leads = await crawl_for_new_sources(db, client, cycle)
-                    adopted = {
-                        s: r for s, r in leads.items()
-                        if any(mark in r for mark in _CRAWL_NEWS)
-                    }
-                    logger.info("Source crawl: %s", leads or "no state due")
-                except Exception:
-                    db.rollback()
-                    logger.exception("Source crawl failed — the sync runs anyway")
-                # The election-season ballot sync may be mid-pass; two
-                # passes writing the same Candidate rows at once is the one
-                # thing to avoid, and that pass is doing this step anyway.
-                # Holding the sync's tracker and lease (lease.tracked_job, as
-                # the scheduled sync does), so a sync in this process or
-                # another can't start beside this pass.
-                async with lease.tracked_job_async(
-                    lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
-                ) as granted:
-                    if not granted:
-                        progress.skip(
-                            "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
-                        )
-                    else:
-                        detail = await _confirmed_candidates_phase(db, client, cycle)
-                        progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
-                    confirmed_open = False
-            except _ElectionHeld:
-                pass
-            except lease.CutOff as cut:
-                db.rollback()
-                logger.warning("Confirmed-candidate phase: %s — continuing", cut)
-                if confirmed_open:
-                    progress.fail("confirmed_candidates")
-            except Exception:
-                db.rollback()
-                logger.exception("Confirmed-candidate sync failed — continuing")
-                if confirmed_open:
-                    progress.fail("confirmed_candidates")
-
-            run.current_phase = "measures"
-            db.commit()
-            logger.info("--- Election: BALLOT MEASURES ---")
-            progress.begin("ballot_measures")
-            try:
-                if election_held:
-                    # Earlier elections' rows still age out.
-                    _prune_past_measures(db)
-                    progress.skip("ballot_measures", detail=f"skipped: {ELECTION_HELD}")
-                    raise _ElectionHeld
-                measure_result = await _sync_ballot_measures(db, client, cycle)
-                if measure_result.get("skipped"):
-                    progress.complete("ballot_measures", detail="skipped (no API key)")
-                else:
-                    detail = (
-                        f"{measure_result['synced']} measures, "
-                        f"{measure_result['failed_states']} states failed"
-                    )
-                    logger.info("Ballot measures: %s", detail)
-                    progress.complete("ballot_measures", detail=detail)
-            except _ElectionHeld:
-                pass
-            except Exception:
-                db.rollback()
-                logger.exception("Ballot measure sync failed — continuing")
-                progress.fail("ballot_measures")
-
-            # Verify the official-ballot links we hand users. Cheap, and
-            # the one link on the page whose failure strands the visitor.
-            try:
-                link_result = await ballot_lookup.refresh_link_verification(client)
-                if link_result["failed"]:
-                    logger.warning(
-                        "%d state ballot-lookup links failed verification and are "
-                        "now hidden", link_result["failed"],
-                    )
-            except Exception:
-                logger.exception("Ballot lookup link verification failed — continuing")
-
-            # Coverage + posting are also run by the 15-minute
-            # election-season refresh (scheduler.py); concurrent passes would
-            # double-ingest and double-post (2026-07 review B3). Holding the
-            # refresh's lease and tracker (lease.tracked_job, as the refresh
-            # does), so a refresh in this process or another can't run
-            # beside this pass; if one is mid-flight, these two phases are
-            # skipped and the in-season cadence re-covers them within 15
-            # minutes. A failure here (taking the guards included) fails
-            # whichever of these phases hadn't finished, not the rest of
-            # the run.
-
-            coverage_open = ["coverage_ingestion", "bluesky_posting"]  # phases not yet finished
-            try:
-                async with lease.tracked_job_async(
-                    lease.COVERAGE_REFRESH, election_coverage.coverage_tracker(), who="Election pipeline's coverage/posting phases",
-                ) as granted:
-                    if not granted:
-                        for phase in coverage_open:
-                            progress.skip(phase, detail=f"skipped: {granted.why}")
-                        coverage_open.clear()
-                    else:
-                        # The cut-off fires only at an await; the posting
-                        # loop, which doesn't await, stops here itself.
-                        coverage_deadline = lease.deadline(lease.COVERAGE_REFRESH)
-                        run.current_phase = "coverage"
-                        db.commit()
-                        logger.info("--- Election: COVERAGE INGESTION ---")
-                        progress.begin("coverage_ingestion")
-                        try:
-                            ingested = await election_coverage.ingest_race_coverage(db)
-                            run.coverage_items_ingested = ingested
-                            logger.info("Ingested %d coverage items", ingested)
-                            progress.complete("coverage_ingestion", detail=f"{ingested} items")
-                        except Exception:
-                            db.rollback()
-                            logger.exception("Coverage ingestion failed — continuing")
-                            progress.fail("coverage_ingestion")
-                        coverage_open.remove("coverage_ingestion")
-
-                        run.current_phase = "posting"
-                        db.commit()
-                        logger.info("--- Election: BLUESKY POSTING ---")
-                        progress.begin("bluesky_posting")
-                        try:
-                            if time.monotonic() >= coverage_deadline:
-                                # The calibration and the posting loop don't
-                                # await, so the cut-off can't stop them; not
-                                # starting them past the deadline keeps them
-                                # inside the guards (each is minutes at most,
-                                # within the lease's stale window).
-                                raise lease.CutOff("Election pipeline's posting phase reached its deadline")
-                            # Re-derive the relevance cut from the corpus this
-                            # run just ingested, before it gates that corpus —
-                            # same order and same stale-beats-nothing failure
-                            # mode as explore_ranking.calibrate_and_store.
-                            race_relevance.calibrate_and_store(db)
-
-
-                            if live_bluesky.counting_is_live(db):
-                                # Election night: the live count's own posts
-                                # have the account while totals move.
-                                progress.complete("bluesky_posting", detail="stood down: the live count is posting")
-                            else:
-                                posted = election_bluesky.post_race_coverage_updates(db, deadline=coverage_deadline)
-                                logger.info("Posted %d race coverage updates", posted)
-                                progress.complete("bluesky_posting", detail=f"{posted} posted")
-                        except lease.CutOff as cut:
-                            logger.warning("%s — its items wait for the next run", cut)
-                            progress.skip("bluesky_posting", detail="skipped: reached its deadline")
-                        except Exception:
-                            db.rollback()
-                            logger.exception("Bluesky posting failed — continuing")
-                            progress.fail("bluesky_posting")
-                        coverage_open.remove("bluesky_posting")
-
-                        # Older stored coverage whose summary may open with a
-                        # photo caption, re-read from its article page a
-                        # bounded number a night (fetch/coverage_captions.py).
-                        # Under the same lease: it rewrites summaries the
-                        # refresh reads. Best-effort, like posting.
-                        logger.info("--- Election: COVERAGE CAPTION RE-CHECK ---")
-                        try:
-                            await coverage_captions.recheck_stored_captions(
-                                db, deadline=lambda: time.monotonic() >= coverage_deadline,
-                            )
-                        except Exception:
-                            db.rollback()
-                            logger.exception("Coverage caption re-check failed — continuing")
-            except lease.CutOff as cut:
-                db.rollback()
-                logger.warning("Election coverage/posting phases: %s — continuing", cut)
-                for phase in coverage_open:
-                    progress.fail(phase)
-            except Exception:
-                db.rollback()
-                logger.exception("Election coverage/posting phases failed — continuing")
-                for phase in coverage_open:
-                    progress.fail(phase)
-
-            run.current_phase = "snapshot"
-            db.commit()
-            logger.info("--- Election: SNAPSHOT ---")
-            progress.begin("snapshot")
-            try:
-                snapshotted = _snapshot_candidates(db)
-                _prune_stale_coverage(db)
-                logger.info("Snapshotted %d candidates", snapshotted)
-                progress.complete("snapshot", detail=f"{snapshotted} snapshotted")
-            except Exception:
-                db.rollback()
-                logger.exception("Snapshot phase failed — continuing")
-                progress.fail("snapshot")
+            night = _ElectionNight(
+                db=db, client=client, cycle=cycle, run=run, progress=progress,
+                election_held=election_is_held(active_election(db)),
+            )
+            await _sync_roster_phase(night)
+            await _refresh_financials_phase(night)
+            await _confirm_candidates(night)
+            await _sync_measures_phase(night)
+            await _verify_ballot_links(client)
+            await _coverage_and_posting(night)
+            _snapshot_phase(night)
 
         run.current_phase = "finalize"
         run.status = PipelineStatus.COMPLETED
@@ -1965,3 +1713,286 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     finally:
         _tracker.stop(_run_token)
         db.close()
+
+
+async def _sync_roster_phase(night: _ElectionNight) -> None:
+    """The Senate's classes, the specials and the calendar, FEC's candidate
+    roster and its link to member records."""
+    db, client, progress = night.db, night.client, night.progress
+    night.begin("roster", "roster_sync", "ROSTER SYNC")
+    # Which states hold which Senate class, from the Senate's own
+    # list, before the roster is filtered by it. Best-effort: a
+    # failed read keeps what is stored (senate_classes.py).
+    await senate_classes.refresh_senate_classes(client)
+    await _read_specials(night)
+    night.begin("roster")
+    try:
+        if night.election_held:
+            progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
+        else:
+            house_raw = await fetch_all_candidates(client, db, night.cycle, "H")
+            senate_raw = await fetch_all_candidates(client, db, night.cycle, "S")
+            # The presidential contest, in the cycles that hold one.
+            pres_raw = (
+                await fetch_all_candidates(client, db, night.cycle, "P") if is_presidential(night.cycle) else []
+            )
+            synced = _sync_roster(db, night.cycle, house_raw + senate_raw + pres_raw)
+            night.run.candidates_synced = synced
+            logger.info("Synced %d candidates", synced)
+            progress.complete("roster_sync", detail=f"{synced} candidates")
+    except Exception:
+        db.rollback()
+        logger.exception("Roster sync failed — continuing")
+        progress.fail("roster_sync")
+    try:
+        linked = link_members(db, night.cycle, await fetch_bioguide_to_fec_ids(client, db))
+        logger.info("Linked %d candidates to their member records", linked)
+    except Exception:
+        db.rollback()
+        logger.exception("Member linking failed — continuing")
+
+
+async def _read_specials(night: _ElectionNight) -> None:
+    """Specials, vacancies and the calendar, in every season: specials
+    are held in any month, and the calendar page reads this
+    whether or not a general is near. After the classes, which the
+    Senate's vacancies are read against."""
+    night.begin("specials", "special_elections")
+    try:
+        specials = await refresh_special_elections(night.db, night.client, election_today(), night.cycle)
+        publish_new_specials(night.db, specials["new"])
+        report_file_problems(
+            "Special elections or the election calendar not fully read",
+            "What is stored stays shown; the next run retries.",
+            specials["problems"], "special-elections-read",
+        )
+        night.progress.complete("special_elections", detail=f"{len(specials['new'])} new calendar rows")
+    except Exception:
+        night.db.rollback()
+        logger.exception("Special-election read failed — continuing")
+        night.progress.fail("special_elections")
+
+
+async def _refresh_financials_phase(night: _ElectionNight) -> None:
+    night.begin("financial", "financial_refresh", "FINANCIAL REFRESH")
+    try:
+        refreshed = await _refresh_financials(night.db, night.client, FINANCIALS_BATCH_SIZE)
+        night.run.financials_refreshed = refreshed
+        logger.info("Refreshed financials for %d candidates", refreshed)
+        night.progress.complete("financial_refresh", detail=f"{refreshed} refreshed")
+    except Exception:
+        night.db.rollback()
+        logger.exception("Financial refresh phase failed — continuing")
+        night.progress.fail("financial_refresh")
+
+
+async def _confirm_candidates(night: _ElectionNight) -> None:
+    """The weekly source crawl over the states due, then each state's
+    confirmed candidates (_confirmed_candidates_phase)."""
+    db, progress = night.db, night.progress
+    night.begin("confirmed_candidates", "confirmed_candidates", "CONFIRMED CANDIDATES")
+    if night.election_held:
+        progress.skip("confirmed_candidates", detail=f"skipped: {ELECTION_HELD}")
+        return
+    adopted = await _crawl_due_states(night)
+    finished = False  # the step marked done or skipped
+    try:
+        # The election-season ballot sync may be mid-pass; two
+        # passes writing the same Candidate rows at once is the one
+        # thing to avoid, and that pass is doing this step anyway.
+        # Holding the sync's tracker and lease (lease.tracked_job, as
+        # the scheduled sync does), so a sync in this process or
+        # another can't start beside this pass.
+        async with lease.tracked_job_async(
+            lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
+        ) as granted:
+            if not granted:
+                progress.skip(
+                    "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
+                )
+            else:
+                detail = await _confirmed_candidates_phase(db, night.client, night.cycle)
+                progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
+            finished = True
+    except lease.CutOff as cut:
+        db.rollback()
+        logger.warning("Confirmed-candidate phase: %s — continuing", cut)
+        if not finished:
+            progress.fail("confirmed_candidates")
+    except Exception:
+        db.rollback()
+        logger.exception("Confirmed-candidate sync failed — continuing")
+        if not finished:
+            progress.fail("confirmed_candidates")
+
+
+async def _crawl_due_states(night: _ElectionNight) -> dict[str, str]:
+    """Each state is crawled weekly — what the crawl looks for,
+    a state standing up a results portal or a new cycle's file
+    appearing, moves on the scale of weeks — but the crawl
+    runs nightly over whichever states are due, so one that
+    failed is retried the next night (crawl_for_new_sources).
+    Runs BEFORE the sync so anything it proves out contributes
+    the same night, and on its own: a crawl that raises
+    must not cost that night's sync. Returns the states whose crawl is
+    news for the step's detail (_CRAWL_NEWS)."""
+    try:
+        leads = await crawl_for_new_sources(night.db, night.client, night.cycle)
+        logger.info("Source crawl: %s", leads or "no state due")
+        return {s: r for s, r in leads.items() if any(mark in r for mark in _CRAWL_NEWS)}
+    except Exception:
+        night.db.rollback()
+        logger.exception("Source crawl failed — the sync runs anyway")
+        return {}
+
+
+async def _sync_measures_phase(night: _ElectionNight) -> None:
+    db, progress = night.db, night.progress
+    night.begin("measures", "ballot_measures", "BALLOT MEASURES")
+    try:
+        if night.election_held:
+            # Earlier elections' rows still age out.
+            _prune_past_measures(db)
+            progress.skip("ballot_measures", detail=f"skipped: {ELECTION_HELD}")
+            return
+        measure_result = await _sync_ballot_measures(db, night.client, night.cycle)
+        if measure_result.get("skipped"):
+            progress.complete("ballot_measures", detail="skipped (no API key)")
+        else:
+            detail = (
+                f"{measure_result['synced']} measures, "
+                f"{measure_result['failed_states']} states failed"
+            )
+            logger.info("Ballot measures: %s", detail)
+            progress.complete("ballot_measures", detail=detail)
+    except Exception:
+        db.rollback()
+        logger.exception("Ballot measure sync failed — continuing")
+        progress.fail("ballot_measures")
+
+
+async def _verify_ballot_links(client: httpx.AsyncClient) -> None:
+    """Verify the official-ballot links we hand users. Cheap, and
+    the one link on the page whose failure strands the visitor."""
+    try:
+        link_result = await ballot_lookup.refresh_link_verification(client)
+        if link_result["failed"]:
+            logger.warning(
+                "%d state ballot-lookup links failed verification and are "
+                "now hidden", link_result["failed"],
+            )
+    except Exception:
+        logger.exception("Ballot lookup link verification failed — continuing")
+
+
+async def _coverage_and_posting(night: _ElectionNight) -> None:
+    """Coverage + posting are also run by the 15-minute
+    election-season refresh (scheduler.py); concurrent passes would
+    double-ingest and double-post (2026-07 review B3). Holding the
+    refresh's lease and tracker (lease.tracked_job, as the refresh
+    does), so a refresh in this process or another can't run
+    beside this pass; if one is mid-flight, these two phases are
+    skipped and the in-season cadence re-covers them within 15
+    minutes. A failure here (taking the guards included) fails
+    whichever of these phases hadn't finished, not the rest of
+    the run."""
+    db, progress = night.db, night.progress
+    open_steps = ["coverage_ingestion", "bluesky_posting"]  # phases not yet finished
+    try:
+        async with lease.tracked_job_async(
+            lease.COVERAGE_REFRESH, election_coverage.coverage_tracker(), who="Election pipeline's coverage/posting phases",
+        ) as granted:
+            if not granted:
+                for step in open_steps:
+                    progress.skip(step, detail=f"skipped: {granted.why}")
+                open_steps.clear()
+                return
+            # The cut-off fires only at an await; the posting
+            # loop, which doesn't await, stops here itself.
+            deadline = lease.deadline(lease.COVERAGE_REFRESH)
+            await _ingest_coverage(night)
+            open_steps.remove("coverage_ingestion")
+            _post_coverage(night, deadline)
+            open_steps.remove("bluesky_posting")
+            # Older stored coverage whose summary may open with a
+            # photo caption, re-read from its article page a
+            # bounded number a night (fetch/coverage_captions.py).
+            # Under the same lease: it rewrites summaries the
+            # refresh reads. Best-effort, like posting.
+            logger.info("--- Election: COVERAGE CAPTION RE-CHECK ---")
+            try:
+                await coverage_captions.recheck_stored_captions(
+                    db, deadline=lambda: time.monotonic() >= deadline,
+                )
+            except Exception:
+                db.rollback()
+                logger.exception("Coverage caption re-check failed — continuing")
+    except lease.CutOff as cut:
+        db.rollback()
+        logger.warning("Election coverage/posting phases: %s — continuing", cut)
+        for step in open_steps:
+            progress.fail(step)
+    except Exception:
+        db.rollback()
+        logger.exception("Election coverage/posting phases failed — continuing")
+        for step in open_steps:
+            progress.fail(step)
+
+
+async def _ingest_coverage(night: _ElectionNight) -> None:
+    night.begin("coverage", "coverage_ingestion", "COVERAGE INGESTION")
+    try:
+        ingested = await election_coverage.ingest_race_coverage(night.db)
+        night.run.coverage_items_ingested = ingested
+        logger.info("Ingested %d coverage items", ingested)
+        night.progress.complete("coverage_ingestion", detail=f"{ingested} items")
+    except Exception:
+        night.db.rollback()
+        logger.exception("Coverage ingestion failed — continuing")
+        night.progress.fail("coverage_ingestion")
+
+
+def _post_coverage(night: _ElectionNight, deadline: float) -> None:
+    db, progress = night.db, night.progress
+    night.begin("posting", "bluesky_posting", "BLUESKY POSTING")
+    try:
+        if time.monotonic() >= deadline:
+            # The calibration and the posting loop don't
+            # await, so the cut-off can't stop them; not
+            # starting them past the deadline keeps them
+            # inside the guards (each is minutes at most,
+            # within the lease's stale window).
+            raise lease.CutOff("Election pipeline's posting phase reached its deadline")
+        # Re-derive the relevance cut from the corpus this
+        # run just ingested, before it gates that corpus —
+        # same order and same stale-beats-nothing failure
+        # mode as explore_ranking.calibrate_and_store.
+        race_relevance.calibrate_and_store(db)
+        if live_bluesky.counting_is_live(db):
+            # Election night: the live count's own posts
+            # have the account while totals move.
+            progress.complete("bluesky_posting", detail="stood down: the live count is posting")
+        else:
+            posted = election_bluesky.post_race_coverage_updates(db, deadline=deadline)
+            logger.info("Posted %d race coverage updates", posted)
+            progress.complete("bluesky_posting", detail=f"{posted} posted")
+    except lease.CutOff as cut:
+        logger.warning("%s — its items wait for the next run", cut)
+        progress.skip("bluesky_posting", detail="skipped: reached its deadline")
+    except Exception:
+        db.rollback()
+        logger.exception("Bluesky posting failed — continuing")
+        progress.fail("bluesky_posting")
+
+
+def _snapshot_phase(night: _ElectionNight) -> None:
+    night.begin("snapshot", "snapshot", "SNAPSHOT")
+    try:
+        snapshotted = _snapshot_candidates(night.db)
+        _prune_stale_coverage(night.db)
+        logger.info("Snapshotted %d candidates", snapshotted)
+        night.progress.complete("snapshot", detail=f"{snapshotted} snapshotted")
+    except Exception:
+        night.db.rollback()
+        logger.exception("Snapshot phase failed — continuing")
+        night.progress.fail("snapshot")
