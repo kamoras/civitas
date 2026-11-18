@@ -3780,6 +3780,12 @@ def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
 
     logger.info("Merged monitor '%s' into '%s'", absorb.title, keep.title)
     db.flush()
+    # The moves set monitor_id; a collection loaded before them (the caller
+    # compares the two monitors' updates) still lists each moved update
+    # under `absorb`, and deleting `absorb` cascaded to it: every merge lost
+    # the absorbed monitor's updates. Expired, both reload as they now are.
+    db.expire(keep, ["updates"])
+    db.expire(absorb, ["updates"])
     db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == absorb.id).delete(synchronize_session=False)
     db.delete(absorb)
 
@@ -4274,8 +4280,12 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
                 logger.info("Deleting insignificant monitor: '%s' (%d updates)", 
                             m.title, update_count)
                 # By query, not the relationship's cascade: rows added by
-                # monitor_id after the collection loaded aren't in it.
+                # monitor_id after the collection loaded aren't in it. The
+                # loaded collection is then expired, so the cascade below
+                # finds it empty instead of deleting the same rows again
+                # (SQLAlchemy warned it expected rows the query had removed).
                 db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == m.id).delete(synchronize_session=False)
+                db.expire(m, ["updates"])
                 db.delete(m)
             else:
                 m.status = MonitorStatus.CLOSED
