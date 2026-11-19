@@ -3780,6 +3780,12 @@ def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
 
     logger.info("Merged monitor '%s' into '%s'", absorb.title, keep.title)
     db.flush()
+    # The moves set monitor_id; a collection loaded before them (the caller
+    # compares the two monitors' updates) still lists each moved update
+    # under `absorb`, and deleting `absorb` cascaded to it: every merge lost
+    # the absorbed monitor's updates. Expired, both reload as they now are.
+    db.expire(keep, ["updates"])
+    db.expire(absorb, ["updates"])
     db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == absorb.id).delete(synchronize_session=False)
     db.delete(absorb)
 
@@ -3991,13 +3997,45 @@ def _update_national_monitors(today: str, db: Session) -> None:
         _cleanup_monitor_lifecycle(today, db)
         return
 
-    existing_monitors = db.query(NationalMonitor).all()
-
     today_embeddings = model.encode(
         [i.title for i in today_issues],
         normalize_embeddings=True,
     )
+    _tidy_monitors(db)
 
+    # Step 1: Merge any existing monitors that are too similar to each other.
+    _set_refresh_state(stage_detail="1/4 dedup")
+    existing_monitors = db.query(NationalMonitor).all()
+    if _merge_similar_monitors(existing_monitors, db):
+        db.commit()
+        existing_monitors = db.query(NationalMonitor).all()
+
+    # Step 2: Match today's issues to existing monitors and add updates
+    _set_refresh_state(stage_detail="2/4 matching")
+    matched_issues = _match_to_monitors(today, today_issues, today_embeddings, existing_monitors, model, db)
+
+    # Step 3: Detect new recurring topics from unmatched issues
+    _set_refresh_state(stage_detail="3/4 new topics")
+    _open_new_monitors(
+        today, [(i, issue) for i, issue in enumerate(today_issues) if i not in matched_issues],
+        today_embeddings, model, db,
+    )
+
+    # Step 3b: Re-merge after creating new monitors.
+    if _merge_similar_monitors(db.query(NationalMonitor).all(), db):
+        db.commit()
+
+    # Step 4: Lifecycle management — watching, closing, and cleaning up
+    _set_refresh_state(stage_detail="4/4 lifecycle")
+    _cleanup_monitor_lifecycle(today, db)
+
+    db.commit()
+
+
+def _tidy_monitors(db: Session) -> None:
+    """Before matching: updates of deleted monitors swept, updates that no
+    longer share a distinctive entity with their monitor pruned, and
+    monitors still named after a headline named again. Each committed."""
     # Committed even when it swept nothing: its DELETE opens the write
     # transaction whatever it matches, and the rename below asks the model.
     # Left open, that held SQLite's write lock through the LLM call on every
@@ -4012,86 +4050,92 @@ def _update_national_monitors(today: str, db: Session) -> None:
     if _rename_headline_monitors(db):
         db.commit()
 
-    # Step 1: Merge any existing monitors that are too similar to each other.
-    _set_refresh_state(stage_detail="1/4 dedup")
-    if _merge_similar_monitors(existing_monitors, db):
-        db.commit()
-        existing_monitors = db.query(NationalMonitor).all()
 
-    # Step 2: Match today's issues to existing monitors and add updates
-    _set_refresh_state(stage_detail="2/4 matching")
+def _match_to_monitors(
+    today: str, today_issues: list[ActionIssue], today_embeddings: np.ndarray,
+    monitors: list[NationalMonitor], model, db: Session,
+) -> set[int]:
+    """Each of today's issues joined to every monitor its title is near and
+    shares a distinctive entity with: an update for its first source, unless
+    the monitor holds one of its sources already, and the monitor's slug on
+    the issue. Returns the indexes of the issues that matched a monitor."""
     matched_issues: set[int] = set()
+    if not monitors:
+        return matched_issues
     issue_monitor_slugs: dict[int, list[str]] = {}
+    monitor_embeddings = model.encode(
+        [f"{m.title} {m.description}" for m in monitors],
+        normalize_embeddings=True,
+    )
+    sims = today_embeddings @ monitor_embeddings.T
+    entity_df, entity_docs = _entity_document_frequency(db)
+    references = {m.id: _monitor_reference(m, db) for m in monitors}
 
-    if existing_monitors:
-        monitor_embeddings = model.encode(
-            [f"{m.title} {m.description}" for m in existing_monitors],
-            normalize_embeddings=True,
-        )
-        sims = today_embeddings @ monitor_embeddings.T
-        entity_df, entity_docs = _entity_document_frequency(db)
-        references = {m.id: _monitor_reference(m, db) for m in existing_monitors}
-
-        for i, issue in enumerate(today_issues):
-            issue_entities = _issue_signature(issue.title, [issue.summary or ""])
-            for j, monitor in enumerate(existing_monitors):
-                full_sim = float(sims[i][j])
-                if full_sim < _MONITOR_ISSUE_SIM:
-                    continue
-                if not _shares_distinctive_entity(
-                    issue_entities, references[monitor.id], entity_df, entity_docs,
-                ):
-                    action_metrics.increment("monitor_update_no_shared_entity")
-                    continue
-
-                issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
-
-                source_urls = json.loads(issue.source_urls or "[]")
-                source_names = json.loads(issue.source_names or "[]")
-                if not source_urls:
-                    matched_issues.add(i)
-                    continue
-
-                # Match against ANY of the issue's source URLs, not just the
-                # first: source ordering shifts between hourly runs as new
-                # articles arrive. And on any date: an issue that stays
-                # current for days added the same article again each day
-                # (the monitor showed one story on consecutive dates).
-                already_exists = (
-                    db.query(MonitorUpdate)
-                    .filter(
-                        MonitorUpdate.monitor_id == monitor.id,
-                        MonitorUpdate.source_url.in_(source_urls),
-                    )
-                    .first()
-                )
-                if already_exists:
-                    matched_issues.add(i)
-                    continue
-
-                db.add(MonitorUpdate(
-                    monitor_id=monitor.id,
-                    date=today,
-                    summary=issue.summary[:500],
-                    source_url=source_urls[0],
-                    source_name=source_names[0] if source_names else "",
-                    article_title=issue.title,
-                ))
-                monitor.last_article_date = today
-                monitor.status = MonitorStatus.ACTIVE
-                matched_issues.add(i)
-                logger.info("Monitor updated: '%s' <- '%s'",
-                            monitor.title, issue.title[:60])
-
+    for i, issue in enumerate(today_issues):
+        issue_entities = _issue_signature(issue.title, [issue.summary or ""])
+        for j, monitor in enumerate(monitors):
+            if float(sims[i][j]) < _MONITOR_ISSUE_SIM:
+                continue
+            if not _shares_distinctive_entity(
+                issue_entities, references[monitor.id], entity_df, entity_docs,
+            ):
+                action_metrics.increment("monitor_update_no_shared_entity")
+                continue
+            issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
+            _add_monitor_update(today, issue, monitor, db)
+            matched_issues.add(i)
 
     # Tag issues with their related monitor slugs
-    for i, issue in enumerate(today_issues):
-        slugs = issue_monitor_slugs.get(i, [])
-        if slugs:
-            issue.related_monitor_slugs = json.dumps(slugs)
+    for i, slugs in issue_monitor_slugs.items():
+        today_issues[i].related_monitor_slugs = json.dumps(slugs)
+    return matched_issues
 
-    # Step 3: Detect new recurring topics from unmatched issues
-    _set_refresh_state(stage_detail="3/4 new topics")
+
+def _add_monitor_update(today: str, issue: ActionIssue, monitor: NationalMonitor, db: Session) -> None:
+    """The issue's first source as an update of `monitor`, which is active
+    again from today; nothing when the issue has no source or the monitor
+    holds one of its sources already."""
+    source_urls = json.loads(issue.source_urls or "[]")
+    source_names = json.loads(issue.source_names or "[]")
+    if not source_urls:
+        return
+
+    # Match against ANY of the issue's source URLs, not just the
+    # first: source ordering shifts between hourly runs as new
+    # articles arrive. And on any date: an issue that stays
+    # current for days added the same article again each day
+    # (the monitor showed one story on consecutive dates).
+    already_exists = (
+        db.query(MonitorUpdate)
+        .filter(
+            MonitorUpdate.monitor_id == monitor.id,
+            MonitorUpdate.source_url.in_(source_urls),
+        )
+        .first()
+    )
+    if already_exists:
+        return
+
+    db.add(MonitorUpdate(
+        monitor_id=monitor.id,
+        date=today,
+        summary=issue.summary[:500],
+        source_url=source_urls[0],
+        source_name=source_names[0] if source_names else "",
+        article_title=issue.title,
+    ))
+    monitor.last_article_date = today
+    monitor.status = MonitorStatus.ACTIVE
+    logger.info("Monitor updated: '%s' <- '%s'", monitor.title, issue.title[:60])
+
+
+def _open_new_monitors(
+    today: str, unmatched: list[tuple[int, ActionIssue]], today_embeddings: np.ndarray, model, db: Session,
+) -> None:
+    """A monitor for each of today's unmatched issues whose story the last
+    _MONITOR_LOOKBACK_DAYS have carried on _MONITOR_MIN_DAYS days, from
+    _MONITOR_MIN_UNIQUE_SOURCES outlets or more, and that no monitor (one
+    opened earlier in this pass included) already covers."""
     cutoff_date = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_LOOKBACK_DAYS)
     ).strftime("%Y-%m-%d")
@@ -4104,150 +4148,149 @@ def _update_national_monitors(today: str, db: Session) -> None:
         )
         .all()
     )
+    if not past_issues:
+        return
 
-    if past_issues:
-        past_embeddings = model.encode(
-            [i.title for i in past_issues],
+    past_embeddings = model.encode(
+        [i.title for i in past_issues],
+        normalize_embeddings=True,
+    )
+    sims = today_embeddings @ past_embeddings.T
+
+    all_monitors = db.query(NationalMonitor).all()
+    mon_embs = None
+    if all_monitors:
+        mon_embs = model.encode(
+            [f"{m.title} {m.description}" for m in all_monitors],
             normalize_embeddings=True,
         )
-        sims = today_embeddings @ past_embeddings.T
 
-        all_monitors = db.query(NationalMonitor).all()
-        mon_embs = None
-        if all_monitors:
-            mon_embs = model.encode(
-                [f"{m.title} {m.description}" for m in all_monitors],
-                normalize_embeddings=True,
+    for i, issue in unmatched:
+        matched_dates = {today}
+        matched_past: list[ActionIssue] = []
+        for j, past_issue in enumerate(past_issues):
+            if sims[i][j] >= _MONITOR_HISTORY_SIM:
+                matched_dates.add(past_issue.date)
+                matched_past.append(past_issue)
+
+        if len(matched_dates) < _MONITOR_MIN_DAYS:
+            continue
+
+        # Ensure the topic has breadth — if only 1 source (e.g. only AP)
+        # covered it over 5 days, it's persistent but likely too niche
+        # for a dedicated National Monitor.
+        unique_sources = set(json.loads(issue.source_names or "[]"))
+        for p_issue in matched_past:
+            unique_sources.update(json.loads(p_issue.source_names or "[]"))
+
+        if len(unique_sources) < _MONITOR_MIN_UNIQUE_SOURCES:
+            logger.info(
+                "Monitor creation skipped for '%s': insufficient breadth "
+                "(%d sources over %d days)",
+                issue.title[:50], len(unique_sources), len(matched_dates),
             )
+            continue
 
-        for i, issue in enumerate(today_issues):
-            if existing_monitors and i in matched_issues:
+        if mon_embs is not None:
+            dup_sims = today_embeddings[i] @ mon_embs.T
+            if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                 continue
 
-            matched_dates = {today}
-            matched_past: list[ActionIssue] = []
-            for j, past_issue in enumerate(past_issues):
-                if sims[i][j] >= _MONITOR_HISTORY_SIM:
-                    matched_dates.add(past_issue.date)
-                    matched_past.append(past_issue)
+        past_index = {id(p): j for j, p in enumerate(past_issues)}
+        monitor = _open_monitor(
+            today, issue, matched_past,
+            np.vstack([today_embeddings[i]] + [past_embeddings[past_index[id(p)]] for p in matched_past]),
+            db,
+        )
 
-            if len(matched_dates) < _MONITOR_MIN_DAYS:
-                continue
+        # A second issue on this topic later in the same run is a
+        # duplicate of the monitor just opened, not a new one.
+        new_emb = model.encode(
+            [f"{monitor.title} {monitor.description}"], normalize_embeddings=True,
+        )
+        mon_embs = new_emb if mon_embs is None else np.vstack([mon_embs, new_emb])
 
-            # Ensure the topic has breadth — if only 1 source (e.g. only AP) 
-            # covered it over 5 days, it's persistent but likely too niche
-            # for a dedicated National Monitor.
-            unique_sources = set(json.loads(issue.source_names or "[]"))
-            for p_issue in matched_past:
-                unique_sources.update(json.loads(p_issue.source_names or "[]"))
+        logger.info("New monitor created: '%s' (%d days)",
+                    monitor.title, len(matched_dates))
 
-            if len(unique_sources) < _MONITOR_MIN_UNIQUE_SOURCES:
-                logger.info(
-                    "Monitor creation skipped for '%s': insufficient breadth "
-                    "(%d sources over %d days)",
-                    issue.title[:50], len(unique_sources), len(matched_dates),
-                )
-                continue
 
-            if mon_embs is not None:
-                dup_sims = today_embeddings[i] @ mon_embs.T
-                if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
-                    continue
+def _open_monitor(
+    today: str, issue: ActionIssue, matched_past: list[ActionIssue], embeddings: np.ndarray, db: Session,
+) -> NationalMonitor:
+    """The monitor opened by today's `issue` and the past issues on its story
+    (`embeddings` theirs, today's first): named by the model, else after the
+    headline nearest the issues' centroid, filed under the policy area they
+    share most, with one update per source article. Committed."""
+    opened_by = [issue] + matched_past
+    areas = Counter(
+        a for i in opened_by for a in json.loads(i.policy_areas or "[]")
+    ).most_common(1)
+    category = areas[0][0].lower() if areas else "general"
+    metadata = _generate_monitor_metadata(
+        _monitor_article_lines([_issue_article_entry(i) for i in opened_by]), db,
+    )
+    if metadata is None:
+        representative = _representative_issue(opened_by, embeddings)
+        metadata = {"title": representative.title[:500],
+                    "description": (representative.summary or "")[:1000]}
+    metadata["category"] = category
+    slug = _slugify(metadata["title"])
 
-            opened_by = [issue] + matched_past
-            areas = Counter(
-                a for i in opened_by for a in json.loads(i.policy_areas or "[]")
-            ).most_common(1)
-            category = areas[0][0].lower() if areas else "general"
-            metadata = _generate_monitor_metadata(
-                _monitor_article_lines([_issue_article_entry(i) for i in opened_by]), db,
-            )
-            if metadata is None:
-                past_index = {id(p): j for j, p in enumerate(past_issues)}
-                representative = _representative_issue(
-                    opened_by,
-                    np.vstack([today_embeddings[i]] + [past_embeddings[past_index[id(p)]] for p in matched_past]),
-                )
-                metadata = {"title": representative.title[:500],
-                            "description": (representative.summary or "")[:1000]}
-            metadata["category"] = category
-            slug = _slugify(metadata["title"])
+    # Ensure unique slug. `int(time.time()) % 1000` (previous
+    # suffix) wasn't actually unique: two monitors created in the
+    # same wall-clock second — plausible in this tight loop — got
+    # the same suffix and the second's write below raised
+    # UNIQUE constraint failed: national_monitors.slug, which
+    # propagated out of _run_refresh uncaught (see 2026-07-27 fix
+    # in refresh_action_issues). uuid4 makes the collision
+    # astronomically unlikely instead of merely second-scale.
+    existing_slug = db.query(NationalMonitor).filter(NationalMonitor.slug == slug).first()
+    if existing_slug:
+        slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
-            # Ensure unique slug. `int(time.time()) % 1000` (previous
-            # suffix) wasn't actually unique: two monitors created in the
-            # same wall-clock second — plausible in this tight loop — got
-            # the same suffix and the second's write below raised
-            # UNIQUE constraint failed: national_monitors.slug, which
-            # propagated out of _run_refresh uncaught (see 2026-07-27 fix
-            # in refresh_action_issues). uuid4 makes the collision
-            # astronomically unlikely instead of merely second-scale.
-            existing_slug = db.query(NationalMonitor).filter(NationalMonitor.slug == slug).first()
-            if existing_slug:
-                slug = f"{slug}-{uuid.uuid4().hex[:6]}"
-
-            monitor = NationalMonitor(
-                slug=slug,
-                title=metadata["title"],
-                description=metadata["description"],
-                category=metadata["category"],
-                status=MonitorStatus.ACTIVE,
-                policy_areas=json.dumps(
-                    [] if metadata["category"] == "general" else [metadata["category"].upper()]
-                ),
-                last_article_date=today,
-            )
-            db.add(monitor)
-            db.commit()
-
-            seen_sources: set[str] = set()
-            source_urls = json.loads(issue.source_urls or "[]")
-            source_names = json.loads(issue.source_names or "[]")
-
-            for past_issue in matched_past:
-                p_urls = json.loads(past_issue.source_urls or "[]")
-                p_names = json.loads(past_issue.source_names or "[]")
-                if p_urls and p_urls[0] not in seen_sources:
-                    db.add(MonitorUpdate(
-                        monitor_id=monitor.id,
-                        date=past_issue.date,
-                        summary=past_issue.summary[:500],
-                        source_url=p_urls[0],
-                        source_name=p_names[0] if p_names else "",
-                        article_title=past_issue.title,
-                    ))
-                    seen_sources.add(p_urls[0])
-
-            if source_urls and source_urls[0] not in seen_sources:
-                db.add(MonitorUpdate(
-                    monitor_id=monitor.id,
-                    date=today,
-                    summary=issue.summary[:500],
-                    source_url=source_urls[0],
-                    source_name=source_names[0] if source_names else "",
-                    article_title=issue.title,
-                ))
-            db.commit()
-
-            # A second issue on this topic later in the same run is a
-            # duplicate of the monitor just opened, not a new one.
-            new_emb = model.encode(
-                [f"{monitor.title} {monitor.description}"], normalize_embeddings=True,
-            )
-            mon_embs = new_emb if mon_embs is None else np.vstack([mon_embs, new_emb])
-
-            logger.info("New monitor created: '%s' (%d days)",
-                        monitor.title, len(matched_dates))
-
-    # Step 3b: Re-merge after creating new monitors.
-    all_monitors = db.query(NationalMonitor).all()
-    if _merge_similar_monitors(all_monitors, db):
-        db.commit()
-
-    # Step 4: Lifecycle management — watching, closing, and cleaning up
-    _set_refresh_state(stage_detail="4/4 lifecycle")
-    _cleanup_monitor_lifecycle(today, db)
-
+    monitor = NationalMonitor(
+        slug=slug,
+        title=metadata["title"],
+        description=metadata["description"],
+        category=metadata["category"],
+        status=MonitorStatus.ACTIVE,
+        policy_areas=json.dumps(
+            [] if metadata["category"] == "general" else [metadata["category"].upper()]
+        ),
+        last_article_date=today,
+    )
+    db.add(monitor)
     db.commit()
+
+    seen_sources: set[str] = set()
+    source_urls = json.loads(issue.source_urls or "[]")
+    source_names = json.loads(issue.source_names or "[]")
+
+    for past_issue in matched_past:
+        p_urls = json.loads(past_issue.source_urls or "[]")
+        p_names = json.loads(past_issue.source_names or "[]")
+        if p_urls and p_urls[0] not in seen_sources:
+            db.add(MonitorUpdate(
+                monitor_id=monitor.id,
+                date=past_issue.date,
+                summary=past_issue.summary[:500],
+                source_url=p_urls[0],
+                source_name=p_names[0] if p_names else "",
+                article_title=past_issue.title,
+            ))
+            seen_sources.add(p_urls[0])
+
+    if source_urls and source_urls[0] not in seen_sources:
+        db.add(MonitorUpdate(
+            monitor_id=monitor.id,
+            date=today,
+            summary=issue.summary[:500],
+            source_url=source_urls[0],
+            source_name=source_names[0] if source_names else "",
+            article_title=issue.title,
+        ))
+    db.commit()
+    return monitor
 
 
 def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
@@ -4274,8 +4317,12 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
                 logger.info("Deleting insignificant monitor: '%s' (%d updates)", 
                             m.title, update_count)
                 # By query, not the relationship's cascade: rows added by
-                # monitor_id after the collection loaded aren't in it.
+                # monitor_id after the collection loaded aren't in it. The
+                # loaded collection is then expired, so the cascade below
+                # finds it empty instead of deleting the same rows again
+                # (SQLAlchemy warned it expected rows the query had removed).
                 db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == m.id).delete(synchronize_session=False)
+                db.expire(m, ["updates"])
                 db.delete(m)
             else:
                 m.status = MonitorStatus.CLOSED
