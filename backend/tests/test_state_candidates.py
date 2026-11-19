@@ -1584,3 +1584,62 @@ def test_a_results_url_names_its_own_decade():
 
     assert with_year(DISCOVERY["page_url"], 2026) == "https://elect.ky.gov/results/2020-2029/Pages/2026.aspx"
     assert with_year(DISCOVERY["page_url"], 2030) == "https://elect.ky.gov/results/2030-2039/Pages/2030.aspx"
+
+
+class TestTheCalendarAndAnUnknownStrategy:
+    """The sync's first step, the FEC election-date calendar, reports each
+    way it can go wrong in one alert; and a state whose entry names no
+    strategy the sync knows is reported, not read."""
+
+    @staticmethod
+    async def _sync(db_session, monkeypatch, calendar):
+        problems = []
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", calendar)
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, found, key, **_: problems.extend(found))
+        monkeypatch.setattr(sc, "configured_states", lambda: set())
+        result = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        return result, problems
+
+    @pytest.mark.asyncio
+    async def test_an_incomplete_calendar_is_reported(self, db_session, monkeypatch):
+        async def partial(client, cycle):
+            return {}, False
+
+        assert await self._sync(db_session, monkeypatch, partial) == ({}, [
+            "the FEC election-date calendar read was incomplete, so no Senate "
+            "election was retracted and the calendar was not marked read",
+        ])
+
+    @pytest.mark.asyncio
+    async def test_a_calendar_read_that_raises_is_reported_and_the_states_still_sync(self, db_session, monkeypatch):
+        async def broken(client, cycle):
+            raise RuntimeError("FEC down")
+
+        assert await self._sync(db_session, monkeypatch, broken) == (
+            {}, ["the FEC election-date calendar read raised: FEC down"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_state_naming_an_unknown_strategy_is_not_configured(self, db_session, monkeypatch):
+        _no_calendar(monkeypatch, known=True)
+        monkeypatch.setattr(sc, "report_file_problems", lambda *a, **k: None)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"ZZ"})
+        monkeypatch.setattr(sc, "source_for_state", lambda state: {"strategy": "no-such-reader"})
+        result = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert result == {"ZZ": {"confirmed": 0, "unmatched": 0, "status": "not_configured"}}
+
+    @pytest.mark.asyncio
+    async def test_a_calendar_that_cannot_be_saved_is_reported(self, db_session, monkeypatch):
+        from app.atomic_write import NotSaved
+
+        async def read(client, cycle):
+            return {"AK": {"general": "2026-11-03"}}, True
+
+        def refuse(*args, **kwargs):
+            raise NotSaved("the data volume is read-only")
+
+        monkeypatch.setattr(sc.election_dates, "save_calendar", refuse)
+        assert await self._sync(db_session, monkeypatch, read) == (
+            {}, ["the FEC election-date calendar was not saved: the data volume is read-only"],
+        )
