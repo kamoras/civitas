@@ -266,9 +266,27 @@ def real_client(tmp_path_factory):
                 if scheduler.running:
                     scheduler.pause()
                 yield client
+            _wait_for_started_jobs()
         finally:
             for engine in engines:
                 engine.dispose()
+
+
+def _wait_for_started_jobs(timeout_s: float = 120.0) -> None:
+    """The jobs the scheduler started at start (agency-sync,
+    host-terms-check and the rest run once at once) are writers on threads of
+    their own, registered until they end. Left running past this module,
+    they were still registered when a later test on the same worker took
+    background.exclusive(), which refused it naming them: the data-reset
+    tests failed whenever they followed this module."""
+    import time
+
+    from app import background
+
+    deadline = time.monotonic() + timeout_s
+    while background._running and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert not background._running, f"jobs still running: {sorted(background._running.values())}"
 
 
 def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client):

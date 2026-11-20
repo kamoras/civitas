@@ -568,6 +568,13 @@ def _no_district_lines_under_recheck(monkeypatch):
 
 _SLOW_TEST_RUNNING = False
 _LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1", "", "0.0.0.0", "::"}
+# A proxy on loopback passes the address check and resolves the outside
+# host itself, so with these set (a sandbox, a corporate network) a fast
+# test's request reached the source: the real app's start-up jobs read the
+# Federal Register and USAspending live from test_cache_headers. Unset for
+# the session, and set again only while a slow test runs.
+_PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
+_PROXIES: dict[str, str] = {}
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -590,7 +597,9 @@ def _fast_tests_offline():
         return real_getaddrinfo(host, *args, **kwargs)
 
     vector_store.SentenceTransformer, socket.getaddrinfo = sentence_transformer, getaddrinfo
+    _PROXIES.update({name: os.environ.pop(name) for name in _PROXY_VARIABLES if name in os.environ})
     yield
+    os.environ.update(_PROXIES)
     vector_store.SentenceTransformer, socket.getaddrinfo = real_model, real_getaddrinfo
 
 
@@ -607,7 +616,10 @@ def _slow_test_running(request, monkeypatch):
     the fast test only; slow tests keep reusing the loaded model."""
     global _SLOW_TEST_RUNNING
     _SLOW_TEST_RUNNING = request.node.get_closest_marker("slow") is not None
-    if not _SLOW_TEST_RUNNING:
+    if _SLOW_TEST_RUNNING:
+        for name, value in _PROXIES.items():
+            monkeypatch.setenv(name, value)
+    else:
         from app.pipeline import vector_store
 
         monkeypatch.setattr(vector_store, "_model", None)
