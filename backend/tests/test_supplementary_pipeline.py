@@ -61,7 +61,9 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
          patch("app.pipeline.supplementary_pipeline.run_presidential_support",
                new_callable=AsyncMock) as mock_presidential_support, \
          patch("app.pipeline.supplementary_pipeline.court_roster_changed",
-               new_callable=AsyncMock, return_value=court_changed):
+               new_callable=AsyncMock, return_value=court_changed) as mock_court:
+        if isinstance(court_changed, Exception):
+            mock_court.side_effect = court_changed
         # No phase reaches the network or loads a model here: the fast suite
         # runs offline with no model (AGENTS.md).
         # An exception or a callable becomes the mock's side effect;
@@ -433,3 +435,77 @@ class TestPresidentialSupportStep:
             **_SUPPORT_DEFAULT, "statements": {"status": "index unavailable", "read": 0}})
         status, detail = self._steps(db_session)["presidential_support"]
         assert status == "failed" and "index unavailable" in detail
+
+
+class TestTheWholeNight:
+    """Every step's record on the run row, and the paths only a whole run
+    reaches: a court-roster check that fails, every lease held elsewhere, a
+    president step that raises, and a failure outside any step."""
+
+    @staticmethod
+    def _steps(db_session):
+        run = db_session.query(SupplementaryPipelineRun).one()
+        return [(s["key"], s["status"], s.get("detail")) for s in json.loads(run.progress_detail)]
+
+    def test_a_sunday_runs_every_step_and_records_each(self, db_session, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 11, 15, 4, 0))  # a Sunday: the weekly steps run
+        result = _run(
+            db_session,
+            explore_result={"new_documents": {"fr_rulemaking": 3, "senate_floor": 2}},
+            justice_result={"justices": 9},
+            president_result={"updated": 46},
+            committee_leadership_result=True,
+            district_pvi_result=False,
+        )
+        assert result["status"] == "completed"
+        assert self._steps(db_session) == [
+            ("explore_documents", "done", "5 ingested"),
+            ("justice_scorecards", "done", "9 refreshed"),
+            ("committee_leadership", "done", "refreshed"),
+            ("district_pvi", "done", "kept previous data"),
+            ("president_scorecards", "done", "46 updated"),
+            ("presidential_support", "done",
+             "0 statements read (ok); 0 Senate and 0 House roll calls counted"),
+        ]
+
+    def test_a_court_roster_check_that_fails_leaves_the_weekly_cadence(self, db_session, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 11, 18, 4, 0))  # a Wednesday
+        db_session.add_all([
+            Justice(id="j1", name="Test Justice", last_name="Justice", loyalty_through_term=2025),
+            _appointment(),
+        ])
+        db_session.commit()
+        assert _run(db_session, court_changed=RuntimeError("Oyez down"))["status"] == "completed"
+        assert ("justice_scorecards", "skipped", "weekly cadence") in self._steps(db_session)
+
+    def test_every_leased_step_steps_aside_for_a_holder_elsewhere(self, db_session):
+        from app.pipeline import lease
+
+        @asynccontextmanager
+        async def all_held(tier, **_kw):
+            yield lease.Granted(f"{tier} is held elsewhere")
+
+        with patch("app.pipeline.lease.job_async", all_held):
+            assert _run(db_session)["status"] == "completed"
+        steps = {key: (status, detail) for key, status, detail in self._steps(db_session)}
+        for key, tier in (("explore_documents", lease.EXPLORE), ("justice_scorecards", lease.JUSTICE_PIPELINE),
+                          ("president_scorecards", lease.PRESIDENT_PIPELINE)):
+            assert steps[key] == ("skipped", f"skipped: {tier} is held elsewhere")
+        assert steps["presidential_support"][0] == "done"
+
+    @pytest.mark.parametrize("failing", ["justice_result", "president_result"])
+    def test_a_scoring_step_that_raises_is_failed_and_the_rest_run(self, db_session, failing):
+        assert _run(db_session, **{failing: RuntimeError("source down")})["status"] == "completed"
+        steps = {key: status for key, status, _ in self._steps(db_session)}
+        step = {"justice_result": "justice_scorecards", "president_result": "president_scorecards"}[failing]
+        assert steps.pop(step) == "failed"
+        assert "failed" not in steps.values() and steps["presidential_support"] == "done"
+
+    def test_a_failure_outside_every_step_fails_the_run_and_records_it(self, db_session):
+        with patch("app.pipeline.analyze.score_calculator._district_pvi", side_effect=RuntimeError("file unreadable")):
+            result = _run(db_session)
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert result["status"] == run.status == "failed"
+        assert run.error_message == "supplementary pipeline failed — see the run's error detail"
+        assert "RuntimeError: file unreadable" in run.error_detail
+        assert not supplementary_pipeline.is_supplementary_pipeline_running()
