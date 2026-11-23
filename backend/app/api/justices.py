@@ -34,7 +34,7 @@ def leaderboard(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/trigger")
-async def trigger_pipeline(authorization: str | None = Header(default=None)):
+def trigger_pipeline(authorization: str | None = Header(default=None)):
     """Trigger a justice data pipeline run (fetches from Oyez API)."""
     check_pipeline_token(authorization)
 

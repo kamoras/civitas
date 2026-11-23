@@ -1,6 +1,5 @@
 """Tests for the /action/issues fallback logic in app/api/action.py."""
 
-import asyncio
 import json
 from datetime import datetime
 from unittest.mock import patch
@@ -326,7 +325,7 @@ class TestTimelineRoutesUseCanonicalClock:
         result = get_open_comments(Response(), db=db_session)
         assert result == []
 
-    async def test_get_timeline_defaults_year_from_the_canonical_clock(self, db_session):
+    def test_get_timeline_defaults_year_from_the_canonical_clock(self, db_session):
         from datetime import datetime
         from unittest.mock import patch
 
@@ -335,10 +334,10 @@ class TestTimelineRoutesUseCanonicalClock:
         from app.api.action import get_timeline
 
         with patch("app.api.action.utcnow", return_value=datetime(2026, 3, 15)):
-            result = await get_timeline(Response(), year=None, db=db_session)
+            result = get_timeline(Response(), year=None, db=db_session)
         assert result["year"] == 2026
 
-    async def test_election_night_keeps_election_day_on_the_calendar(self, db_session):
+    def test_election_night_keeps_election_day_on_the_calendar(self, db_session):
         """9 PM ET on election day is already the 4th in UTC."""
         from datetime import date, datetime
         from unittest.mock import patch
@@ -349,7 +348,7 @@ class TestTimelineRoutesUseCanonicalClock:
 
         with patch("app.api.action.utcnow", return_value=datetime(2026, 11, 4, 2)), \
                 patch("app.api.action.election_today", return_value=date(2026, 11, 3)):
-            result = await get_timeline(Response(), year=2026, db=db_session)
+            result = get_timeline(Response(), year=2026, db=db_session)
         assert any(e["date"] == "2026-11-03" for e in result["upcomingEvents"])
 
 
@@ -382,7 +381,7 @@ class TestSingleIssueEnrichment:
         db.commit()
         return issue, doc
 
-    async def test_single_issue_returns_related_explore_docs(self, db_session):
+    def test_single_issue_returns_related_explore_docs(self, db_session):
         """Regression: the endpoint used to pass an empty prefetch map, which
         resolved every related explore id to a miss and silently returned no
         documents — so the full-story page could never show them."""
@@ -392,7 +391,7 @@ class TestSingleIssueEnrichment:
 
         issue, doc = self._make_issue_with_doc(db_session)
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert [d["id"] for d in resp["relatedExploreDocs"]] == [doc.id]
         assert resp["relatedExploreDocs"][0]["title"] == "Proposed Rule on Something"
@@ -401,7 +400,7 @@ class TestSingleIssueEnrichment:
         )
         assert resp["relatedExploreDocs"][0]["commentsCloseOn"] == "2026-12-31"
 
-    async def test_single_issue_matches_the_list_endpoint(self, db_session):
+    def test_single_issue_matches_the_list_endpoint(self, db_session):
         """Whatever the list endpoint exposes for an issue, the detail endpoint
         must expose too — otherwise the full-story page silently degrades."""
         from fastapi import Response
@@ -410,8 +409,8 @@ class TestSingleIssueEnrichment:
 
         issue, _ = self._make_issue_with_doc(db_session)
 
-        listed = await get_action_issues(Response(), date=issue.date, db=db_session, db_visits=db_session)
-        single = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        listed = get_action_issues(Response(), date=issue.date, db=db_session, db_visits=db_session)
+        single = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert single == listed["issues"][0]
 
@@ -421,7 +420,7 @@ class TestIssueLookupByPublicId:
     the identifier shown to readers and published in share links (#issue
     relabeling). Old links pointing at the bare id still have to resolve."""
 
-    async def test_looks_up_by_public_id(self, db_session):
+    def test_looks_up_by_public_id(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
@@ -430,12 +429,12 @@ class TestIssueLookupByPublicId:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["id"] == issue.id
         assert resp["publicId"] == to_public_id(issue.id)
 
-    async def test_falls_back_to_legacy_numeric_id(self, db_session):
+    def test_falls_back_to_legacy_numeric_id(self, db_session):
         """A Bluesky post from before public_id existed links to the bare
         int id — it has to keep resolving, not 404 a link that's already
         out in the world."""
@@ -447,22 +446,22 @@ class TestIssueLookupByPublicId:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issue(str(issue.id), Response(), db=db_session)
+        resp = get_action_issue(str(issue.id), Response(), db=db_session)
 
         assert resp["id"] == issue.id
 
-    async def test_unknown_identifier_404s(self, db_session):
+    def test_unknown_identifier_404s(self, db_session):
         from fastapi import HTTPException, Response
 
         from app.api.action import get_action_issue
 
         try:
-            await get_action_issue("iNoSuchIssue", Response(), db=db_session)
+            get_action_issue("iNoSuchIssue", Response(), db=db_session)
             assert False, "expected HTTPException"
         except HTTPException as exc:
             assert exc.status_code == 404
 
-    async def test_oversized_numeric_id_404s_instead_of_500ing(self, db_session):
+    def test_oversized_numeric_id_404s_instead_of_500ing(self, db_session):
         """A digit string past SQLite's 8-byte INTEGER range (a bot, a
         mistyped URL) used to reach the DB driver and raise OverflowError
         instead of just missing."""
@@ -471,7 +470,7 @@ class TestIssueLookupByPublicId:
         from app.api.action import get_action_issue
 
         try:
-            await get_action_issue("9" * 40, Response(), db=db_session)
+            get_action_issue("9" * 40, Response(), db=db_session)
             assert False, "expected HTTPException"
         except HTTPException as exc:
             assert exc.status_code == 404
@@ -484,7 +483,7 @@ class TestFirstSurfacedDate:
     displays today's date as if that's when it happened. `first_surfaced`
     (issue.created_at) is set once at insert and never touched again."""
 
-    async def test_first_surfaced_stays_fixed_while_date_advances(self, db_session):
+    def test_first_surfaced_stays_fixed_while_date_advances(self, db_session):
         from datetime import datetime
 
         from fastapi import Response
@@ -503,12 +502,12 @@ class TestFirstSurfacedDate:
         issue.date = "2026-08-20"
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["firstSurfaced"] == "2026-08-15"
         assert resp["date"] == "2026-08-20"
 
-    async def test_an_evening_issue_first_surfaces_on_its_eastern_day(self, db_session):
+    def test_an_evening_issue_first_surfaces_on_its_eastern_day(self, db_session):
         """Filed at 9:30 PM EDT on the 14th (01:30 UTC on the 15th) under the
         refresh's Eastern date: it read "2026-10-15 · updated 2026-10-14"
         (46 of 551 issues on 2026-10-15). Every surface showing the date
@@ -530,7 +529,7 @@ class TestFirstSurfacedDate:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
         assert resp["firstSurfaced"] == "2026-10-14" == resp["date"]
         assert [i["firstSurfaced"] for i in _get_active_issues("S000001", db_session)] == ["2026-10-14"]
         assert [i.first_surfaced for i in _issues_mentioning(db_session, "S.2403")] == ["2026-10-14"]
@@ -541,7 +540,7 @@ class TestTrendingFlag:
     spread, so it's only computed by the list endpoint — see
     ActionIssueSchema.is_trending's docstring."""
 
-    async def test_issue_with_no_recorded_views_is_not_trending(self, db_session):
+    def test_issue_with_no_recorded_views_is_not_trending(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
@@ -550,13 +549,13 @@ class TestTrendingFlag:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issues(
+        resp = get_action_issues(
             Response(), date=issue.date, db=db_session, db_visits=db_session,
         )
 
         assert resp["issues"][0]["isTrending"] is False
 
-    async def test_issue_clearing_the_traction_bar_is_flagged_trending(self, db_session):
+    def test_issue_clearing_the_traction_bar_is_flagged_trending(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
@@ -573,14 +572,14 @@ class TestTrendingFlag:
         db_session.add(IssueView(date=today, issue_public_id=to_public_id(quiet.id), count=1))
         db_session.commit()
 
-        resp = await get_action_issues(
+        resp = get_action_issues(
             Response(), date=today, db=db_session, db_visits=db_session,
         )
 
         by_title = {i["title"]: i["isTrending"] for i in resp["issues"]}
         assert by_title == {"Hot issue": True, "Quiet issue": False}
 
-    async def test_single_issue_endpoint_never_flags_trending(self, db_session):
+    def test_single_issue_endpoint_never_flags_trending(self, db_session):
         """get_action_issue has no peer issues to judge against — always
         False rather than a misleading answer computed from nothing."""
         from fastapi import Response
@@ -596,11 +595,11 @@ class TestTrendingFlag:
         db_session.add(IssueView(date=today, issue_public_id=to_public_id(issue.id), count=1000))
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["isTrending"] is False
 
-    async def test_visits_db_failure_degrades_to_no_trending_instead_of_500ing(self, db_session):
+    def test_visits_db_failure_degrades_to_no_trending_instead_of_500ing(self, db_session):
         """/action/issues is one of the most-hit routes on the site;
         get_visits_db has no error handling of its own (its docstring says
         it's built for low-stakes admin endpoints) — a locked or briefly
@@ -622,7 +621,7 @@ class TestTrendingFlag:
         broken_visits_db = MagicMock()
         broken_visits_db.query.side_effect = OperationalError("stmt", {}, Exception("database is locked"))
 
-        resp = await get_action_issues(
+        resp = get_action_issues(
             Response(), date=issue.date, db=db_session, db_visits=broken_visits_db,
         )
 
@@ -634,7 +633,7 @@ class TestNewFactsField:
     pipeline-level snapshot behavior is covered in test_action_center.py's
     TestApplyMatchedIssueUpdate; this pins the read side."""
 
-    async def test_never_updated_issue_has_no_new_facts(self, db_session):
+    def test_never_updated_issue_has_no_new_facts(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
@@ -646,11 +645,11 @@ class TestNewFactsField:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["newFacts"] == []
 
-    async def test_updated_issue_reports_the_stored_new_facts(self, db_session):
+    def test_updated_issue_reports_the_stored_new_facts(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
@@ -664,12 +663,12 @@ class TestNewFactsField:
         db_session.add(issue)
         db_session.commit()
 
-        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        resp = get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["newFacts"] == ["Brand new fact."]
         assert resp["facts"] == ["Old fact.", "Brand new fact."]
 
-    async def test_reading_issues_never_loads_the_embedding_model(self, db_session):
+    def test_reading_issues_never_loads_the_embedding_model(self, db_session):
         """A GET must never load a model (AGENTS.md "Read path must stay
         lightweight"). It did: the "new" diff ran the similarity model per
         issue on every /api/action/issues request. Now it is stored when
@@ -689,9 +688,9 @@ class TestNewFactsField:
 
         with patch("app.pipeline.vector_store.get_similarity_model",
                    side_effect=AssertionError("model loaded on a read")):
-            listed = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
-            recent = await get_recent_action_issues(Response(), limit=10, db=db_session)
-            single = await get_action_issue(to_public_id(issue_id), Response(), db=db_session)
+            listed = get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+            recent = get_recent_action_issues(Response(), limit=10, db=db_session)
+            single = get_action_issue(to_public_id(issue_id), Response(), db=db_session)
 
         by_title = {i["title"]: i["newFacts"] for i in listed["issues"]}
         assert by_title == {"Backfilled": ["New."], "Not yet backfilled": []}
@@ -709,17 +708,17 @@ class TestCacheHeaderMatchesNginx:
     a future change to one side without the other is at least a failing
     test, not a silent drift back to five minutes."""
 
-    async def test_issues_list_cache_header_is_short(self, db_session):
+    def test_issues_list_cache_header_is_short(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
 
         resp = Response()
-        await get_action_issues(resp, date=None, db=db_session, db_visits=db_session)
+        get_action_issues(resp, date=None, db=db_session, db_visits=db_session)
 
         assert resp.headers["Cache-Control"] == "public, max-age=30"
 
-    async def test_single_issue_cache_header_is_short(self, db_session):
+    def test_single_issue_cache_header_is_short(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
@@ -729,7 +728,7 @@ class TestCacheHeaderMatchesNginx:
         db_session.commit()
 
         resp = Response()
-        await get_action_issue(to_public_id(issue.id), resp, db=db_session)
+        get_action_issue(to_public_id(issue.id), resp, db=db_session)
 
         assert resp.headers["Cache-Control"] == "public, max-age=30"
 
@@ -756,7 +755,7 @@ class TestRecentActionIssues:
                 patch("app.pipeline.vector_store.get_embedding_model", side_effect=refuse):
             yield
 
-    async def test_leaves_out_rows_marked_duplicates(self, db_session):
+    def test_leaves_out_rows_marked_duplicates(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
@@ -770,11 +769,11 @@ class TestRecentActionIssues:
         db_session.add(_make_issue("2026-08-20", 1, "Something else", is_current=False))
         db_session.commit()
 
-        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        result = get_recent_action_issues(Response(), limit=10, db=db_session)
 
         assert [i["title"] for i in result["issues"]] == ["Beef import tariffs", "Something else"]
 
-    async def test_shows_one_issue_per_monitor(self, db_session):
+    def test_shows_one_issue_per_monitor(self, db_session):
         """Two developments of one monitored story (a statement, then a
         letter) are separate events, not duplicates, but the record lists the
         newer only; the monitor is linked by the issue or by an update that
@@ -794,12 +793,12 @@ class TestRecentActionIssues:
         ])
         db_session.commit()
 
-        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        result = get_recent_action_issues(Response(), limit=10, db=db_session)
         assert [i["title"] for i in result["issues"]] == [
             "Senators send letter on diesel deal", "Unrelated story", "Another unrelated story",
         ]
 
-    async def test_leaves_out_drafts_retired_unconfirmed(self, db_session):
+    def test_leaves_out_drafts_retired_unconfirmed(self, db_session):
         """A developing draft taken off the Action Center never had news
         coverage behind it: two month-old vote drafts led the record on
         2026-10-15. A retired confirmed story stays, and so does a live
@@ -814,17 +813,17 @@ class TestRecentActionIssues:
         ])
         db_session.commit()
 
-        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        result = get_recent_action_issues(Response(), limit=10, db=db_session)
         assert [i["title"] for i in result["issues"]] == ["Senate vote on H.R. 1: Passed, 60-40", "Retired confirmed story"]
         assert result["issues"][0]["isCurrent"] is True and result["issues"][1]["isCurrent"] is False
 
         # Its own page still opens, and says it is no longer current.
-        page = await get_action_issue(str(retired.id), Response(), db=db_session)
+        page = get_action_issue(str(retired.id), Response(), db=db_session)
         assert page["status"] == "developing" and page["isCurrent"] is False and page["coveredBy"] is None
         assert page["retiredReason"] == "unconfirmed"
         assert result["issues"][0]["retiredReason"] is None
 
-    async def test_ordered_by_date_then_rank_newest_first(self, db_session):
+    def test_ordered_by_date_then_rank_newest_first(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
@@ -837,13 +836,13 @@ class TestRecentActionIssues:
         db_session.commit()
 
         resp = Response()
-        result = await get_recent_action_issues(resp, limit=10, db=db_session)
+        result = get_recent_action_issues(resp, limit=10, db=db_session)
 
         assert [i["title"] for i in result["issues"]] == [
             "Newer day, rank 1", "Newer day, rank 2", "Older day",
         ]
 
-    async def test_respects_the_limit(self, db_session):
+    def test_respects_the_limit(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
@@ -853,17 +852,17 @@ class TestRecentActionIssues:
         db_session.commit()
 
         resp = Response()
-        result = await get_recent_action_issues(resp, limit=2, db=db_session)
+        result = get_recent_action_issues(resp, limit=2, db=db_session)
 
         assert len(result["issues"]) == 2
 
-    async def test_cache_header_matches_the_rest_of_the_endpoint_family(self, db_session):
+    def test_cache_header_matches_the_rest_of_the_endpoint_family(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
 
         resp = Response()
-        await get_recent_action_issues(resp, limit=10, db=db_session)
+        get_recent_action_issues(resp, limit=10, db=db_session)
 
         assert resp.headers["Cache-Control"] == "public, max-age=30"
 
@@ -905,29 +904,29 @@ class TestElectionNightPager:
         db_session.add_all([confirmed, flip])
         db_session.commit()
 
-    async def test_the_landing_day_is_the_newest_day_the_pager_offers(self, db_session):
+    def test_the_landing_day_is_the_newest_day_the_pager_offers(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
 
         self._seed(db_session)
-        resp = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        resp = get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
         assert resp["date"] == "2026-11-03"
         assert resp["availableDates"][0] == "2026-11-03"
         assert {i["title"] for i in resp["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
 
-    async def test_asking_for_the_newest_day_by_date_shows_the_same_view(self, db_session):
+    def test_asking_for_the_newest_day_by_date_shows_the_same_view(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
 
         self._seed(db_session)
-        by_date = await get_action_issues(Response(), date="2026-11-03", db=db_session, db_visits=db_session)
+        by_date = get_action_issues(Response(), date="2026-11-03", db=db_session, db_visits=db_session)
         assert {i["title"] for i in by_date["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
 
 
 class TestPagerAroundAnOlderDay:
-    async def test_an_older_deep_link_pages_to_its_neighbours(self, db_session):
+    def test_an_older_deep_link_pages_to_its_neighbours(self, db_session):
         """The timeline's year-in-review links open a day older than the 14
         newest: the pager still lists it and the days either side."""
         from datetime import date, timedelta
@@ -941,7 +940,7 @@ class TestPagerAroundAnOlderDay:
             db_session.add(ActionIssue(date=d, rank=1, title=f"Issue {i}", is_current=(d == days[-1])))
         db_session.commit()
 
-        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        resp = get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
         dates = resp["availableDates"]
         assert resp["date"] == "2026-10-02"
         i = dates.index("2026-10-02")
@@ -950,7 +949,7 @@ class TestPagerAroundAnOlderDay:
 
 
 class TestEmptyDayPager:
-    async def test_a_day_with_no_issues_left_still_pages_to_its_neighbours(self, db_session):
+    def test_a_day_with_no_issues_left_still_pages_to_its_neighbours(self, db_session):
         """A re-matched issue is restamped to the day that matched it, so a
         day can end up with no rows; the timeline still links to it."""
         from fastapi import Response
@@ -960,19 +959,19 @@ class TestEmptyDayPager:
         db_session.add(ActionIssue(date="2026-10-01", rank=1, title="Old", is_current=False))
         db_session.add(ActionIssue(date="2026-10-03", rank=1, title="Moved on", is_current=True))
         db_session.commit()
-        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        resp = get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
         assert resp["issues"] == []
         # Its neighbours, not the empty day itself: the timeline offers
         # every listed day as one to open.
         assert resp["availableDates"] == ["2026-10-03", "2026-10-01"]
 
-    async def test_a_malformed_date_is_not_offered_as_a_day(self, db_session):
+    def test_a_malformed_date_is_not_offered_as_a_day(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issues
 
         for bad in ("not-a-day", "2026-1-2", "2026-02-30", "2026-09-26\n"):
-            resp = await get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
+            resp = get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
             assert resp == {"date": bad, "issues": [], "availableDates": [], "generatedAt": None, "checkedAt": None}, bad
 
 
@@ -981,7 +980,7 @@ class TestRecentFeedAndSeatFlips:
     story (their titles differ only by the district, their source is the
     state's results page); the homepage keeps each race's own."""
 
-    async def test_a_flip_is_never_hidden_behind_another_races_flip(self, db_session):
+    def test_a_flip_is_never_hidden_behind_another_races_flip(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
@@ -1001,11 +1000,11 @@ class TestRecentFeedAndSeatFlips:
         db_session.add(copy)
         db_session.commit()
 
-        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        titles = {i["title"] for i in (get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
         assert "Republican leads Georgia's 6th" in titles
         assert "Copy of the news story" not in titles
 
-    async def test_a_flip_still_gives_way_to_a_news_story_of_the_same_flip(self, db_session):
+    def test_a_flip_still_gives_way_to_a_news_story_of_the_same_flip(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
@@ -1018,7 +1017,7 @@ class TestRecentFeedAndSeatFlips:
                                    is_current=True, source_type="election_results", duplicate_of_id=news.id))
         db_session.commit()
 
-        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        titles = {i["title"] for i in (get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
         assert titles == {"Republican flips Georgia's 2nd"}
 
 
@@ -1062,7 +1061,7 @@ class TestIssuesListPagerFields:
     """The day pager and the "Updated" line read these off the list
     endpoint (2026-09 Action Center redesign)."""
 
-    async def test_an_empty_day_still_lists_the_days_to_page_back_to(self, db_session):
+    def test_an_empty_day_still_lists_the_days_to_page_back_to(self, db_session):
         # A reader who opens a day whose issues were cleaned up needs the
         # pager's way back, not a dead end.
         from fastapi import Response
@@ -1072,14 +1071,14 @@ class TestIssuesListPagerFields:
         db_session.add(ActionIssue(date="2026-09-28", rank=1, title="Kept", summary="s"))
         db_session.commit()
 
-        resp = await get_action_issues(
+        resp = get_action_issues(
             Response(), date="2026-06-01", db=db_session, db_visits=db_session,
         )
 
         assert resp["issues"] == []
         assert resp["availableDates"] == ["2026-09-28"]
 
-    async def test_generated_at_is_the_latest_run_that_wrote_issues(self, db_session):
+    def test_generated_at_is_the_latest_run_that_wrote_issues(self, db_session):
         # An aborted run (feeds down) still writes a metrics row; "Updated"
         # must not read as fresh over issues it didn't touch.
         import json
@@ -1103,14 +1102,14 @@ class TestIssuesListPagerFields:
         ])
         db_session.commit()
 
-        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
-        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
+        live = get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        past = get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
 
         assert live["generatedAt"] == "2026-09-29T13:15:00Z"
         assert past["generatedAt"] is None
         assert past["checkedAt"] is None
 
-    async def test_checked_at_is_the_latest_run_that_read_the_news(self, db_session):
+    def test_checked_at_is_the_latest_run_that_read_the_news(self, db_session):
         # 2026-10-15: hourly runs that found nothing to publish left the page
         # reading "Updated 4:17 AM" all afternoon. The last check is shown
         # as such; a run with the feeds down (no articles) is not a check.
@@ -1126,11 +1125,11 @@ class TestIssuesListPagerFields:
         ])
         db_session.commit()
 
-        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        live = get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
         assert live["checkedAt"] == "2026-09-29T15:17:00Z"
         assert live["generatedAt"] == "2026-09-29T04:17:00Z"
 
-    async def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
+    def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
         import json
         from datetime import datetime
 
@@ -1145,11 +1144,11 @@ class TestIssuesListPagerFields:
                                 cached_at=datetime(2026, 9, 29, 14, 15)))
         db_session.commit()
 
-        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        live = get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
         assert live["generatedAt"] is None
 
 
-async def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
+def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
     """The Archive offers a listed day to open; capped at the newest 14, an
     older day was openable only while Today showed a day beside it."""
     from datetime import date, timedelta
@@ -1163,7 +1162,7 @@ async def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
         db_session.add(ActionIssue(date=d, rank=1, title=f"t{d}", summary="s", is_current=True))
     db_session.commit()
     for shown in (None, days[10], days[0]):
-        resp = await get_action_issues(Response(), date=shown, db=db_session, db_visits=db_session)
+        resp = get_action_issues(Response(), date=shown, db=db_session, db_visits=db_session)
         assert resp["availableDates"] == sorted(days, reverse=True), shown
 
 
@@ -1198,12 +1197,12 @@ class TestRelatedMembersAreCurrent:
         data = _build_issue_response(self._issue(db_session), db_session)
         assert data["relatedSenators"][0]["overallScore"] == 62.45
 
-    async def test_recent_list_reads_it_too(self, db_session):
+    def test_recent_list_reads_it_too(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
         self._issue(db_session)
-        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        result = get_recent_action_issues(Response(), limit=10, db=db_session)
         assert result["issues"][0]["relatedSenators"][0]["overallScore"] == 62.45
 
     def test_a_member_no_longer_held_keeps_the_stored_entry(self, db_session):
@@ -1217,7 +1216,7 @@ class TestTimelineRepeatLeads:
     led. The writer applies that to new days only; rows from before it
     listed one story twice in a row (two pairs in 2026-10)."""
 
-    async def test_a_repeated_lead_is_listed_once_on_its_first_day(self, db_session):
+    def test_a_repeated_lead_is_listed_once_on_its_first_day(self, db_session):
         from datetime import datetime
 
         from fastapi import Response
@@ -1229,7 +1228,7 @@ class TestTimelineRepeatLeads:
             db_session.add(TimelineEntry(date=day, title=url, summary="s", policy_areas="[]", source_url=url))
         db_session.commit()
         with patch("app.api.action.utcnow", return_value=datetime(2026, 10, 9, 15)):
-            result = await get_timeline(Response(), year=2026, db=db_session)
+            result = get_timeline(Response(), year=2026, db=db_session)
         days = sorted(e["date"] for m in result["months"] for e in m["entries"])
         # The same source again after another day's lead is a new day's lead.
         assert days == ["2026-10-01", "2026-10-03", "2026-10-04"]
@@ -1259,7 +1258,7 @@ def test_ongoing_lists_monitors_closed_in_the_last_sixty_days(db_session, freeze
                                        updated_at=updated, last_article_date="2026-08-01"))
     db_session.commit()
 
-    body = asyncio.run(list_monitors(Response(), db_session))
+    body = list_monitors(Response(), db_session)
 
     assert [m["slug"] for m in body["monitors"]] == ["watching-one"]
     assert [(m["slug"], m["closedOn"]) for m in body["recentlyClosed"]] == [("closed-recently", "2026-09-01")]
@@ -1291,7 +1290,7 @@ def test_a_monitors_box_quotes_its_newest_update_only_with_the_outlet_it_is_from
     ])
     db_session.commit()
 
-    body = asyncio.run(list_monitors(Response(), db_session))
+    body = list_monitors(Response(), db_session)
     latest = {m["slug"]: m["latest"] for m in body["monitors"]}
 
     assert latest["quoted"] == {"date": "2026-10-09", "text": "The Senate voted 51-49 on the bill.",

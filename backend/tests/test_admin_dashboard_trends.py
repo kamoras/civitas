@@ -286,7 +286,7 @@ class TestLoadTimes:
 
 
 class TestPipelineTrend:
-    async def test_returns_runs_of_every_type_in_window_oldest_first(self, db_session):
+    def test_returns_runs_of_every_type_in_window_oldest_first(self, db_session):
         now = utcnow()
         db_session.add_all([
             PipelineRun(started_at=now - timedelta(days=1), status=PipelineStatus.COMPLETED,
@@ -297,7 +297,7 @@ class TestPipelineTrend:
         ])
         db_session.commit()
 
-        result = await admin_pipeline_trend(days=30, db=db_session)
+        result = admin_pipeline_trend(days=30, db=db_session)
 
         assert [(r["pipelineType"], r["status"]) for r in result["runs"]] == [
             ("house", "failed"),
@@ -305,7 +305,7 @@ class TestPipelineTrend:
         ]
         assert result["runs"][1]["elapsedSeconds"] == 3600
 
-    async def test_window_starts_at_midnight_utc_of_the_first_calendar_day(self, db_session):
+    def test_window_starts_at_midnight_utc_of_the_first_calendar_day(self, db_session):
         # days=2 covers yesterday and today by UTC date: a run late on the
         # day before yesterday is outside it even if it is < 48h old.
         today = datetime.now(UTC).replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
@@ -315,7 +315,7 @@ class TestPipelineTrend:
         ])
         db_session.commit()
 
-        runs = (await admin_pipeline_trend(days=2, db=db_session))["runs"]
+        runs = (admin_pipeline_trend(days=2, db=db_session))["runs"]
         assert [r["status"] for r in runs] == ["completed"]
 
 

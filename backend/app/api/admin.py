@@ -189,7 +189,7 @@ def _clear_stuck_runs(db: Session, model, is_running: Callable[[], bool], pipeli
 
 
 @router.post("/auth")
-async def admin_auth(authorization: str | None = Header(default=None)):
+def admin_auth(authorization: str | None = Header(default=None)):
     """Validate an admin token. Returns 200 on success, 401 on failure."""
     require_admin(authorization)
     return {"status": "authenticated"}
@@ -369,7 +369,7 @@ def _collect_vector_db_stats(db: Session) -> dict:
 
 
 @router.get("/system/stats", dependencies=[Depends(require_admin)])
-async def admin_system_stats():
+def admin_system_stats():
     """Lightweight endpoint for live system metrics polling."""
     return _read_system_stats()
 
@@ -736,7 +736,7 @@ _VACANCY_REASONS = {"deceased", "resigned", "expelled"}
 
 
 @router.post("/politicians/{politician_id}/vacancy", dependencies=[Depends(require_admin)])
-async def admin_set_vacancy(
+def admin_set_vacancy(
     politician_id: str,
     is_current: bool = Query(...),
     reason: str | None = Query(default=None),
@@ -1029,7 +1029,7 @@ async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/pipeline/status", dependencies=[Depends(require_admin)])
-async def admin_pipeline_status(db: Session = Depends(get_db)):
+def admin_pipeline_status(db: Session = Depends(get_db)):
     """Live pipeline status for polling during a run."""
     db.expire_all()
 
@@ -1220,7 +1220,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
 
 @router.get("/pipeline/history", dependencies=[Depends(require_admin)])
-async def admin_pipeline_history(
+def admin_pipeline_history(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
@@ -1333,7 +1333,7 @@ async def admin_pipeline_history(
 
 
 @router.get("/pipeline/trend", dependencies=[Depends(require_admin)])
-async def admin_pipeline_trend(
+def admin_pipeline_trend(
     days: int = Query(30, ge=1, le=366),
     db: Session = Depends(get_db),
 ):
@@ -1389,7 +1389,7 @@ PHASE_TIMING_KINDS = {
 
 
 @router.get("/pipeline/timings", dependencies=[Depends(require_admin)])
-async def admin_pipeline_timings(
+def admin_pipeline_timings(
     kind: str = Query(default="pipeline_runs"),
     runs: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -1755,7 +1755,7 @@ def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/clear-stuck-senate", dependencies=[Depends(require_admin)])
-async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
+def admin_clear_stuck_senate(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) Senate pipeline run as failed.
 
     For a row no live lease speaks for (run_tracker.senate_run_state):
@@ -1790,7 +1790,7 @@ async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])
-async def admin_clear_stuck_house(db: Session = Depends(get_db)):
+def admin_clear_stuck_house(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) house pipeline run as failed.
 
     Use when the in-memory flag says idle but the DB record still shows running
@@ -1801,7 +1801,7 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
-async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
+def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) stock-trades pipeline run as failed.
 
     Use when the in-memory flag says idle but the DB record still shows
@@ -1812,7 +1812,7 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/trigger-supplementary", dependencies=[Depends(require_admin)])
-async def admin_trigger_supplementary_pipeline():
+def admin_trigger_supplementary_pipeline():
     """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run.
 
     Refused while a pipeline chain is running, like the house trigger above;
@@ -1829,7 +1829,7 @@ async def admin_trigger_supplementary_pipeline():
 
 
 @router.post("/pipeline/clear-stuck-supplementary", dependencies=[Depends(require_admin)])
-async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
+def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) supplementary pipeline run as failed.
 
     Use when the in-memory flag says idle but the DB record still shows
@@ -1840,7 +1840,7 @@ async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/trigger-election", dependencies=[Depends(require_admin)])
-async def admin_trigger_election_pipeline():
+def admin_trigger_election_pipeline():
     """Trigger a midterm-elections pipeline run (candidate roster,
     financials, coverage ingestion, Bluesky posting).
 
@@ -1858,7 +1858,7 @@ async def admin_trigger_election_pipeline():
 
 
 @router.post("/pipeline/clear-stuck-election", dependencies=[Depends(require_admin)])
-async def admin_clear_stuck_election(db: Session = Depends(get_db)):
+def admin_clear_stuck_election(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) election pipeline run as failed.
 
     Use when the in-memory flag says idle but the DB record still shows
@@ -2137,7 +2137,7 @@ def admin_trend_posts(
 
 
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
-async def admin_action_metrics(
+def admin_action_metrics(
     limit: int = Query(48, ge=1, le=500),
     # Annotated, so a direct call (tests, other modules) gets a real None
     # rather than the Query() marker as its default.
@@ -2227,13 +2227,13 @@ async def admin_action_metrics(
 
 
 @router.get("/classification/health", dependencies=[Depends(require_admin)])
-async def admin_classification_health(db: Session = Depends(get_db)):
+def admin_classification_health(db: Session = Depends(get_db)):
     """Classification system health metrics for monitoring adaptive learning."""
     return get_health_metrics(db)
 
 
 @router.get("/score-calibration", dependencies=[Depends(require_admin)])
-async def get_score_calibration(entity_type: str = "senator"):
+def get_score_calibration(entity_type: str = "senator"):
     """Score distribution monitoring across consecutive pipeline runs.
 
     Compares distributions between the two most recent snapshot dates.

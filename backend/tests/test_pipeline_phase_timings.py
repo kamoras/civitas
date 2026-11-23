@@ -195,8 +195,7 @@ def test_internal_timing_errors_are_swallowed(monkeypatch, db_session):
     tracker.complete("fetch_a")  # must not raise
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_rolls_up_by_phase(db_session):
+def test_timings_endpoint_rolls_up_by_phase(db_session):
     from app.api.admin import admin_pipeline_timings
 
     now = utcnow()
@@ -217,7 +216,7 @@ async def test_timings_endpoint_rolls_up_by_phase(db_session):
         ))
     db_session.commit()
 
-    result = await admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
 
     assert result["pipelineType"] == "senate"
     entry = result["runs"][0]
@@ -237,8 +236,7 @@ async def test_timings_endpoint_rolls_up_by_phase(db_session):
     assert entry["steps"][0]["stepKey"] == "fetch_a"
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_reports_untimed_steps_separately(db_session):
+def test_timings_endpoint_reports_untimed_steps_separately(db_session):
     """A step with no duration must not be counted as 0 seconds — that
     would silently understate the run total and every phase percentage."""
     from app.api.admin import admin_pipeline_timings
@@ -257,14 +255,13 @@ async def test_timings_endpoint_reports_untimed_steps_separately(db_session):
     ))
     db_session.commit()
 
-    result = await admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
     entry = result["runs"][0]
     assert entry["totalSeconds"] == 30.0
     assert entry["untimedSteps"] == 1
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_builds_a_per_phase_trend_across_runs(db_session):
+def test_timings_endpoint_builds_a_per_phase_trend_across_runs(db_session):
     from app.api.admin import admin_pipeline_timings
 
     for secs in (100.0, 500.0):
@@ -277,28 +274,26 @@ async def test_timings_endpoint_builds_a_per_phase_trend_across_runs(db_session)
         ))
         db_session.commit()
 
-    result = await admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
     trend = [p["seconds"] for p in result["phaseTrend"]["fetch"]]
     # Most recent run first — a phase that grew reads as a descending series.
     assert trend == [500.0, 100.0]
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_rejects_an_unknown_kind(db_session):
+def test_timings_endpoint_rejects_an_unknown_kind(db_session):
     from fastapi import HTTPException
 
     from app.api.admin import admin_pipeline_timings
 
     with pytest.raises(HTTPException) as exc:
-        await admin_pipeline_timings(kind="not_a_pipeline", runs=10, db=db_session)
+        admin_pipeline_timings(kind="not_a_pipeline", runs=10, db=db_session)
     assert exc.value.status_code == 422
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_is_empty_before_any_run_records_timings(db_session):
+def test_timings_endpoint_is_empty_before_any_run_records_timings(db_session):
     from app.api.admin import admin_pipeline_timings
 
-    result = await admin_pipeline_timings(kind="house_pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="house_pipeline_runs", runs=10, db=db_session)
     assert result["runs"] == []
     assert result["phaseTrend"] == {}
 

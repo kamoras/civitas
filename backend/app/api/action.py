@@ -734,7 +734,7 @@ def _refresh_times(db: Session) -> tuple[str | None, str | None]:
 
 
 @router.get("/issues")
-async def get_action_issues(
+def get_action_issues(
     response: Response,
     date: str | None = Query(None, description="Date in YYYY-MM-DD format; defaults to most recent"),
     db: Session = Depends(get_db),
@@ -810,7 +810,7 @@ _RECENT_ISSUES_MAX_LIMIT = RECENT_FEED_MAX_LIMIT
 
 
 @router.get("/issues/recent")
-async def get_recent_action_issues(
+def get_recent_action_issues(
     response: Response,
     limit: int = Query(_RECENT_ISSUES_DEFAULT_LIMIT, ge=1, le=_RECENT_ISSUES_MAX_LIMIT),
     db: Session = Depends(get_db),
@@ -1048,7 +1048,7 @@ def get_issue_members(
 
 
 @router.get("/issues/{issue_id}")
-async def get_action_issue(issue_id: str, response: Response, db: Session = Depends(get_db)):
+def get_action_issue(issue_id: str, response: Response, db: Session = Depends(get_db)):
     """Return a single action issue by its public id (used for OG metadata /
     deep-link previews).
 
@@ -1155,7 +1155,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", dependencies=[Depends(require_admin)])
-async def refresh_action_center(db: Session = Depends(get_db)):
+def refresh_action_center(db: Session = Depends(get_db)):
     """Trigger an action center refresh (admin only). Runs in background."""
     from app.pipeline.analyze.action_center import refresh_action_issues
 
@@ -1258,7 +1258,7 @@ def _latest_updates(db: Session, monitors: list[NationalMonitor]) -> dict[int, d
 
 
 @router.get("/monitors")
-async def list_monitors(response: Response, db: Session = Depends(get_db)):
+def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors, and those closed
     in the last _RECENTLY_CLOSED_DAYS days."""
     # Monitor creation/status changes on the pipeline's hourly cadence, not
@@ -1293,7 +1293,7 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/monitors/{slug}")
-async def get_monitor(response: Response, slug: str, db: Session = Depends(get_db)):
+def get_monitor(response: Response, slug: str, db: Session = Depends(get_db)):
     """Get full detail for a national monitor including timeline."""
     # Same cadence as the monitors list above — a single monitor's
     # timeline only grows on the same hourly refresh.
@@ -1398,7 +1398,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
 
 
 @router.get("/timeline")
-async def get_timeline(
+def get_timeline(
     response: Response,
     # Bounded: the handler builds calendar dates from it, and date() refuses
     # a year outside 1-9999 with a 500 rather than a 422. The checks against

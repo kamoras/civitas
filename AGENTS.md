@@ -3202,6 +3202,15 @@ the pending list).
   - Batch related-entity lookups (collect IDs, query with `.in_()`, map back)
   - Wrap blocking I/O (`fetch_news_articles`, embedding model calls) with
     `await asyncio.to_thread()` to keep the event loop non-blocking
+  - **A route that awaits nothing is a plain `def`** (2026-11). FastAPI
+    runs an `async def` route on the worker's event loop, so its database
+    reads hold every other request on that worker behind it, the liveness
+    check (`/api/live`) included: three missed checks and Swarm replaces
+    the task. A plain `def` runs in the threadpool. Until 2026-11 the
+    Action Center's routes and most admin routes were `async def` with no
+    `await`. `tests/test_routes_off_the_event_loop.py` fails on a new one,
+    except the two it names with why (`/api/live` itself, and
+    `track_timing`, which puts onto the loop's `asyncio.Queue`)
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
   - **Two backend services in production, one image** (`settings.PROCESS_ROLE`,

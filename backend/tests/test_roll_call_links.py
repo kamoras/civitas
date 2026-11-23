@@ -203,7 +203,7 @@ def test_an_issue_serves_its_linked_votes_and_each_members_vote_on_them(db_sessi
     assert members.members[0].positions == {"house-119-2-170": "Aye"}
 
 
-async def test_a_monitor_serves_its_votes_on_the_record_oldest_first(db_session):
+def test_a_monitor_serves_its_votes_on_the_record_oldest_first(db_session):
     _vote(db_session, 244, "2026-09-24", "Iran resolution")
     _vote(db_session, 170, "2026-05-14", "Iran resolution", chamber="house", yeas=212, nays=212)
     monitor = NationalMonitor(slug="us-iran-conflict", title="U.S.-Iran Conflict")
@@ -218,7 +218,7 @@ async def test_a_monitor_serves_its_votes_on_the_record_oldest_first(db_session)
     ])
     db_session.commit()
 
-    body = await get_monitor(Response(), "us-iran-conflict", db=db_session)
+    body = get_monitor(Response(), "us-iran-conflict", db=db_session)
 
     assert [(v["chamber"], v["number"], v["margin"]) for v in body["onTheRecord"]] == [
         ("house", 170, 0), ("senate", 244, -1)]

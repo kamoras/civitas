@@ -606,7 +606,7 @@ async def get_explore_document_summary(
 
 
 @router.post("/pipeline/trigger")
-async def trigger_explore_pipeline(authorization: str | None = Header(default=None)):
+def trigger_explore_pipeline(authorization: str | None = Header(default=None)):
     """Trigger the explore document ingestion pipeline."""
     check_pipeline_token(authorization)
 

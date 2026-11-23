@@ -44,33 +44,30 @@ async def test_trigger_rejects_wrong_token_when_configured(monkeypatch, endpoint
     assert exc.value.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_presidents_trigger_accepts_correct_token(monkeypatch):
+def test_presidents_trigger_accepts_correct_token(monkeypatch):
     from app.api.presidents import trigger_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with patch("app.background.start_writer") as start:
-        result = await trigger_pipeline(authorization="Bearer real-token")
+        result = trigger_pipeline(authorization="Bearer real-token")
     assert result["status"] == "started"
     start.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_a_trigger_during_a_data_reset_is_refused_not_silently_dropped(monkeypatch):
+def test_a_trigger_during_a_data_reset_is_refused_not_silently_dropped(monkeypatch):
     from app.api.presidents import trigger_pipeline
     from app.background import WritesHeld, exclusive
 
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with exclusive("test-reset"):
         with pytest.raises(WritesHeld):  # answered 409 by main's handler
-            await trigger_pipeline(authorization="Bearer real-token")
+            trigger_pipeline(authorization="Bearer real-token")
 
 
-@pytest.mark.asyncio
-async def test_explore_trigger_accepts_correct_token(monkeypatch):
+def test_explore_trigger_accepts_correct_token(monkeypatch):
     from app.api.explore import trigger_explore_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with patch("app.api.pipeline_runner.start_writer") as start:
-        result = await trigger_explore_pipeline(authorization="Bearer real-token")
+        result = trigger_explore_pipeline(authorization="Bearer real-token")
     assert result["status"] == "started"
     start.assert_called_once()
 

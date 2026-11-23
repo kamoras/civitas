@@ -29,14 +29,13 @@ def _metrics_row(db, key: str, counts: dict, *, minutes_ago: int = 0):
     db.commit()
 
 
-@pytest.mark.asyncio
-async def test_returns_runs_newest_first(db_session):
+def test_returns_runs_newest_first(db_session):
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "run-2026-07-27-1000", {"articles_fetched": 40}, minutes_ago=120)
     _metrics_row(db_session, "run-2026-07-27-1100", {"articles_fetched": 55}, minutes_ago=60)
 
-    result = await admin_action_metrics(limit=48, db=db_session)
+    result = admin_action_metrics(limit=48, db=db_session)
 
     assert [r["run"] for r in result["runs"]] == [
         "run-2026-07-27-1100", "run-2026-07-27-1000",
@@ -44,8 +43,7 @@ async def test_returns_runs_newest_first(db_session):
     assert result["runsReturned"] == 2
 
 
-@pytest.mark.asyncio
-async def test_healthy_intake_with_no_output_reads_as_suppression(db_session):
+def test_healthy_intake_with_no_output_reads_as_suppression(db_session):
     # The shape the endpoint exists to make visible: articles arrived and
     # clustered, and every one of them was dropped by a gate.
     from app.api.admin import admin_action_metrics
@@ -58,7 +56,7 @@ async def test_healthy_intake_with_no_output_reads_as_suppression(db_session):
         "bsky_reposts_suppressed_no_new_information": 1,
     })
 
-    totals = (await admin_action_metrics(limit=48, db=db_session))["totals"]
+    totals = (admin_action_metrics(limit=48, db=db_session))["totals"]
 
     assert totals["intake"]["articles_fetched"] == 61
     assert totals["intake"]["clusters_considered"] == 4
@@ -67,8 +65,7 @@ async def test_healthy_intake_with_no_output_reads_as_suppression(db_session):
     assert totals["suppressed"]["issues_skipped_no_action_surface"] == 3
 
 
-@pytest.mark.asyncio
-async def test_quiet_intake_is_distinguishable_from_suppression(db_session):
+def test_quiet_intake_is_distinguishable_from_suppression(db_session):
     # The genuinely-slow-news-day shape: nothing came in, so nothing was
     # dropped either. Must not look like the case above.
     from app.api.admin import admin_action_metrics
@@ -80,32 +77,30 @@ async def test_quiet_intake_is_distinguishable_from_suppression(db_session):
         "issues_matched_existing": 1,
     })
 
-    totals = (await admin_action_metrics(limit=48, db=db_session))["totals"]
+    totals = (admin_action_metrics(limit=48, db=db_session))["totals"]
 
     assert totals["suppressedTotal"] == 0
     assert totals["output"]["issues_matched_existing"] == 1
 
 
-@pytest.mark.asyncio
-async def test_aborted_run_is_recorded_not_absent(db_session):
+def test_aborted_run_is_recorded_not_absent(db_session):
     # A refresh that fetched nothing used to return before persisting, so
     # a broken feed and a healthy quiet hour both left no row at all.
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "run-c", {"refresh_aborted_no_articles": 1})
 
-    result = await admin_action_metrics(limit=48, db=db_session)
+    result = admin_action_metrics(limit=48, db=db_session)
 
     assert result["runs"][0]["counts"]["refresh_aborted_no_articles"] == 1
 
 
-@pytest.mark.asyncio
-async def test_zero_and_absent_counters_are_omitted_from_totals(db_session):
+def test_zero_and_absent_counters_are_omitted_from_totals(db_session):
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "run-d", {"articles_fetched": 5, "issues_new_topic": 0})
 
-    totals = (await admin_action_metrics(limit=48, db=db_session))["totals"]
+    totals = (admin_action_metrics(limit=48, db=db_session))["totals"]
 
     assert "issues_new_topic" not in totals["output"]  # 0 is noise, not signal
     assert totals["intake"]["articles_fetched"] == 5
@@ -120,8 +115,7 @@ async def test_zero_and_absent_counters_are_omitted_from_totals(db_session):
     pytest.param(json.dumps(["not", "an", "object"]), id="payload_not_an_object"),
     pytest.param(json.dumps({}), id="no_counts_key"),
 ])
-@pytest.mark.asyncio
-async def test_an_unusable_row_is_skipped_not_fatal(db_session, data_json):
+def test_an_unusable_row_is_skipped_not_fatal(db_session, data_json):
     # A diagnostic endpoint that 500s on one bad row fails exactly when
     # someone is reaching for it.
     from app.api.admin import admin_action_metrics
@@ -132,14 +126,13 @@ async def test_an_unusable_row_is_skipped_not_fatal(db_session, data_json):
     db_session.commit()
     _metrics_row(db_session, "run-ok", {"articles_fetched": 3}, minutes_ago=10)
 
-    result = await admin_action_metrics(limit=48, db=db_session)
+    result = admin_action_metrics(limit=48, db=db_session)
 
     assert result["runsReturned"] == 1
     assert result["totals"]["intake"]["articles_fetched"] == 3
 
 
-@pytest.mark.asyncio
-async def test_non_integer_counter_values_are_dropped(db_session):
+def test_non_integer_counter_values_are_dropped(db_session):
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "run-mixed", {
@@ -148,14 +141,13 @@ async def test_non_integer_counter_values_are_dropped(db_session):
         "issues_new_topic": True,       # bool is an int subclass; not a count
     })
 
-    result = await admin_action_metrics(limit=48, db=db_session)
+    result = admin_action_metrics(limit=48, db=db_session)
 
     assert result["totals"]["intake"] == {"articles_fetched": 4}
     assert result["totals"]["output"] == {}
 
 
-@pytest.mark.asyncio
-async def test_ungrouped_counters_surface_in_other(db_session):
+def test_ungrouped_counters_surface_in_other(db_session):
     # The endpoint must not be able to hide a gate. Counters that predate
     # the grouping (facts_dropped_*), and any a future gate adds without
     # updating the tuples above, have to remain visible in totals — an
@@ -169,7 +161,7 @@ async def test_ungrouped_counters_surface_in_other(db_session):
         "some_gate_invented_next_year": 5,
     })
 
-    totals = (await admin_action_metrics(limit=48, db=db_session))["totals"]
+    totals = (admin_action_metrics(limit=48, db=db_session))["totals"]
 
     assert totals["other"] == {
         "facts_dropped_ungrounded_number": 2,
@@ -180,8 +172,7 @@ async def test_ungrouped_counters_surface_in_other(db_session):
     assert "articles_fetched" not in totals["other"]
 
 
-@pytest.mark.asyncio
-async def test_other_api_cache_tiers_are_not_included(db_session):
+def test_other_api_cache_tiers_are_not_included(db_session):
     from app.api.admin import admin_action_metrics
 
     db_session.add(ApiCache(
@@ -191,26 +182,24 @@ async def test_other_api_cache_tiers_are_not_included(db_session):
     ))
     db_session.commit()
 
-    result = await admin_action_metrics(limit=48, db=db_session)
+    result = admin_action_metrics(limit=48, db=db_session)
 
     assert result["runsReturned"] == 0
 
 
-@pytest.mark.asyncio
-async def test_limit_caps_the_window(db_session):
+def test_limit_caps_the_window(db_session):
     from app.api.admin import admin_action_metrics
 
     for i in range(5):
         _metrics_row(db_session, f"run-{i}", {"articles_fetched": 1}, minutes_ago=i)
 
-    result = await admin_action_metrics(limit=2, db=db_session)
+    result = admin_action_metrics(limit=2, db=db_session)
 
     assert result["runsReturned"] == 2
     assert result["totals"]["intake"]["articles_fetched"] == 2
 
 
-@pytest.mark.asyncio
-async def test_each_run_carries_published_and_suppressed_rollups(db_session):
+def test_each_run_carries_published_and_suppressed_rollups(db_session):
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "run-a", {
@@ -222,20 +211,19 @@ async def test_each_run_carries_published_and_suppressed_rollups(db_session):
         "issues_skipped_grounding": 1,
     })
 
-    run = (await admin_action_metrics(limit=48, db=db_session))["runs"][0]
+    run = (admin_action_metrics(limit=48, db=db_session))["runs"][0]
 
     assert run["issuesPublished"] == 3  # Bluesky posts are not issues
     assert run["suppressed"] == 4
 
 
-@pytest.mark.asyncio
-async def test_since_hours_bounds_the_window_by_time(db_session):
+def test_since_hours_bounds_the_window_by_time(db_session):
     from app.api.admin import admin_action_metrics
 
     _metrics_row(db_session, "recent", {"issues_skipped_grounding": 1}, minutes_ago=30)
     _metrics_row(db_session, "old", {"issues_skipped_grounding": 5}, minutes_ago=60 * 30)
 
-    result = await admin_action_metrics(limit=500, since_hours=24, db=db_session)
+    result = admin_action_metrics(limit=500, since_hours=24, db=db_session)
 
     assert [r["run"] for r in result["runs"]] == ["recent"]
     assert result["totals"]["suppressedTotal"] == 1
