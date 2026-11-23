@@ -79,9 +79,14 @@ export default async function HomeTasks() {
         <section aria-labelledby="task-congress" className={CELL}>
           <h2 id="task-congress" className={TYPE.kicker}>
             <span className={KICKER}>Congress this week · </span>
-            <span className={TASK}>{data?.congress ? congressLine(data.congress) : "This week in Congress"}</span>
+            <span className={TASK}>
+              {data?.congress ? congressLine(data.congress) : "This week in Congress"}
+            </span>
           </h2>
-          <Link href="/congress" className={`inline-flex min-h-11 w-fit items-center ${INLINE_LINK}`}>
+          <Link
+            href="/congress"
+            className={`inline-flex min-h-11 w-fit items-center ${INLINE_LINK}`}
+          >
             The week&apos;s record &rarr;
           </Link>
         </section>
