@@ -1,18 +1,23 @@
-"""Explore-document ingestion + SCOTUS justice scoring + president scoring.
+"""The Supplementary run: Explore documents, the justices' records (not
+scored since justice v3), committee and leadership data, the district PVI
+tables, president scoring, and votes with the president's stated positions.
 
-Extracted from senate_pipeline.py (2026-07): these three had no data
-dependency on Senate's own fetch/analyze work, they were just sequenced
-as extra phases inside run_senate_pipeline() because that was the
-pipeline that already existed. Genuinely independent domains — own
-top-level function, own tracking row — matching how House and Stock
-Trades are already orchestrated, rather than living inside "the Senate
-pipeline" where they don't belong.
+Extracted from senate_pipeline.py (2026-07): Explore, the justices and
+the presidents had no data dependency on Senate's own fetch/analyze
+work, they were just sequenced as extra phases inside
+run_senate_pipeline() because that was the pipeline that already
+existed. Genuinely independent domains — own top-level function, own
+tracking row — matching how House and Stock Trades are already
+orchestrated, rather than living inside "the Senate pipeline" where they
+don't belong.
 """
 
 import asyncio
 import logging
 import time
 from datetime import timedelta
+
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.error_utils import record_exception
@@ -30,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 SUPPLEMENTARY_PIPELINE_STEPS = [
     ("explore_documents",   "explore",   "Ingest explore documents"),
-    ("justice_scorecards",  "justices",  "Score SCOTUS justices"),
+    ("justice_scorecards",  "justices",  "Refresh SCOTUS justices' records"),
     ("committee_leadership", "committee_leadership", "Refresh committee/leadership data"),
     ("district_pvi",        "district_pvi", "Refresh district PVI"),
     ("president_scorecards", "presidents", "Score presidents"),
@@ -56,8 +61,8 @@ def supplementary_pipeline_hung(quiet_after: "timedelta | None" = None) -> bool:
 
 
 async def run_supplementary_pipeline() -> dict:
-    """Ingest explore documents, refresh SCOTUS justice scorecards
-    (weekly cadence), and update president scorecards."""
+    """Each of the run's steps in turn, each best-effort: a step that fails
+    is recorded and the run goes on (SUPPLEMENTARY_PIPELINE_STEPS)."""
     db = SessionLocal()
     _run_token = None  # no run of ours for the finally to stop until start() below
 
@@ -79,234 +84,12 @@ async def run_supplementary_pipeline() -> dict:
 
     try:
         logger.info("=== SUPPLEMENTARY PIPELINE START ===")
-
-        # ── EXPLORE DOCUMENTS ──
-        run.current_phase = "explore"
-        db.commit()
-        logger.info("--- Supplementary: EXPLORE DOCUMENTS ---")
-        progress.begin("explore_documents")
-        try:
-            async with lease.job_async(lease.EXPLORE, who="Supplementary pipeline's explore step") as held:
-                if not held:
-                    progress.skip("explore_documents", detail=f"skipped: {held.why}")
-                else:
-                    from app.pipeline.explore_pipeline import run_explore_pipeline
-                    explore_result = await run_explore_pipeline()
-                    # Count NEW documents per source — the old sum over all int
-                    # values picked up total_embedded (historically the whole
-                    # corpus), reporting "N ingested" when nothing new arrived.
-                    total_docs = sum(
-                        (explore_result.get("new_documents") or {}).values()
-                    )
-                    run.explore_docs_ingested = total_docs
-                    logger.info("Explore pipeline ingested %d documents", total_docs)
-                    progress.complete("explore_documents", detail=f"{total_docs} ingested")
-        except Exception:
-            # Discard any partial writes this phase staged on the shared
-            # session before the next phase's commit persists them (the
-            # justice/president sub-pipelines run on this same `db` and only
-            # commit at their end, so a mid-phase failure otherwise leaves
-            # half-written rows that the phase-boundary commit below flushes).
-            db.rollback()
-            logger.exception("Explore pipeline failed — continuing")
-            progress.fail("explore_documents")
-
-        # ── SCOTUS JUSTICES ──
-        run.current_phase = "justices"
-        db.commit()
-        logger.info("--- Supplementary: SCOTUS JUSTICES ---")
-        progress.begin("justice_scorecards")
-        # SCOTUS data changes a few times per term, but the Oyez fetch is
-        # uncached per-case crawling (5h+ in run 69). Refresh weekly
-        # (Sunday UTC), or whenever the justices table is empty or a sitting
-        # justice's appointer estimate has never been measured (a new
-        # install, a source that was down: the fields stay unset until a run
-        # reads them; or a justice measured only before justice v3, whose
-        # own estimate was never stored).
-        justices_missing = db.query(Justice.id).first() is None
-        unmeasured = db.query(Justice.id).filter(
-            Justice.is_active.is_(True),
-            Justice.loyalty_through_term.is_(None)
-            | (Justice.appointer_effect.is_(None) & Justice.loyalty_votes_in.is_not(None)),
-        ).first() is not None
-        # Nor any Supreme Court appointment stored yet (the presidents'
-        # pages read them): the night after the table is added, not Sunday.
-        appointments_missing = db.query(JusticeAppointment.id).first() is None
-        run_justices = justices_missing or unmeasured or appointments_missing or utcnow().weekday() == 6
-        if not run_justices:
-            # A confirmation or a departure is picked up the night Oyez
-            # lists it, not on the next weekly day (one request).
-            try:
-                run_justices = await court_roster_changed(db)
-            except Exception:
-                logger.warning("Court roster check failed — weekly cadence stands", exc_info=True)
-            if run_justices:
-                logger.info("The Court's sitting justices changed: refreshing off the weekly cadence")
-        if not run_justices:
-            logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
-            run.justices_skipped = True
-            progress.skip("justice_scorecards", detail="weekly cadence")
-        else:
-            try:
-                async with lease.job_async(lease.JUSTICE_PIPELINE, who="Supplementary pipeline's justice step") as held:
-                    if not held:
-                        progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
-                    else:
-                        justice_result = await run_justice_pipeline(db)
-                        run.justices_scored = justice_result.get("justices", 0)
-                        logger.info("Justice pipeline refreshed %d justices", run.justices_scored)
-                        # The voting record can refresh while the appointer
-                        # estimate can't be measured. A bare "9 scored" hid the SCDB 403
-                        # that left every justice unscored on 2026-09-29, and
-                        # the logs naming the source rotated away within the
-                        # day, so the alert carries the reason.
-                        detail = f"{run.justices_scored} refreshed"
-                        if why := justice_result.get("loyalty_unmeasured"):
-                            detail += f", appointer estimate not measured: {why}"
-                            send_ops_alert(
-                                "Justice appointer estimate not measured",
-                                f"The justice step refreshed the voting record but not the appointer estimate: {why}. "
-                                "The stored estimates stand until a later run can read it.",
-                                dedupe_key=f"justice-loyalty-unmeasured-{utcnow():%Y-%m-%d}",
-                                condition="justice-loyalty-unmeasured",
-                            )
-                        else:
-                            resolve_ops_alert("justice-loyalty-unmeasured")
-                        if justice_result.get("positions_unread"):
-                            detail += ", Martin-Quinn positions not read"
-                            send_ops_alert(
-                                "Martin-Quinn positions not read",
-                                "The justice step could not read any Martin-Quinn file (mqscores.wustl.edu); "
-                                "the stored positions stand until a later run can read it.",
-                                dedupe_key=f"justice-positions-unread-{utcnow():%Y-%m-%d}",
-                                condition="justice-positions-unread",
-                            )
-                        else:
-                            resolve_ops_alert("justice-positions-unread")
-                        progress.complete("justice_scorecards", detail=detail)
-            except Exception:
-                db.rollback()  # drop partial justice upserts before the next commit
-                logger.exception("Justice pipeline failed — continuing")
-                progress.fail("justice_scorecards")
-
-        # ── COMMITTEE MEMBERSHIP / CHAMBER LEADERSHIP ──
-        run.current_phase = "committee_leadership"
-        db.commit()
-        logger.info("--- Supplementary: COMMITTEE/LEADERSHIP ---")
-        progress.begin("committee_leadership")
-        # Same weekly-or-empty cadence as justices above: leadership titles
-        # and committee rosters change slowly, and the source (three raw
-        # GitHub-hosted YAML files) needs no more frequent a pull than that.
-        # "Missing" here means the persistent volume has never had a
-        # successful ingest — the bundled app/data/*.json fallback loads
-        # fine in the meantime, but should be refreshed immediately rather
-        # than waiting up to a week for the first real data.
-        from app.pipeline.transform.committee_data import (
-            leadership_tenures_on_volume,
-            load_leadership_roles,
-        )
-        leadership_missing = not load_leadership_roles() or not leadership_tenures_on_volume()
-        run_committee_leadership = leadership_missing or utcnow().weekday() == 6
-        if not run_committee_leadership:
-            logger.info("Committee/leadership refresh skipped (weekly cadence; next on Sunday UTC)")
-            run.committee_leadership_skipped = True
-            progress.skip("committee_leadership", detail="weekly cadence")
-        else:
-            try:
-                from app.pipeline.fetch.committee_leadership import (
-                    refresh_committee_leadership_data,
-                )
-                run.committee_leadership_refreshed = await refresh_committee_leadership_data()
-                progress.complete(
-                    "committee_leadership",
-                    detail="refreshed" if run.committee_leadership_refreshed else "kept previous data",
-                )
-            except Exception:
-                logger.exception("Committee/leadership refresh failed — continuing")
-                progress.fail("committee_leadership")
-
-        # ── DISTRICT PVI ──
-        run.current_phase = "district_pvi"
-        db.commit()
-        logger.info("--- Supplementary: DISTRICT PVI ---")
-        progress.begin("district_pvi")
-        # Same weekly-or-missing cadence as the phases above. Re-fetches the
-        # per-Congress PINNED revisions (app/data/district_pvi_sources.json
-        # and the pins adopted by rule; idempotent — a pin can't drift) and
-        # adopts a newer revision of the article that meets the rule
-        # (district_pvi.adopt_new_pins: stood 14 days, every gate, the
-        # redrawn states the maps list, the computed lean). The
-        # sitting-Congress switch, and fetching a pin that changed,
-        # happen before each House run scores
-        # (fetch/district_pvi.run_house_on_sitting_lines). Writes nothing
-        # while a House run holds the lines (the DISTRICT_LINES lease).
-        from app.pipeline.analyze.score_calculator import _district_pvi
-        district_pvi_missing = not _district_pvi()
-        run_district_pvi = district_pvi_missing or utcnow().weekday() == 6
-        if not run_district_pvi:
-            logger.info("District PVI refresh skipped (weekly cadence; next on Sunday UTC)")
-            run.district_pvi_skipped = True
-            progress.skip("district_pvi", detail="weekly cadence")
-        else:
-            try:
-                from app.pipeline.fetch.district_pvi import refresh_district_pvi
-                run.district_pvi_refreshed = await refresh_district_pvi()
-                progress.complete(
-                    "district_pvi",
-                    detail="refreshed" if run.district_pvi_refreshed else "kept previous data",
-                )
-            except Exception:
-                logger.exception("District PVI refresh failed — continuing")
-                progress.fail("district_pvi")
-
-        # ── PRESIDENTS ──
-        run.current_phase = "presidents"
-        db.commit()
-        logger.info("--- Supplementary: PRESIDENTS ---")
-        progress.begin("president_scorecards")
-        try:
-            async with lease.job_async(lease.PRESIDENT_PIPELINE, who="Supplementary pipeline's president step") as held:
-                if not held:
-                    progress.skip("president_scorecards", detail=f"skipped: {held.why}")
-                else:
-                    from app.pipeline.president_pipeline import run_president_pipeline
-                    president_result = await run_president_pipeline(db)
-                    run.presidents_updated = president_result.get("updated", 0)
-                    logger.info("President pipeline updated %d presidents", run.presidents_updated)
-                    progress.complete("president_scorecards", detail=f"{run.presidents_updated} updated")
-        except Exception:
-            db.rollback()  # drop partial president updates before the next commit
-            logger.exception("President pipeline failed — continuing")
-            progress.fail("president_scorecards")
-
-        # ── VOTES WITH THE PRESIDENT'S STATED POSITIONS ──
-        # Informational (no score reads it): OMB's Statements of
-        # Administration Policy matched to the chambers' final votes
-        # (analyze/presidential_support.py). Nightly: the roll calls it
-        # reads are synced half-hourly, and only new statements are fetched.
-        run.current_phase = "presidential_support"
-        db.commit()
-        logger.info("--- Supplementary: PRESIDENTIAL SUPPORT ---")
-        progress.begin("presidential_support")
-        try:
-            # Time-boxed, so a slow source can't hold the run (and the chain
-            # behind it); the reading step keeps its own smaller budget.
-            async with make_async_client() as client:
-                support = await asyncio.wait_for(
-                    run_presidential_support(client, db), timeout=PRESIDENTIAL_SUPPORT_TIMEOUT_S,
-                )
-            detail = (
-                f"{support['statements']['read']} statements read ({support['statements']['status']}); "
-                f"{support['senate']['rollCalls']} Senate and {support['house']['rollCalls']} House roll calls counted"
-            )
-            if support["statements"]["status"] == "index unavailable":
-                progress.fail("presidential_support", detail=detail)
-            else:
-                progress.complete("presidential_support", detail=detail)
-        except Exception:
-            db.rollback()
-            logger.exception("Presidential support step failed — continuing")
-            progress.fail("presidential_support")
+        await _explore_step(db, run, progress)
+        await _justice_step(db, run, progress)
+        await _committee_leadership_step(db, run, progress)
+        await _district_pvi_step(db, run, progress)
+        await _president_step(db, run, progress)
+        await _presidential_support_step(db, run, progress)
 
         run.current_phase = "finalize"
         run.status = PipelineStatus.COMPLETED
@@ -342,3 +125,249 @@ async def run_supplementary_pipeline() -> dict:
     finally:
         _tracker.stop(_run_token)
         db.close()
+
+
+async def _explore_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Ingest the new Explore documents (explore_pipeline), under the EXPLORE
+    lease."""
+    run.current_phase = "explore"
+    db.commit()
+    logger.info("--- Supplementary: EXPLORE DOCUMENTS ---")
+    progress.begin("explore_documents")
+    try:
+        async with lease.job_async(lease.EXPLORE, who="Supplementary pipeline's explore step") as held:
+            if not held:
+                progress.skip("explore_documents", detail=f"skipped: {held.why}")
+            else:
+                from app.pipeline.explore_pipeline import run_explore_pipeline
+                explore_result = await run_explore_pipeline()
+                # Count NEW documents per source — the old sum over all int
+                # values picked up total_embedded (historically the whole
+                # corpus), reporting "N ingested" when nothing new arrived.
+                total_docs = sum(
+                    (explore_result.get("new_documents") or {}).values()
+                )
+                run.explore_docs_ingested = total_docs
+                logger.info("Explore pipeline ingested %d documents", total_docs)
+                progress.complete("explore_documents", detail=f"{total_docs} ingested")
+    except Exception:
+        # Discard any partial writes this phase staged on the shared
+        # session before the next phase's commit persists them (the
+        # justice/president sub-pipelines run on this same `db` and only
+        # commit at their end, so a mid-phase failure otherwise leaves
+        # half-written rows that the phase-boundary commit below flushes).
+        db.rollback()
+        logger.exception("Explore pipeline failed — continuing")
+        progress.fail("explore_documents")
+
+
+async def _justice_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Refresh the justices' records: weekly, or whenever a justice, an
+    appointment or an appointer estimate is missing, or the Court's sitting
+    justices changed."""
+    run.current_phase = "justices"
+    db.commit()
+    logger.info("--- Supplementary: SCOTUS JUSTICES ---")
+    progress.begin("justice_scorecards")
+    # SCOTUS data changes a few times per term, but the Oyez fetch is
+    # uncached per-case crawling (5h+ in run 69). Refresh weekly
+    # (Sunday UTC), or whenever the justices table is empty or a sitting
+    # justice's appointer estimate has never been measured (a new
+    # install, a source that was down: the fields stay unset until a run
+    # reads them; or a justice measured only before justice v3, whose
+    # own estimate was never stored).
+    justices_missing = db.query(Justice.id).first() is None
+    unmeasured = db.query(Justice.id).filter(
+        Justice.is_active.is_(True),
+        Justice.loyalty_through_term.is_(None)
+        | (Justice.appointer_effect.is_(None) & Justice.loyalty_votes_in.is_not(None)),
+    ).first() is not None
+    # Nor any Supreme Court appointment stored yet (the presidents'
+    # pages read them): the night after the table is added, not Sunday.
+    appointments_missing = db.query(JusticeAppointment.id).first() is None
+    run_justices = justices_missing or unmeasured or appointments_missing or utcnow().weekday() == 6
+    if not run_justices:
+        # A confirmation or a departure is picked up the night Oyez
+        # lists it, not on the next weekly day (one request).
+        try:
+            run_justices = await court_roster_changed(db)
+        except Exception:
+            logger.warning("Court roster check failed — weekly cadence stands", exc_info=True)
+        if run_justices:
+            logger.info("The Court's sitting justices changed: refreshing off the weekly cadence")
+    if not run_justices:
+        logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
+        run.justices_skipped = True
+        progress.skip("justice_scorecards", detail="weekly cadence")
+    else:
+        try:
+            async with lease.job_async(lease.JUSTICE_PIPELINE, who="Supplementary pipeline's justice step") as held:
+                if not held:
+                    progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
+                else:
+                    justice_result = await run_justice_pipeline(db)
+                    run.justices_scored = justice_result.get("justices", 0)
+                    logger.info("Justice pipeline refreshed %d justices", run.justices_scored)
+                    # The voting record can refresh while the appointer
+                    # estimate can't be measured. A bare "9 scored" hid the SCDB 403
+                    # that left every justice unscored on 2026-09-29, and
+                    # the logs naming the source rotated away within the
+                    # day, so the alert carries the reason.
+                    detail = f"{run.justices_scored} refreshed"
+                    if why := justice_result.get("loyalty_unmeasured"):
+                        detail += f", appointer estimate not measured: {why}"
+                        send_ops_alert(
+                            "Justice appointer estimate not measured",
+                            f"The justice step refreshed the voting record but not the appointer estimate: {why}. "
+                            "The stored estimates stand until a later run can read it.",
+                            dedupe_key=f"justice-loyalty-unmeasured-{utcnow():%Y-%m-%d}",
+                            condition="justice-loyalty-unmeasured",
+                        )
+                    else:
+                        resolve_ops_alert("justice-loyalty-unmeasured")
+                    if justice_result.get("positions_unread"):
+                        detail += ", Martin-Quinn positions not read"
+                        send_ops_alert(
+                            "Martin-Quinn positions not read",
+                            "The justice step could not read any Martin-Quinn file (mqscores.wustl.edu); "
+                            "the stored positions stand until a later run can read it.",
+                            dedupe_key=f"justice-positions-unread-{utcnow():%Y-%m-%d}",
+                            condition="justice-positions-unread",
+                        )
+                    else:
+                        resolve_ops_alert("justice-positions-unread")
+                    progress.complete("justice_scorecards", detail=detail)
+        except Exception:
+            db.rollback()  # drop partial justice upserts before the next commit
+            logger.exception("Justice pipeline failed — continuing")
+            progress.fail("justice_scorecards")
+
+
+async def _committee_leadership_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Refresh committee rosters and leadership titles: weekly, or while none
+    are on the data volume."""
+    run.current_phase = "committee_leadership"
+    db.commit()
+    logger.info("--- Supplementary: COMMITTEE/LEADERSHIP ---")
+    progress.begin("committee_leadership")
+    # Same weekly-or-empty cadence as justices above: leadership titles
+    # and committee rosters change slowly, and the source (three raw
+    # GitHub-hosted YAML files) needs no more frequent a pull than that.
+    # "Missing" here means the persistent volume has never had a
+    # successful ingest — the bundled app/data/*.json fallback loads
+    # fine in the meantime, but should be refreshed immediately rather
+    # than waiting up to a week for the first real data.
+    from app.pipeline.transform.committee_data import (
+        leadership_tenures_on_volume,
+        load_leadership_roles,
+    )
+    leadership_missing = not load_leadership_roles() or not leadership_tenures_on_volume()
+    run_committee_leadership = leadership_missing or utcnow().weekday() == 6
+    if not run_committee_leadership:
+        logger.info("Committee/leadership refresh skipped (weekly cadence; next on Sunday UTC)")
+        run.committee_leadership_skipped = True
+        progress.skip("committee_leadership", detail="weekly cadence")
+    else:
+        try:
+            from app.pipeline.fetch.committee_leadership import (
+                refresh_committee_leadership_data,
+            )
+            run.committee_leadership_refreshed = await refresh_committee_leadership_data()
+            progress.complete(
+                "committee_leadership",
+                detail="refreshed" if run.committee_leadership_refreshed else "kept previous data",
+            )
+        except Exception:
+            logger.exception("Committee/leadership refresh failed — continuing")
+            progress.fail("committee_leadership")
+
+
+async def _district_pvi_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Refresh the pinned district PVI tables and adopt new pins by rule:
+    weekly, or while none is on file."""
+    run.current_phase = "district_pvi"
+    db.commit()
+    logger.info("--- Supplementary: DISTRICT PVI ---")
+    progress.begin("district_pvi")
+    # Same weekly-or-missing cadence as the phases above. Re-fetches the
+    # per-Congress PINNED revisions (app/data/district_pvi_sources.json
+    # and the pins adopted by rule; idempotent — a pin can't drift) and
+    # adopts a newer revision of the article that meets the rule
+    # (district_pvi.adopt_new_pins: stood 14 days, every gate, the
+    # redrawn states the maps list, the computed lean). The
+    # sitting-Congress switch, and fetching a pin that changed,
+    # happen before each House run scores
+    # (fetch/district_pvi.run_house_on_sitting_lines). Writes nothing
+    # while a House run holds the lines (the DISTRICT_LINES lease).
+    from app.pipeline.analyze.score_calculator import _district_pvi
+    district_pvi_missing = not _district_pvi()
+    run_district_pvi = district_pvi_missing or utcnow().weekday() == 6
+    if not run_district_pvi:
+        logger.info("District PVI refresh skipped (weekly cadence; next on Sunday UTC)")
+        run.district_pvi_skipped = True
+        progress.skip("district_pvi", detail="weekly cadence")
+    else:
+        try:
+            from app.pipeline.fetch.district_pvi import refresh_district_pvi
+            run.district_pvi_refreshed = await refresh_district_pvi()
+            progress.complete(
+                "district_pvi",
+                detail="refreshed" if run.district_pvi_refreshed else "kept previous data",
+            )
+        except Exception:
+            logger.exception("District PVI refresh failed — continuing")
+            progress.fail("district_pvi")
+
+
+async def _president_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Score the presidents (president_pipeline), under the PRESIDENT_PIPELINE
+    lease."""
+    run.current_phase = "presidents"
+    db.commit()
+    logger.info("--- Supplementary: PRESIDENTS ---")
+    progress.begin("president_scorecards")
+    try:
+        async with lease.job_async(lease.PRESIDENT_PIPELINE, who="Supplementary pipeline's president step") as held:
+            if not held:
+                progress.skip("president_scorecards", detail=f"skipped: {held.why}")
+            else:
+                from app.pipeline.president_pipeline import run_president_pipeline
+                president_result = await run_president_pipeline(db)
+                run.presidents_updated = president_result.get("updated", 0)
+                logger.info("President pipeline updated %d presidents", run.presidents_updated)
+                progress.complete("president_scorecards", detail=f"{run.presidents_updated} updated")
+    except Exception:
+        db.rollback()  # drop partial president updates before the next commit
+        logger.exception("President pipeline failed — continuing")
+        progress.fail("president_scorecards")
+
+
+async def _presidential_support_step(db: Session, run: SupplementaryPipelineRun, progress: ProgressTracker) -> None:
+    """Measure votes with the president's stated positions, time-boxed."""
+    # Informational (no score reads it): OMB's Statements of
+    # Administration Policy matched to the chambers' final votes
+    # (analyze/presidential_support.py). Nightly: the roll calls it
+    # reads are synced half-hourly, and only new statements are fetched.
+    run.current_phase = "presidential_support"
+    db.commit()
+    logger.info("--- Supplementary: PRESIDENTIAL SUPPORT ---")
+    progress.begin("presidential_support")
+    try:
+        # Time-boxed, so a slow source can't hold the run (and the chain
+        # behind it); the reading step keeps its own smaller budget.
+        async with make_async_client() as client:
+            support = await asyncio.wait_for(
+                run_presidential_support(client, db), timeout=PRESIDENTIAL_SUPPORT_TIMEOUT_S,
+            )
+        detail = (
+            f"{support['statements']['read']} statements read ({support['statements']['status']}); "
+            f"{support['senate']['rollCalls']} Senate and {support['house']['rollCalls']} House roll calls counted"
+        )
+        if support["statements"]["status"] == "index unavailable":
+            progress.fail("presidential_support", detail=detail)
+        else:
+            progress.complete("presidential_support", detail=detail)
+    except Exception:
+        db.rollback()
+        logger.exception("Presidential support step failed — continuing")
+        progress.fail("presidential_support")
