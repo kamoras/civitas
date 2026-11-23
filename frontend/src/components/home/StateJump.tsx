@@ -37,21 +37,24 @@ export default function StateJump({
   const id = useId();
   const { state } = useYourState();
   const name = state ? (STATE_NAMES[state] ?? state) : "";
+  // One row where the width allows: the header state's link, then the
+  // label beside its select (the homepage's task band, kept short so the
+  // record below it starts on the first screen).
   return (
-    <div className="mt-auto pt-3">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {state && showYours && (
         <Link href={hrefFor(state)} className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}>
           {name}&apos;s {to === "ballot" ? "ballot" : "members"} &rarr;
         </Link>
       )}
-      <label htmlFor={id} className="block text-small text-ink-lo">
+      <label htmlFor={id} className="text-small text-ink-lo">
         {state ? `Another state` : label}
       </label>
       <select
         id={id}
         defaultValue=""
         onChange={(e) => e.target.value && navigate(router, hrefFor(e.target.value))}
-        className="mt-1 min-h-11 w-full border border-ink-hi bg-surface px-2 text-body text-ink-hi"
+        className="min-h-11 min-w-0 flex-1 border border-ink-hi bg-surface px-2 text-body text-ink-hi sm:max-w-[18rem]"
       >
         <option value="">Choose a state</option>
         {STATES.map(([code, name]) => (

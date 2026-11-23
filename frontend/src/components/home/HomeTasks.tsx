@@ -12,11 +12,13 @@ import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
-const BOX = "flex min-w-0 flex-col border border-white/30 bg-surface p-4 sm:p-5";
-const LABEL = "text-small font-semibold text-ink-lo";
-const TITLE = `${TYPE.boxTitle} mt-1`;
-const BUTTON =
-  "inline-flex min-h-11 w-fit items-center border border-ink-hi px-3 text-small font-semibold text-ink-hi hover:bg-white/5";
+// One ruled band, not three boxes: a cell per task, its heading on one line
+// and its control on the next. As three padded boxes they filled the first
+// screen (300px at 1280px wide, 776px on an iPhone 13, measured 2026-11-23)
+// and pushed the record they introduce below it.
+const CELL = "flex min-w-0 flex-col gap-1 py-3 md:px-4 md:first:pl-0 md:last:pr-0";
+const KICKER = "font-normal";
+const TASK = "text-ink-hi";
 
 /** Congress in one heading: in session today, back on a day, or neither. */
 function congressLine(c: ThisWeek["congress"]): string {
@@ -53,49 +55,48 @@ export default async function HomeTasks() {
   const election = data?.election;
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6">
-      <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <section aria-labelledby="task-members" className={BOX}>
-          <p className={LABEL}>Your members</p>
-          <h2 id="task-members" className={TITLE}>
-            Who represents you
+      <div className="mt-5 grid grid-cols-1 divide-y divide-white/30 border-y border-white/30 md:grid-cols-3 md:divide-x md:divide-y-0">
+        <section aria-labelledby="task-members" className={CELL}>
+          <h2 id="task-members" className={TYPE.kicker}>
+            <span className={KICKER}>Your members · </span>
+            <span className={TASK}>Who represents you</span>
           </h2>
           <StateJump label="State" to="members" />
         </section>
-        <section aria-labelledby="task-ballot" className={BOX}>
-          <p className={LABEL}>Your ballot</p>
-          <h2 id="task-ballot" className={TITLE}>
-            {election ? ballotLine(election) : "Your state's ballot"}
+        <section aria-labelledby="task-ballot" className={CELL}>
+          <h2 id="task-ballot" className={TYPE.kicker}>
+            <span className={KICKER}>Your ballot · </span>
+            <span className={TASK}>{election ? ballotLine(election) : "Your state's ballot"}</span>
+            {election && (
+              <>
+                {" "}
+                <span className={`${KICKER} whitespace-nowrap`}>· {shortDate(election.date)}</span>
+              </>
+            )}
           </h2>
-          {election && <p className="text-small text-ink-lo">{shortDate(election.date)}</p>}
           <StateJump label="State" to="ballot" />
-          <SourceLine className="mt-3">
-            Election Day by law (
-            <a href={ELECTION_DAY_LAW.url} className={INLINE_LINK}>
-              {ELECTION_DAY_LAW.name}
-            </a>
-            ); registration deadlines from each state&apos;s election office, on the{" "}
-            <Link href={CALENDAR_HREF} className={INLINE_LINK}>
-              calendar
-            </Link>
-            .
-          </SourceLine>
         </section>
-        <section aria-labelledby="task-congress" className={BOX}>
-          <p className={LABEL}>Congress this week</p>
-          <h2 id="task-congress" className={TITLE}>
-            {data?.congress ? congressLine(data.congress) : "This week in Congress"}
+        <section aria-labelledby="task-congress" className={CELL}>
+          <h2 id="task-congress" className={TYPE.kicker}>
+            <span className={KICKER}>Congress this week · </span>
+            <span className={TASK}>{data?.congress ? congressLine(data.congress) : "This week in Congress"}</span>
           </h2>
-          {data?.congress && <p className="text-body text-ink-lo">{data.congress.sentence}</p>}
-          <SourceLine className="mt-3">
-            Source: {RECORD_SOURCE}; the next sitting as the Record announces it.
-          </SourceLine>
-          <div className="mt-auto pt-3">
-            <Link href="/congress" className={BUTTON}>
-              The week&apos;s record
-            </Link>
-          </div>
+          <Link href="/congress" className={`inline-flex min-h-11 w-fit items-center ${INLINE_LINK}`}>
+            The week&apos;s record &rarr;
+          </Link>
         </section>
       </div>
+      <SourceLine className="mt-2">
+        Election Day by law (
+        <a href={ELECTION_DAY_LAW.url} className={INLINE_LINK}>
+          {ELECTION_DAY_LAW.name}
+        </a>
+        ); registration deadlines from each state&apos;s election office, on the{" "}
+        <Link href={CALENDAR_HREF} className={INLINE_LINK}>
+          calendar
+        </Link>
+        . Congress: {RECORD_SOURCE}.
+      </SourceLine>
       {election?.registrationClosing && (
         <ClosingLine rows={election.registrationClosing} days={election.closingSoonDays ?? 10} />
       )}
