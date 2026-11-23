@@ -910,3 +910,11 @@ class TestTheWholeRun:
         if counted:
             expected[counted] = 0
         assert result["new_documents"] == expected
+
+    def test_a_source_that_fails_part_way_counts_nothing_it_did_not_keep(self, db_session):
+        """Its rows are rolled back, so none of them is reported ingested (the
+        run reported the ones before the failure until 2026-11)."""
+        self._seed(db_session)
+        result = self._night(db_session, fetch_fr_rulemaking=AsyncMock(return_value=[_rule(1), {"title": "no id"}]))
+        assert result["new_documents"]["fr_rulemaking"] == 0
+        assert db_session.query(ExploreDocument).filter_by(chamber="Regulatory").count() == 0
