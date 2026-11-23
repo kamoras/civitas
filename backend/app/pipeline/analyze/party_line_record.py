@@ -195,11 +195,6 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         return [None] * len(members)
     rolls = {rc.id: rc for rc in db.query(RollCall).filter_by(chamber=chamber, congress=congress)}
 
-    def key(member_id: str, last_name: str, state: str):
-        # The House's roll calls carry the bioguide id; the Senate's only a
-        # name and state (extract_senator_vote matches the same way).
-        return member_id if chamber == "house" else (_normalize_for_match(last_name or ""), (state or "").upper())
-
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(
         RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
@@ -215,6 +210,85 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     scored = len(members)
     if chamber == "senate":
         members = members + _departed_senators(db, members, positions)
+    find = _member_finder(chamber, members, positions)
+
+    # The chamber's stored members' parties (an independent's caucus party):
+    # every member without a voting record (the rest of the chamber, and a
+    # departed senator added above) reads its party from here, and each
+    # section's party centers cover the whole chamber however few members
+    # this run scores.
+    model = Senator if chamber == "senate" else Representative
+    stored: dict[str, str] = {
+        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
+    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or stored.get(m.get("bioguideId") or "")
+               or m.get("party") for m in members]
+    tenures = load_leadership_tenures()
+    spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
+
+    party_of: dict[str, str] = {}
+    if chamber == "house":
+        # The House's roll calls name every member's bioguide and party; a
+        # stored caucus party (an independent's) reads over them.
+        party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
+    party_of.update(stored)
+    party_of.update({m.get("bioguideId"): parties[i] for i, m in enumerate(members) if m.get("bioguideId")})
+
+    dim1 = _positions_from_party_centers(chamber, congress, party_of)
+
+    found: set[int] = set()
+    # member -> measure -> [(date, session, number, ref, vote, kind)], kind "with" /
+    # "break" / "flank".
+    stages: list[dict] = [defaultdict(list) for _ in members]
+    for rid, rc in rolls.items():
+        ps = positions.get(rid, [])
+        # The roll call's own parties, as its stored partySplit reads them.
+        label = None if is_housekeeping(rc.question, chamber) else compute_party_split(
+            {"members": [{"party": p.party, "voteCast": p.position} for p in ps]},
+        )
+        cast = []
+        for p in ps:
+            i = find(p)
+            if i is not None:
+                found.add(i)
+            vote = _VOTES.get((p.position or "").strip().lower())
+            if label not in ("R", "D") or vote is None:
+                continue
+            # A member the run doesn't score: their stored caucus party where
+            # the roll call names them by bioguide (the House), else its own.
+            party = parties[i] if i is not None else (
+                party_of.get(p.member_id) if chamber == "house" and p.member_id else None) or p.party
+            if party not in ("R", "D"):
+                # A party line is either party's: a member of neither (a
+                # roll call's "I" with no caucus resolved, an unusual code)
+                # has none to break with, and toward[] below knows only these.
+                continue
+            switch = is_reconsider_switch({"motionRejected": rc.rejected, "rollCallDate": rc.date}, spans[i]) if i is not None else None
+            with_party = _determine_party_alignment(party, vote, label, reconsider_switch=switch)
+            if with_party is None:
+                continue
+            bioguide = p.member_id if chamber == "house" else (members[i].get("bioguideId") if i is not None else None)
+            cast.append((i, party, vote, with_party, dim1.get(bioguide)))
+        if not cast:
+            continue
+        toward = {party: _toward_other_party(party, cast) for party in ("R", "D")}
+        unit = measure_key(rc.question, rc.bill_id) or f"rc-{rid}"
+        ref = f"{rc.chamber}-{rc.congress}-{rc.session}-{rc.number}"
+        for i, party, vote, with_party, _ in cast:
+            if i is not None:
+                kind = "with" if with_party else ("break" if toward[party] else "flank")
+                stages[i][unit].append((rc.date, rc.session, rc.number, ref, vote, kind))
+
+    _warn_unmatched(chamber, members, scored, found)
+    return _records(congress, stages, found, scored)
+
+
+def _member_finder(chamber: str, members: list[dict], positions: dict[int, list]):
+    """A function from a roll-call position to the index of the member in
+    `members` it is (None when it matches none, or more than one)."""
+    def key(member_id: str, last_name: str, state: str):
+        # The House's roll calls carry the bioguide id; the Senate's only a
+        # name and state (extract_senator_vote matches the same way).
+        return member_id if chamber == "house" else (_normalize_for_match(last_name or ""), (state or "").upper())
 
     index: dict = defaultdict(list)
     for i, m in enumerate(members):
@@ -240,19 +314,13 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             found_at = first_name_matches(p.first_name or "",
                                           {i: (members[i].get("name") or "").split(" ")[0] for i in found_at})
         return found_at[0] if len(found_at) == 1 else None
+    return find
 
-    # The chamber's stored members' parties (an independent's caucus party):
-    # every member without a voting record (the rest of the chamber, and a
-    # departed senator added above) reads its party from here, and each
-    # section's party centers cover the whole chamber however few members
-    # this run scores.
-    model = Senator if chamber == "senate" else Representative
-    stored: dict[str, str] = {
-        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
-    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or stored.get(m.get("bioguideId") or "")
-               or m.get("party") for m in members]
-    tenures = load_leadership_tenures()
-    spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
+
+def _positions_from_party_centers(chamber: str, congress: int, party_of: dict[str, str]) -> dict:
+    """bioguide -> (position from its party's mean, reliability weight): the
+    side of their party each member sits, which classifies a defector's
+    break (toward the other party, or out on their own party's flank)."""
     # Any Congress's section: this rule needs only which side of their party
     # the defectors sit, and positions carry from one Congress to the next,
     # so early in a new Congress the last positions classify its breaks
@@ -268,14 +336,6 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # two Congresses can't move a member who is read from one against a
     # party read from the other.
     ideal = _member_ideal_points(chamber) or {}
-
-    party_of: dict[str, str] = {}
-    if chamber == "house":
-        # The House's roll calls name every member's bioguide and party; a
-        # stored caucus party (an independent's) reads over them.
-        party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
-    party_of.update(stored)
-    party_of.update({m.get("bioguideId"): parties[i] for i, m in enumerate(members) if m.get("bioguideId")})
 
     def weighted(section) -> dict:
         # bioguide -> (position from its party's mean, reliability weight)
@@ -353,50 +413,26 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
                 dim1[b] = (x, w)
         elif w > dim1[b][1]:
             dim1[b] = (x, w)
+    return dim1
 
-    found: set[int] = set()
-    # member -> measure -> [(date, session, number, ref, vote, kind)], kind "with" /
-    # "break" / "flank".
-    stages: list[dict] = [defaultdict(list) for _ in members]
-    for rid, rc in rolls.items():
-        ps = positions.get(rid, [])
-        # The roll call's own parties, as its stored partySplit reads them.
-        label = None if is_housekeeping(rc.question, chamber) else compute_party_split(
-            {"members": [{"party": p.party, "voteCast": p.position} for p in ps]},
+
+def _warn_unmatched(chamber: str, members: list[dict], scored: int, found: set[int]) -> None:
+    """Log the members this run scores that matched no stored roll-call
+    position (scored on their stored votes instead)."""
+    # Only the members this run scores (the rest of the chamber is passed
+    # without a voting record, for the means alone).
+    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored)
+               if i not in found and members[i].get("votingRecord") is not None]
+    if missing:
+        logger.warning(
+            "%d %s members matched no stored roll-call position (scored on stored votes): %s",
+            len(missing), chamber, ", ".join(map(str, missing[:10])),
         )
-        cast = []
-        for p in ps:
-            i = find(p)
-            if i is not None:
-                found.add(i)
-            vote = _VOTES.get((p.position or "").strip().lower())
-            if label not in ("R", "D") or vote is None:
-                continue
-            # A member the run doesn't score: their stored caucus party where
-            # the roll call names them by bioguide (the House), else its own.
-            party = parties[i] if i is not None else (
-                party_of.get(p.member_id) if chamber == "house" and p.member_id else None) or p.party
-            if party not in ("R", "D"):
-                # A party line is either party's: a member of neither (a
-                # roll call's "I" with no caucus resolved, an unusual code)
-                # has none to break with, and toward[] below knows only these.
-                continue
-            switch = is_reconsider_switch({"motionRejected": rc.rejected, "rollCallDate": rc.date}, spans[i]) if i is not None else None
-            with_party = _determine_party_alignment(party, vote, label, reconsider_switch=switch)
-            if with_party is None:
-                continue
-            bioguide = p.member_id if chamber == "house" else (members[i].get("bioguideId") if i is not None else None)
-            cast.append((i, party, vote, with_party, dim1.get(bioguide)))
-        if not cast:
-            continue
-        toward = {party: _toward_other_party(party, cast) for party in ("R", "D")}
-        unit = measure_key(rc.question, rc.bill_id) or f"rc-{rid}"
-        ref = f"{rc.chamber}-{rc.congress}-{rc.session}-{rc.number}"
-        for i, party, vote, with_party, _ in cast:
-            if i is not None:
-                kind = "with" if with_party else ("break" if toward[party] else "flank")
-                stages[i][unit].append((rc.date, rc.session, rc.number, ref, vote, kind))
 
+
+def _records(congress: int, stages: list[dict], found: set[int], scored: int) -> list[dict | None]:
+    """Each scored member's record from their classified votes: per measure,
+    its latest counted break, else its latest flank break, newest first."""
     out: list[dict | None] = []
     for i in range(scored):
         if i not in found:
@@ -415,13 +451,4 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             "breaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(breaks, reverse=True)],
             "flankBreaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(flank, reverse=True)],
         })
-    # Only the members this run scores (the rest of the chamber is passed
-    # without a voting record, for the means alone).
-    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored)
-               if i not in found and members[i].get("votingRecord") is not None]
-    if missing:
-        logger.warning(
-            "%d %s members matched no stored roll-call position (scored on stored votes): %s",
-            len(missing), chamber, ", ".join(map(str, missing[:10])),
-        )
     return out
