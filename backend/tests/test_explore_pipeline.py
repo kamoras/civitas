@@ -806,3 +806,107 @@ class TestFederalRegisterPageMarkers:
         (second,) = _strip_page_markers(db_session, limit=1)
         assert db_session.get(ExploreDocument, second).body == "Captain of the Port.\n\nIV. Regulatory Analyses"
         assert _strip_page_markers(db_session) == []
+
+
+GOLDEN_FIRST_NIGHT = Path(__file__).parent / "fixtures" / "explore_run_golden.json"
+
+
+def _order(n, signer="Donald J. Trump"):
+    return {"external_id": f"fr-2026-{n:05d}", "doc_type": "Executive Order", "title": f"Executive Order {n}",
+            "summary": f"Order {n}.", "body": f"Section 1. Order {n} directs the agencies.",
+            "date": "2026-10-0%d" % (n % 9 + 1), "url": f"https://www.federalregister.gov/documents/2026/10/01/{n}",
+            "politician_name": signer, "identifiers": [f"EO {14300 + n}"]}
+
+
+def _case(n, url=None, author=""):
+    return {"external_id": f"scotus-25-{n}", "doc_type": "Supreme Court Opinion", "title": f"Case {n} v. United States",
+            "summary": "Argued." if url is None else f"Held in case {n}.", "body": "" if url is None else "Opinion.",
+            "date": "2026-10-06", "url": url, "politician_name": author}
+
+
+def _rule(n):
+    return {"external_id": f"fr-rule-{n}", "doc_type": "Proposed Rule", "title": f"Air quality standard {n}",
+            "summary": f"Proposed standard {n}.", "body": "x" * 2500, "date": "2026-10-02",
+            "url": f"https://www.federalregister.gov/documents/2026/10/02/rule-{n}",
+            "agency_name": "Environmental Protection Agency", "agency_slug": "environmental-protection-agency",
+            "comment_url": f"https://www.regulations.gov/comment/EPA-{n}", "comments_close_on": "2026-12-01",
+            "identifiers": [f"EPA-HQ-OAR-2026-{n}"]}
+
+
+class TestTheWholeRun:
+    """The run as a whole across its sources: what each stores, a night that
+    reads them again, and a source that raises."""
+
+    @staticmethod
+    def _seed(db_session):
+        from app.models import Justice, President
+
+        db_session.add_all([
+            President(id="trump-47", name="Donald J. Trump", party="R", number=47, term_start="2025-01-20"),
+            Justice(id="roberts", name="John G. Roberts, Jr.", last_name="Roberts", is_active=True),
+        ])
+        db_session.commit()
+
+    @staticmethod
+    def _night(db_session, **sources):
+        stubs = {
+            "fetch_recent_presidential_actions": AsyncMock(return_value=[_order(1), _order(2)]),
+            "fetch_scotus_cases": AsyncMock(return_value=[_case(1, url="https://supremecourt.gov/1.pdf",
+                                                                 author="John G. Roberts, Jr."), _case(2)]),
+            "fetch_fr_rulemaking": AsyncMock(return_value=[_rule(1), _rule(2)]),
+            "_refresh_federal_register": AsyncMock(return_value={"updated": 0, "removed": 0}),
+            "_backfill_rulemaking_bodies": AsyncMock(return_value=[]),
+            "_embed_step": AsyncMock(return_value=6),
+            **sources,
+        }
+        with _stubbed_run(db_session, **stubs):
+            return asyncio.run(run_explore_pipeline())
+
+    def test_a_first_night_stores_every_source(self, db_session):
+        from tests.pipeline_run_helpers import matches_golden
+
+        self._seed(db_session)
+        result = self._night(db_session)
+        assert result["status"] == "completed"
+        assert result["new_documents"] == {
+            "senate_floor": 0, "house_floor": 0, "presidential": 2, "scotus": 2, "fr_rulemaking": 2,
+        }
+        orders = db_session.query(ExploreDocument).filter_by(doc_type="Executive Order").all()
+        assert {d.politician_id for d in orders} == {"trump-47"}
+        opinion = db_session.query(ExploreDocument).filter_by(external_id="scotus-25-1").one()
+        assert opinion.politician_id == "roberts"
+        assert matches_golden(db_session, GOLDEN_FIRST_NIGHT)
+
+    def test_the_next_night_adds_nothing_twice_and_follows_a_posted_opinion(self, db_session):
+        self._seed(db_session)
+        self._night(db_session)
+        result = self._night(db_session, fetch_scotus_cases=AsyncMock(return_value=[
+            _case(1, url="https://supremecourt.gov/1.pdf", author="John G. Roberts, Jr."),
+            _case(2, url="https://supremecourt.gov/2.pdf", author="John G. Roberts, Jr."),
+        ]))
+        assert result["new_documents"] == {
+            "senate_floor": 0, "house_floor": 0, "presidential": 0, "scotus": 0, "fr_rulemaking": 0,
+        }
+        assert db_session.query(ExploreDocument).count() == 6
+        posted = db_session.query(ExploreDocument).filter_by(external_id="scotus-25-2").one()
+        assert (posted.url, posted.summary, posted.politician_id) == (
+            "https://supremecourt.gov/2.pdf", "Held in case 2.", "roberts",
+        )
+
+    @pytest.mark.parametrize("source, counted", [
+        ("fetch_crec_packages", None),
+        ("fetch_recent_presidential_actions", "presidential"),
+        ("fetch_scotus_cases", "scotus"),
+        ("fetch_fr_rulemaking", "fr_rulemaking"),
+        ("_refresh_federal_register", None),
+        ("update_document_authority", None),
+    ])
+    def test_a_source_that_raises_leaves_the_others_stored(self, db_session, source, counted):
+        self._seed(db_session)
+        broken = MagicMock if source == "update_document_authority" else AsyncMock
+        result = self._night(db_session, **{source: broken(side_effect=RuntimeError("source down"))})
+        assert result["status"] == "completed"
+        expected = {"senate_floor": 0, "house_floor": 0, "presidential": 2, "scotus": 2, "fr_rulemaking": 2}
+        if counted:
+            expected[counted] = 0
+        assert result["new_documents"] == expected
