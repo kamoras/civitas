@@ -85,7 +85,7 @@ export default async function HomeTasks() {
           </h2>
           <Link
             href="/congress"
-            className={`inline-flex min-h-11 w-fit items-center ${INLINE_LINK}`}
+            className={`mt-auto inline-flex min-h-11 w-fit items-center ${INLINE_LINK}`}
           >
             The week&apos;s record &rarr;
           </Link>
