@@ -275,9 +275,7 @@ def _drop_overlapping_granule_copies(db: Session) -> int:
     return len(drop)
 
 
-async def _backfill_presidential_bodies(
-    db: Session, client: httpx.AsyncClient
-) -> list[int]:
+async def _backfill_presidential_bodies(db: Session) -> list[int]:
     """Fetch body text for presidential documents that have empty body/summary.
 
     Returns the ids of documents whose body changed, for the log. The embed
@@ -844,6 +842,150 @@ def _purge_orphaned_vectors(db: Session) -> int:
     return removed
 
 
+async def _ingest_presidential_actions(db: Session, client: httpx.AsyncClient) -> int:
+    """The president's newest Federal Register documents not stored yet,
+    credited to the presidency whose term holds each. Returns how many were
+    added: 0 when it fails, since nothing is then kept."""
+    added = 0
+    logger.info("Explore pipeline: fetching presidential actions...")
+    try:
+        actions = await fetch_recent_presidential_actions(client, pages=5)
+        for action in actions:
+            ext_id = action["external_id"]
+
+            exists = db.query(ExploreDocument.id).filter(
+                ExploreDocument.external_id == ext_id
+            ).first()
+            if exists:
+                continue
+
+            president_id = _president_id_for(db, action.get("politician_name", ""), action["date"])
+
+            db.add(ExploreDocument(
+                doc_type=action["doc_type"],
+                source="Federal Register",
+                title=action["title"],
+                summary=action["summary"],
+                body=action.get("body", ""),
+                date=action["date"],
+                url=action.get("url"),
+                politician_name=action.get("politician_name"),
+                politician_id=president_id,
+                chamber="Executive",
+                external_id=ext_id,
+                identifiers=json.dumps(action.get("identifiers") or []),
+            ))
+            added += 1
+
+        db.commit()
+        logger.info("Explore pipeline: ingested %d presidential actions", added)
+    except Exception as e:
+        logger.warning("Presidential actions fetch failed: %s", e)
+        db.rollback()
+        return 0  # rolled back: nothing it counted was kept
+    return added
+
+
+async def _ingest_scotus_cases(db: Session, client: httpx.AsyncClient) -> int:
+    """The Court's new cases, each linked to its authoring justice, and a
+    stored case updated when its opinion is posted. Returns how many were
+    added: 0 when it fails, since nothing is then kept."""
+    added = 0
+    logger.info("Explore pipeline: fetching Supreme Court opinions...")
+    justice_map = _justice_lookup(db)
+    sitting = [(j.name, j.last_name) for j in db.query(Justice).filter(Justice.is_active == True)]  # noqa: E712
+    try:
+        scotus_cases = await fetch_scotus_cases(client, justices=sitting)
+        for case in scotus_cases:
+            ext_id = case["external_id"]
+
+            # Link to the authoring justice when politician_name is set
+            author_name = case.get("politician_name") or ""
+            author_last = next((last for name, last in sitting if name == author_name), "")
+            justice_id = justice_map.get((author_last or "").upper())
+
+            stored = db.query(ExploreDocument).filter(
+                ExploreDocument.external_id == ext_id
+            ).first()
+            if stored is not None:
+                # The Court posts an opinion after the case is first
+                # stored: the link, author and holding follow it.
+                if case.get("url") and case["url"] != stored.url:
+                    stored.url, stored.summary, stored.body = case["url"], case["summary"], case.get("body", "")
+                    stored.politician_name, stored.politician_id = author_name or None, justice_id
+                if case.get("date") and case["date"] != stored.date:
+                    stored.date = case["date"]
+                continue
+
+            db.add(ExploreDocument(
+                doc_type=case["doc_type"],
+                source="Supreme Court (supremecourt.gov)",
+                title=case["title"],
+                summary=case["summary"],
+                body=case.get("body", ""),
+                date=case["date"],
+                url=case.get("url"),
+                politician_name=author_name or None,
+                politician_id=justice_id,
+                chamber="Judicial",
+                external_id=ext_id,
+            ))
+            added += 1
+
+        db.commit()
+        logger.info("Explore pipeline: ingested %d Supreme Court opinions", added)
+    except Exception as e:
+        logger.warning("Supreme Court fetch failed: %s", e)
+        db.rollback()
+        return 0  # rolled back: nothing it counted was kept
+    return added
+
+
+async def _ingest_rulemaking(db: Session, client: httpx.AsyncClient) -> int:
+    """The Federal Register's new rulemaking documents. Returns how many were
+    added: 0 when it fails, since nothing is then kept."""
+    added = 0
+    logger.info("Explore pipeline: fetching Federal Register rulemaking...")
+    try:
+        fr_docs = await fetch_fr_rulemaking(client, pages=5)
+        for fr_doc in fr_docs:
+            ext_id = fr_doc["external_id"]
+
+            exists = db.query(ExploreDocument.id).filter(
+                ExploreDocument.external_id == ext_id
+            ).first()
+            if exists:
+                continue
+
+            db.add(ExploreDocument(
+                doc_type=fr_doc["doc_type"],
+                source="Federal Register",
+                title=fr_doc["title"],
+                summary=fr_doc["summary"],
+                body=fr_doc.get("body", ""),
+                date=fr_doc["date"],
+                url=fr_doc.get("url"),
+                politician_name=None,
+                politician_id=None,
+                chamber="Regulatory",
+                agency_name=fr_doc.get("agency_name"),
+                agency_slug=fr_doc.get("agency_slug"),
+                comment_url=fr_doc.get("comment_url"),
+                comments_close_on=fr_doc.get("comments_close_on"),
+                external_id=ext_id,
+                identifiers=json.dumps(fr_doc.get("identifiers") or []),
+            ))
+            added += 1
+
+        db.commit()
+        logger.info("Explore pipeline: ingested %d Federal Register rulemaking docs", added)
+    except Exception as e:
+        logger.warning("Federal Register rulemaking fetch failed: %s", e)
+        db.rollback()
+        return 0  # rolled back: nothing it counted was kept
+    return added
+
+
 async def run_explore_pipeline() -> dict:
     """Run the full explore document ingestion pipeline.
 
@@ -874,130 +1016,10 @@ async def run_explore_pipeline() -> dict:
             except Exception as e:
                 logger.warning("Floor speech ingest failed: %s", e)
                 db.rollback()
-
-            # --- 3. Presidential actions ---
-            logger.info("Explore pipeline: fetching presidential actions...")
-            try:
-                actions = await fetch_recent_presidential_actions(client, pages=5)
-                for action in actions:
-                    ext_id = action["external_id"]
-
-                    exists = db.query(ExploreDocument.id).filter(
-                        ExploreDocument.external_id == ext_id
-                    ).first()
-                    if exists:
-                        continue
-
-                    president_id = _president_id_for(db, action.get("politician_name", ""), action["date"])
-
-                    db.add(ExploreDocument(
-                        doc_type=action["doc_type"],
-                        source="Federal Register",
-                        title=action["title"],
-                        summary=action["summary"],
-                        body=action.get("body", ""),
-                        date=action["date"],
-                        url=action.get("url"),
-                        politician_name=action.get("politician_name"),
-                        politician_id=president_id,
-                        chamber="Executive",
-                        external_id=ext_id,
-                        identifiers=json.dumps(action.get("identifiers") or []),
-                    ))
-                    stats["presidential"] += 1
-
-                db.commit()
-                logger.info("Explore pipeline: ingested %d presidential actions", stats["presidential"])
-            except Exception as e:
-                logger.warning("Presidential actions fetch failed: %s", e)
-                db.rollback()
-
-            # --- 4. Supreme Court opinions ---
-            logger.info("Explore pipeline: fetching Supreme Court opinions...")
-            justice_map = _justice_lookup(db)
-            sitting = [(j.name, j.last_name) for j in db.query(Justice).filter(Justice.is_active == True)]  # noqa: E712
-            try:
-                scotus_cases = await fetch_scotus_cases(client, justices=sitting)
-                for case in scotus_cases:
-                    ext_id = case["external_id"]
-
-                    # Link to the authoring justice when politician_name is set
-                    author_name = case.get("politician_name") or ""
-                    author_last = next((last for name, last in sitting if name == author_name), "")
-                    justice_id = justice_map.get((author_last or "").upper())
-
-                    stored = db.query(ExploreDocument).filter(
-                        ExploreDocument.external_id == ext_id
-                    ).first()
-                    if stored is not None:
-                        # The Court posts an opinion after the case is first
-                        # stored: the link, author and holding follow it.
-                        if case.get("url") and case["url"] != stored.url:
-                            stored.url, stored.summary, stored.body = case["url"], case["summary"], case.get("body", "")
-                            stored.politician_name, stored.politician_id = author_name or None, justice_id
-                        if case.get("date") and case["date"] != stored.date:
-                            stored.date = case["date"]
-                        continue
-
-                    db.add(ExploreDocument(
-                        doc_type=case["doc_type"],
-                        source="Supreme Court (supremecourt.gov)",
-                        title=case["title"],
-                        summary=case["summary"],
-                        body=case.get("body", ""),
-                        date=case["date"],
-                        url=case.get("url"),
-                        politician_name=author_name or None,
-                        politician_id=justice_id,
-                        chamber="Judicial",
-                        external_id=ext_id,
-                    ))
-                    stats["scotus"] += 1
-
-                db.commit()
-                logger.info("Explore pipeline: ingested %d Supreme Court opinions", stats["scotus"])
-            except Exception as e:
-                logger.warning("Supreme Court fetch failed: %s", e)
-                db.rollback()
-
-            # --- 5. Federal Register rulemaking ---
-            logger.info("Explore pipeline: fetching Federal Register rulemaking...")
-            try:
-                fr_docs = await fetch_fr_rulemaking(client, pages=5)
-                for fr_doc in fr_docs:
-                    ext_id = fr_doc["external_id"]
-
-                    exists = db.query(ExploreDocument.id).filter(
-                        ExploreDocument.external_id == ext_id
-                    ).first()
-                    if exists:
-                        continue
-
-                    db.add(ExploreDocument(
-                        doc_type=fr_doc["doc_type"],
-                        source="Federal Register",
-                        title=fr_doc["title"],
-                        summary=fr_doc["summary"],
-                        body=fr_doc.get("body", ""),
-                        date=fr_doc["date"],
-                        url=fr_doc.get("url"),
-                        politician_name=None,
-                        politician_id=None,
-                        chamber="Regulatory",
-                        agency_name=fr_doc.get("agency_name"),
-                        agency_slug=fr_doc.get("agency_slug"),
-                        comment_url=fr_doc.get("comment_url"),
-                        comments_close_on=fr_doc.get("comments_close_on"),
-                        external_id=ext_id,
-                        identifiers=json.dumps(fr_doc.get("identifiers") or []),
-                    ))
-                    stats["fr_rulemaking"] += 1
-
-                db.commit()
-                logger.info("Explore pipeline: ingested %d Federal Register rulemaking docs", stats["fr_rulemaking"])
-            except Exception as e:
-                logger.warning("Federal Register rulemaking fetch failed: %s", e)
-                db.rollback()
+            # --- 3-5. Presidential actions, Supreme Court cases, rulemaking ---
+            stats["presidential"] = await _ingest_presidential_actions(db, client)
+            stats["scotus"] = await _ingest_scotus_cases(db, client)
+            stats["fr_rulemaking"] = await _ingest_rulemaking(db, client)
 
             # --- 5b. Stored Federal Register documents, as the Register has them now ---
             try:
@@ -1011,7 +1033,7 @@ async def run_explore_pipeline() -> dict:
         # --- 6. Backfill docs missing body content ---
         # Their vectors are re-embedded in step 7, whose text hashes show
         # the change.
-        backfilled = await _backfill_presidential_bodies(db, client)
+        backfilled = await _backfill_presidential_bodies(db)
         backfilled += await _backfill_rulemaking_bodies(db)
         backfilled += _strip_page_markers(db)
         if backfilled:
