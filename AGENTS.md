@@ -3884,6 +3884,15 @@ Patterns that exist because they failed once:
   rebuilds and stack redeploys (it's external to the stack, never recreated
   by `docker stack deploy`)
 - Frontend Dockerfile uses multi-stage build (deps → build → runner) with non-root user
+- **Memory limits need the host's memory controller.** Raspberry Pi OS
+  boots with `cgroup_disable=memory`, and Docker then drops every
+  `deploy.resources.limits.memory` without an error (`docker stats` reads
+  0). Production ran that way into 2026-11, and on 2026-11-24 the host
+  went into full swap and Swarm replaced the API three times in twenty
+  minutes on liveness timeouts. `docs/self-hosting.md` ("Memory limits")
+  has the check and the fix. Two settings cut what the processes hold: llama-server runs with `--cache-ram 0` (side by side on the same
+  image, the prompt cache was what grew; measurements in
+  `docker-compose.yml`), and the backend image sets `MALLOC_ARENA_MAX=2`.
 
 ### CI/CD
 

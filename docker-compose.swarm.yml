@@ -104,11 +104,14 @@ services:
       # Read-only work scales across processes: each worker has its own
       # interpreter lock. Each also holds its own copy of the search
       # embedding model, preloaded so no request loads one
-      # (main._preload_models). Measured 2026-09: ~0.9 GB a worker (the app
-      # ~800 MB, the search model ~28 MB; /api/qa's ~10 MB model has since
-      # gone with that route), 1.8 GB for two plus the supervisor, under the
-      # 4G limit docker-compose.yml gives backend.
-      # Raise only after checking memory under load (`docker stats`).
+      # (main._preload_models). Measured 2026-09: ~0.9 GB a worker.
+      # Measured 2026-11-24, before MALLOC_ARENA_MAX (backend/Dockerfile):
+      # 2.75 and 3.05 GB three hours after start and still growing, 978 MB
+      # of the first in malloc arenas. That is over the 4G limit
+      # docker-compose.yml gives backend, which holds only where the host
+      # has the memory controller on (docs/self-hosting.md, "Memory limits").
+      # Raise only after checking memory under load: per-process RSS from
+      # /proc, since `docker stats` reads 0 without the memory controller.
       - WEB_CONCURRENCY=2
     deploy:
       update_config:
@@ -157,7 +160,10 @@ services:
           # What the single backend container had when it ran both halves.
           # With backend's 4G, llama-server's 2G and frontend's 512M the
           # limits total ~10.5G of the Pi's 15.8G, so each container meets
-          # its own limit before the host runs out.
+          # its own limit before the host runs out. Only where the kernel
+          # has the memory controller: Raspberry Pi OS boots with
+          # cgroup_disable=memory, and there Docker drops every limit here
+          # without an error (docs/self-hosting.md, "Memory limits").
           memory: 4G
       # stop-first, unlike backend: two pipeline processes overlapping
       # would load a second set of models for nothing and run two

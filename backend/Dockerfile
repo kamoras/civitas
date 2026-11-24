@@ -112,4 +112,11 @@ ENTRYPOINT ["/entrypoint.sh"]
 # the read-only API service, whose per-client limits live in a store every
 # worker shares (app/api/throttle.py), not in any one process.
 ENV WEB_CONCURRENCY=1
+# Two malloc arenas, not glibc's default of eight per core. Every thread
+# that allocates gets an arena of its own up to that cap, and the API runs
+# its plain `def` routes on a 40-thread pool. Measured on production
+# 2026-11-24: one API worker, 3 hours old, held 17 arenas totalling 978 MB
+# of its 2.75 GB. Python code allocates under the GIL, so fewer arenas
+# cost it little parallelism. The pipeline process gets the same setting.
+ENV MALLOC_ARENA_MAX=2
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
