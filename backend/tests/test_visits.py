@@ -231,6 +231,10 @@ class TestTrackVisitPageViews:
         await _view(_make_request(user_agent="Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36"), "/")
         assert _drain_queue_and_write(db_session) == 1
 
+    async def test_lightpanda_is_not_a_visitor(self, db_session):
+        await _view(_make_request(user_agent="Lightpanda/1.0"), "/")
+        assert _drain_queue_and_write(db_session) == 0
+
     @pytest.mark.parametrize("user_agent", [
         "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; "
         "+http://www.bing.com/bingbot.htm) Chrome/116.0.1938.76 Safari/537.36",

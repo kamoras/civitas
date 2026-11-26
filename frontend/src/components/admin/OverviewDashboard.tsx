@@ -151,17 +151,13 @@ export function OverviewDashboard({
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Confirmed visitors today"
-          value={
-            today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString("en-US") : "—"
-          }
+          label="First-paint loads today"
+          value={today ? today.firstPaintLoads.toLocaleString("en-US") : "—"}
           note={
             today
-              ? `${today.firstPaintLoads.toLocaleString("en-US")} first-paint loads${
-                  today.visitorsExceedLoads
-                    ? `; more visitors than the ${today.loadsReported.toLocaleString("en-US")} loads reported`
-                    : ""
-                }`
+              ? today.confirmedVisitors != null
+                ? `${today.confirmedVisitors.toLocaleString("en-US")} confirmed visitors, an upper bound`
+                : undefined
               : loadFailed.visits
                 ? "couldn't load"
                 : undefined

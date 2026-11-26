@@ -113,16 +113,16 @@ export function TrafficDashboard({ token }: { token: string }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
+          label="First-paint loads today"
+          value={today ? today.firstPaintLoads.toLocaleString("en-US") : "—"}
+          note={`cold loads a browser painted in view; ${formatCompact(paintedTotal)} in ${range}d`}
+        />
+        <StatTile
           label="Confirmed visitors today"
           value={
             today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString("en-US") : "—"
           }
-          note={`browsers that ran the page they opened; ${formatCompact(confirmedTotal)} in ${range}d`}
-        />
-        <StatTile
-          label="First-paint loads today"
-          value={today ? today.firstPaintLoads.toLocaleString("en-US") : "—"}
-          note={`cold loads a browser painted in view; ${formatCompact(paintedTotal)} in ${range}d`}
+          note={`an upper bound: crawlers that run the page count too; ${formatCompact(confirmedTotal)} in ${range}d`}
         />
         <StatTile
           label="Page views today"
@@ -166,8 +166,8 @@ export function TrafficDashboard({ token }: { token: string }) {
             formatTick={formatCompact}
             stale={stale}
             headline={
-              today?.confirmedVisitors != null ? (
-                <span className="text-dek">{today.confirmedVisitors.toLocaleString("en-US")}</span>
+              today ? (
+                <span className="text-dek">{today.firstPaintLoads.toLocaleString("en-US")}</span>
               ) : undefined
             }
             emptyMessage={emptyText(
