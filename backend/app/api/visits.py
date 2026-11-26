@@ -317,7 +317,11 @@ async def run_visit_consumer() -> None:
 # site's scripts like a person's browser, so it would pass the page-then-
 # router check (_confirmed_paths); only this token tells it apart. An agent
 # driving a real browser window can't be told apart, and is browsing.
-_AUTOMATED_BROWSER = "HeadlessChrome"
+# Lightpanda, a headless browser built for scraping and agents, runs the
+# page's scripts without painting it and names itself ("Lightpanda/1.0"):
+# measured 2026-11-25, it was 548 of the day's 726 confirmed visitors
+# (stored as browser "Other"), from 559 addresses, none reporting a load.
+_AUTOMATED_BROWSER = re.compile(r"HeadlessChrome|Lightpanda/")
 # Crawlers that render pages in a real browser engine (Bingbot, Applebot,
 # Baiduspider-render, OAI-SearchBot, GoogleOther…) run the page too, and name
 # themselves by the crawler convention (rate_limit.SELF_DECLARED_CRAWLER). Of the 17
@@ -752,7 +756,7 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
         return  # page and router signals come only from the frontend's proxy
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    if _AUTOMATED_BROWSER in user_agent or SELF_DECLARED_CRAWLER.search(user_agent):
+    if _AUTOMATED_BROWSER.search(user_agent) or SELF_DECLARED_CRAWLER.search(user_agent):
         return
     paths = await throttle.run(_confirmed_paths, ip, kind, path)
     if not paths:

@@ -1523,12 +1523,19 @@ the House town filter runs in the browser over district lists the page already
 has. `/congress`'s "Your members this Congress" works the same way (`GET /api/congress/members?state=`). Keep both that way: a tap row that named a state would be a coarse
 location log per issue.
 
-The admin dashboard's headline traffic figures are the two that measure people:
-**confirmed visitors** (`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first
-whole day a visit counted only once the browser ran the page; null before it,
-when the stored count was mostly automation) and **first-paint loads** (cold
+The admin dashboard's headline traffic figure is **first-paint loads** (cold
 loads whose browser reported a first contentful paint, from the timing
-histogram). Raw `uniqueVisitors` stays in `GET /api/admin/visitor-stats` for
+histogram), with **confirmed visitors** beside it as an upper bound
+(`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first whole day a visit
+counted only once the browser ran the page; null before it, when the stored
+count was mostly automation). From 2026-10-29 confirmed visitors exceeded
+reported loads every day (726 against 80 on 2026-11-25): crawlers that run
+the page without painting it are confirmed by their own prefetches.
+`track_visit` also drops Lightpanda, a headless scraping browser that names
+itself (548 of those 726). A crawler that paints in a visible, undriven
+browser passes both: 2026-11-22 read 3,241 visitors and 2,737 first-paint
+loads, 2,733 of them desktop, one page each, against 65 to 71 loads on the
+days either side. Raw `uniqueVisitors` stays in `GET /api/admin/visitor-stats` for
 history, but is not shown as a visitor count.
 
 Public API and MCP use (`ApiRequestCount`) is counted the same way: one
