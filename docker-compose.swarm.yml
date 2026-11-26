@@ -158,8 +158,8 @@ services:
       resources:
         limits:
           # What the single backend container had when it ran both halves.
-          # With backend's 4G, llama-server's 2G and frontend's 512M the
-          # limits total ~10.5G of the Pi's 15.8G, so each container meets
+          # With backend's 5G, llama-server's 2G and frontend's 768M the
+          # limits total ~11.75G of the Pi's 15.8G, so each container meets
           # its own limit before the host runs out. Only where the kernel
           # has the memory controller: Raspberry Pi OS boots with
           # cgroup_disable=memory, and there Docker drops every limit here
