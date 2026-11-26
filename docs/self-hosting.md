@@ -36,7 +36,9 @@ Any 64-bit Linux machine of that size or larger works.
   process peaked at 3.5 GB over a day that held the nightly chain and the
   hourly refreshes, and the llama-server, API and frontend processes used
   5.7 GB more. The compose files cap the containers at 2 GB (llama-server),
-  4 GB (backend), 4 GB (pipeline, Swarm only) and 512 MB (frontend). Idle
+  4 GB (backend), 4 GB (pipeline, Swarm only) and 512 MB (frontend), but
+  only on a kernel with the memory controller on (see "Memory limits"
+  below). Idle
   after start, the measured use on the test machine was about 780 MB for
   llama-server, 610 MB for the backend and 60 MB for the frontend. 8 GB is
   **not** enough for a full nightly run (estimate, from the figures above).
@@ -70,6 +72,28 @@ Any 64-bit Linux machine of that size or larger works.
   three).
 - For the production path only: the **GitHub CLI** (`gh`), used by the
   deploy poller to refuse a commit whose CI failed.
+
+### Memory limits
+
+Docker applies the compose files' memory limits only when the kernel has
+the memory controller. **Raspberry Pi OS boots without it**
+(`cgroup_disable=memory` on the kernel command line), and Docker then
+drops every limit without an error. Check:
+
+```bash
+cat /sys/fs/cgroup/cgroup.controllers   # must list "memory"
+```
+
+If it doesn't, add ` cgroup_enable=memory` to the end of the single line
+in `/boot/firmware/cmdline.txt` and reboot. Production ran without it
+into 2026-11: on 2026-11-24 the containers held about 17 GB of RAM and
+swap between them, swap was full, and Swarm replaced the API three times in twenty
+minutes because its liveness check timed out while it waited on swap.
+With the limits in force, a container that outgrows its limit is
+restarted on its own instead of taking the whole host into swap. Check
+each service's memory (per-process RSS in `/proc`) against its limit
+before turning the controller on: until then nothing has held them to
+it.
 
 ### arm64 and amd64
 

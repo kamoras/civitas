@@ -3202,6 +3202,15 @@ the pending list).
   - Batch related-entity lookups (collect IDs, query with `.in_()`, map back)
   - Wrap blocking I/O (`fetch_news_articles`, embedding model calls) with
     `await asyncio.to_thread()` to keep the event loop non-blocking
+  - **A route that awaits nothing is a plain `def`** (2026-11). FastAPI
+    runs an `async def` route on the worker's event loop, so its database
+    reads hold every other request on that worker behind it, the liveness
+    check (`/api/live`) included: three missed checks and Swarm replaces
+    the task. A plain `def` runs in the threadpool. Until 2026-11 the
+    Action Center's routes and most admin routes were `async def` with no
+    `await`. `tests/test_routes_off_the_event_loop.py` fails on a new one,
+    except the two it names with why (`/api/live` itself, and
+    `track_timing`, which puts onto the loop's `asyncio.Queue`)
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
   - **Two backend services in production, one image** (`settings.PROCESS_ROLE`,
@@ -3875,6 +3884,15 @@ Patterns that exist because they failed once:
   rebuilds and stack redeploys (it's external to the stack, never recreated
   by `docker stack deploy`)
 - Frontend Dockerfile uses multi-stage build (deps → build → runner) with non-root user
+- **Memory limits need the host's memory controller.** Raspberry Pi OS
+  boots with `cgroup_disable=memory`, and Docker then drops every
+  `deploy.resources.limits.memory` without an error (`docker stats` reads
+  0). Production ran that way into 2026-11, and on 2026-11-24 the host
+  went into full swap and Swarm replaced the API three times in twenty
+  minutes on liveness timeouts. `docs/self-hosting.md` ("Memory limits")
+  has the check and the fix. Two settings cut what the processes hold: llama-server runs with `--cache-ram 0` (side by side on the same
+  image, the prompt cache was what grew; measurements in
+  `docker-compose.yml`), and the backend image sets `MALLOC_ARENA_MAX=2`.
 
 ### CI/CD
 

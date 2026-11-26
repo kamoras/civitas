@@ -904,7 +904,6 @@ def test_clear_stuck_senate_takes_only_a_row_no_lease_speaks_for(db_session):
     run whose beats stalled); accepted once nothing speaks for it. The
     status endpoint offers Clear exactly when the endpoint would take it,
     and a proven-dead row reads as not running."""
-    import asyncio
     from datetime import timedelta
 
     from fastapi import HTTPException
@@ -918,20 +917,20 @@ def test_clear_stuck_senate_takes_only_a_row_no_lease_speaks_for(db_session):
     run = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
     assert senate_run_state(db_session) == (run.id, True, False)
     with pytest.raises(HTTPException) as refused:
-        asyncio.run(admin.admin_clear_stuck_senate(db=db_session))
+        admin.admin_clear_stuck_senate(db=db_session)
     assert refused.value.status_code == 409 and "lease" in refused.value.detail
 
     db_session.query(models.ApiCache).delete()  # its lease let go, its row left RUNNING
     db_session.commit()
     assert senate_run_state(db_session) == (run.id, True, True)
-    assert asyncio.run(admin.admin_clear_stuck_senate(db=db_session))["cleared"] == 1
+    assert admin.admin_clear_stuck_senate(db=db_session)["cleared"] == 1
     db_session.expire_all()
     assert db_session.get(models.PipelineRun, run.id).status == "failed"
     assert senate_run_state(db_session) == (None, False, False)
 
     dead = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(hours=2))
     assert senate_run_state(db_session) == (dead.id, False, True)
-    assert asyncio.run(admin.admin_clear_stuck_senate(db=db_session))["cleared"] == 1
+    assert admin.admin_clear_stuck_senate(db=db_session)["cleared"] == 1
 
     old = start_senate_run_then_stop_beating(db_session)  # beating, but past the age rule
     old.started_at = utcnow() - timedelta(hours=13)

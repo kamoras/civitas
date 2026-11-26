@@ -40,7 +40,7 @@ def leaderboard(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/trigger")
-async def trigger_pipeline(authorization: str | None = Header(default=None)):
+def trigger_pipeline(authorization: str | None = Header(default=None)):
     """Trigger a president data pipeline run (fetches live data from APIs)."""
     check_pipeline_token(authorization)
 

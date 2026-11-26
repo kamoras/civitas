@@ -93,9 +93,15 @@ jobs:
     # about 70 s of that is each worker importing the app). Run serially it
     # had reached 18-20 minutes and was cancelled at a 20-minute ceiling
     # after every test passed (PR #961); a slow runner has taken 1.25x the
-    # normal time (2026-10-03). 15 leaves that headroom and still stops a
-    # hung job well before GitHub's default.
-    timeout-minutes: 15
+    # normal time (2026-10-03).
+    # By 2026-11-23 the suite was 9,760 tests and the job 12 to 14 minutes,
+    # and with eight Dependabot PRs running at once pytest alone took 11m40s:
+    # the knip update (#1413) was cancelled at the old 15-minute ceiling
+    # after every test passed, during the coverage report, so its required
+    # check never passed and it didn't merge on its own. 25 leaves the same
+    # headroom over today's suite and still stops a hung job well before
+    # GitHub's default.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend

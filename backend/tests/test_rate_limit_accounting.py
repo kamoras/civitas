@@ -183,8 +183,7 @@ def test_rate_limit_stat_errors_are_swallowed(db_session, monkeypatch):
     tracker.complete("fetch_a")  # must not raise
 
 
-@pytest.mark.asyncio
-async def test_timings_endpoint_reports_blocked_share_of_a_run(db_session):
+def test_timings_endpoint_reports_blocked_share_of_a_run(db_session):
     """The number the hardware decision turns on: a run that is mostly
     blocked on someone else's rate limit cannot be shortened by faster
     local hardware."""
@@ -209,7 +208,7 @@ async def test_timings_endpoint_reports_blocked_share_of_a_run(db_session):
     ))
     db_session.commit()
 
-    result = await admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
     entry = result["runs"][0]
 
     assert entry["blockedSeconds"] == 750.0
@@ -222,8 +221,7 @@ async def test_timings_endpoint_reports_blocked_share_of_a_run(db_session):
     assert entry["steps"][0]["blockedSeconds"] == 750.0
 
 
-@pytest.mark.asyncio
-async def test_run_with_no_rate_limit_rows_reports_zero_blocked(db_session):
+def test_run_with_no_rate_limit_rows_reports_zero_blocked(db_session):
     from app.api.admin import admin_pipeline_timings
     from app.models import PipelinePhaseTiming
 
@@ -236,7 +234,7 @@ async def test_run_with_no_rate_limit_rows_reports_zero_blocked(db_session):
     ))
     db_session.commit()
 
-    result = await admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
+    result = admin_pipeline_timings(kind="pipeline_runs", runs=10, db=db_session)
     entry = result["runs"][0]
     assert entry["blockedSeconds"] == 0.0
     assert entry["blockedPct"] == 0.0
