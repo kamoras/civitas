@@ -93,7 +93,10 @@ With the limits in force, a container that outgrows its limit is
 restarted on its own instead of taking the whole host into swap. Check
 each service's memory (per-process RSS in `/proc`) against its limit
 before turning the controller on: until then nothing has held them to
-it.
+it. Sampled every 30 minutes on 2026-11-26, a nightly run and a day's
+traffic, production peaked at 3.7 GB for the backend's two workers, 2.1 GB
+for the pipeline, 1.6 GB for llama-server and 573 MB for the frontend; the
+limits (5G, 4G, 2G, 768M) leave about a third above each of those.
 
 ### arm64 and amd64
 
